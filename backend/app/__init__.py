@@ -1,0 +1,1 @@
+"""QuantPilot FastAPI application package."""

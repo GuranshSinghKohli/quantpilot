@@ -1,0 +1,30 @@
+import asyncio
+
+import yfinance as yf
+
+from app.models.schemas import StockResponse
+
+
+def _fetch_stock_sync(ticker: str) -> StockResponse:
+    symbol = ticker.upper().strip()
+    stock = yf.Ticker(symbol)
+    info = stock.info
+
+    if not info or info.get("regularMarketPrice") is None and info.get("currentPrice") is None:
+        if not info.get("symbol"):
+            raise ValueError(f"No data found for ticker '{symbol}'")
+
+    current_price = info.get("currentPrice") or info.get("regularMarketPrice")
+
+    return StockResponse(
+        ticker=info.get("symbol", symbol),
+        current_price=current_price,
+        market_cap=info.get("marketCap"),
+        pe_ratio=info.get("trailingPE"),
+        fifty_two_week_high=info.get("fiftyTwoWeekHigh"),
+        fifty_two_week_low=info.get("fiftyTwoWeekLow"),
+    )
+
+
+async def get_stock_data(ticker: str) -> StockResponse:
+    return await asyncio.to_thread(_fetch_stock_sync, ticker)
