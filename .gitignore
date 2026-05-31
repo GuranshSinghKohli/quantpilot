@@ -1,6 +1,7 @@
 # Environment
 .env
 .env.local
+.env.production
 .env.*.local
 
 # Python
@@ -40,8 +41,13 @@ Thumbs.db
 # Logs & databases
 *.log
 logs/
+backend/logs/
 *.db
 *.sqlite3
+data/chroma_db/
+data/watchlist.json
+backend/data/chroma_db/
+backend/data/watchlist.json
 
 # Docker
 .docker/

@@ -26,7 +26,7 @@ type FilingsData = {
   filings: Filing[];
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 function formatCurrency(value: number | null): string {
   if (value === null || value === undefined) return "—";
