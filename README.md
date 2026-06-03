@@ -9,18 +9,18 @@
 [![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
 [![Railway](https://img.shields.io/badge/Deploy-Railway-0B0D0E?logo=railway&logoColor=white)](https://railway.app/)
 
-**QuantPilot AI** is a production-style research copilot that turns a stock ticker into an institutional- quality equity snapshot. A LangGraph multi-agent pipeline pulls live market data, SEC filings, and news via MCP tools, synthesizes risk, and delivers a structured research report with confidence scoring, fact/insight separation, and vector memory — all through a polished Next.js dashboard.
+**QuantPilot AI** is a production-style research copilot that turns a stock ticker into an institutional- quality equity snapshot. A LangGraph multi-agent pipeline pulls live market data, SEC filings, and news via MCP tools, synthesizes risk, and delivers a structured research report with confidence scoring, fact/insight separation, and vector memory  - all through a polished Next.js dashboard.
 
 ---
 
 ## What it does
 
-- **One-click equity research** — Enter a ticker (e.g. `AAPL`) and receive a full multi-section report with executive summary and BUY/HOLD/SELL-style recommendation
-- **Transparent agent pipeline** — Watch five specialized agents run in sequence: news, financial metrics, SEC filings, risk, and report synthesis
-- **Grounded citations** — Facts (prices, filings, headlines) are separated from LLM-generated insights for auditability
-- **Confidence scoring** — Heuristic per-agent and overall confidence based on data completeness — not a black box
-- **Persistent memory** — Past reports stored in ChromaDB with semantic search, session history, and a watchlist
-- **Production observability** — Structured JSON logs, workflow run tracking, and defensive validation that never crashes the pipeline
+- **One-click equity research** - Enter a ticker (e.g. `AAPL`) and receive a full multi-section report with executive summary and BUY/HOLD/SELL-style recommendation
+- **Transparent agent pipeline** - Watch five specialized agents run in sequence: news, financial metrics, SEC filings, risk, and report synthesis
+- **Grounded citations** - Facts (prices, filings, headlines) are separated from LLM-generated insights for auditability
+- **Confidence scoring** - Heuristic per-agent and overall confidence based on data completeness — not a black box
+- **Persistent memory** - Past reports stored in ChromaDB with semantic search, session history, and a watchlist
+- **Production observability** - Structured JSON logs, workflow run tracking, and defensive validation that never crashes the pipeline
 
 ![Dashboard](./assets/dashboard.png)
 
