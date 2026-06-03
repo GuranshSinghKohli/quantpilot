@@ -10,8 +10,10 @@ from app.agents.news_agent import analyze_news
 from app.agents.report_agent import generate_report
 from app.agents.risk_agent import assess_risk
 from app.agents.sec_filing_agent import analyze_sec_filings
+from app.agents.bull_agent import argue_bull
+from app.agents.bear_agent import argue_bear
 from app.evaluation.confidence import (
-    overall_confidence,
+    score_debate_agent,
     score_financial_agent,
     score_news_agent,
     score_report_agent,
@@ -44,6 +46,9 @@ class AnalysisState(TypedDict, total=False):
     metrics_output: Dict[str, Any]
     sec_output: Dict[str, Any]
     risk_output: Dict[str, Any]
+    bull_output: Dict[str, Any]
+    bear_output: Dict[str, Any]
+    debate_output: Dict[str, Any]
     final_report: Dict[str, Any]
     confidence_scores: Dict[str, float]
     validation_warnings: List[str]
@@ -131,6 +136,8 @@ async def _execute_agent_step(
         "financial_agent": "financial",
         "sec_agent": "sec",
         "risk_agent": "risk",
+        "bull_agent": "bull",
+        "bear_agent": "bear",
         "report_agent": "report",
     }
     scores = dict(state.get("confidence_scores") or {})
@@ -242,6 +249,60 @@ async def risk_assessment(state: AnalysisState) -> AnalysisState:
     return {**updated, "risk_output": risk_out, "confidence_scores": scores}
 
 
+async def bull_debate(state: AnalysisState) -> AnalysisState:
+    if state.get("error"):
+        return state
+
+    async def run_bull():
+        return await argue_bull(
+            state["ticker"],
+            state.get("news_output") or {},
+            state.get("metrics_output") or {},
+            state.get("sec_output") or {},
+            state.get("risk_output") or {},
+        )
+
+    updated = await _execute_agent_step(
+        state,
+        "bull_agent",
+        run_bull,
+        lambda raw: (raw, []),
+        score_debate_agent,
+        "bull_output",
+    )
+    bull = updated.get("bull_output") or {}
+    debate = dict(state.get("debate_output") or {})
+    debate["bull"] = bull
+    return {**updated, "debate_output": debate}
+
+
+async def bear_debate(state: AnalysisState) -> AnalysisState:
+    if state.get("error"):
+        return state
+
+    async def run_bear():
+        return await argue_bear(
+            state["ticker"],
+            state.get("news_output") or {},
+            state.get("metrics_output") or {},
+            state.get("sec_output") or {},
+            state.get("risk_output") or {},
+        )
+
+    updated = await _execute_agent_step(
+        state,
+        "bear_agent",
+        run_bear,
+        lambda raw: (raw, []),
+        score_debate_agent,
+        "bear_output",
+    )
+    bear = updated.get("bear_output") or {}
+    debate = dict(updated.get("debate_output") or state.get("debate_output") or {})
+    debate["bear"] = bear
+    return {**updated, "debate_output": debate}
+
+
 async def final_report(state: AnalysisState) -> AnalysisState:
     if state.get("error"):
         return state
@@ -258,6 +319,7 @@ async def final_report(state: AnalysisState) -> AnalysisState:
             state.get("metrics_output") or {},
             state.get("sec_output") or {},
             state.get("risk_output") or {},
+            state.get("debate_output") or {},
         )
 
     updated = await _execute_agent_step(
@@ -298,6 +360,8 @@ def _build_graph():
     workflow.add_node("financial_analysis", financial_analysis)
     workflow.add_node("sec_analysis", sec_analysis)
     workflow.add_node("risk_assessment", risk_assessment)
+    workflow.add_node("bull_debate", bull_debate)
+    workflow.add_node("bear_debate", bear_debate)
     workflow.add_node("final_report", final_report)
 
     workflow.set_entry_point("fetch_data")
@@ -305,7 +369,9 @@ def _build_graph():
     workflow.add_edge("news_analysis", "financial_analysis")
     workflow.add_edge("financial_analysis", "sec_analysis")
     workflow.add_edge("sec_analysis", "risk_assessment")
-    workflow.add_edge("risk_assessment", "final_report")
+    workflow.add_edge("risk_assessment", "bull_debate")
+    workflow.add_edge("bull_debate", "bear_debate")
+    workflow.add_edge("bear_debate", "final_report")
     workflow.add_edge("final_report", END)
 
     return workflow.compile()
@@ -330,3 +396,78 @@ async def run_analysis(ticker: str, run_id: Optional[str] = None) -> AnalysisSta
         "confidence_scores": {},
     }
     return await graph.ainvoke(initial)
+
+
+# Maps LangGraph node names to frontend agent step ids
+STREAM_NODE_TO_AGENT: Dict[str, Optional[str]] = {
+    "fetch_data": None,
+    "news_analysis": "news",
+    "financial_analysis": "financial",
+    "sec_analysis": "sec",
+    "risk_assessment": "risk",
+    "bull_debate": "bull",
+    "bear_debate": "bear",
+    "final_report": "report",
+}
+
+STREAM_AGENT_ORDER = [
+    "news",
+    "financial",
+    "sec",
+    "risk",
+    "bull",
+    "bear",
+    "report",
+]
+
+
+async def stream_analysis(
+    ticker: str, run_id: Optional[str] = None
+):
+    """Async generator of pipeline events for SSE."""
+    graph = get_analysis_graph()
+    initial: AnalysisState = {
+        "ticker": ticker.upper().strip(),
+        "run_id": run_id or "",
+        "validation_warnings": [],
+        "confidence_scores": {},
+    }
+
+    yield {"type": "pipeline_started", "ticker": initial["ticker"]}
+    if STREAM_AGENT_ORDER:
+        yield {"type": "agent_started", "agent": STREAM_AGENT_ORDER[0]}
+
+    final_state: AnalysisState = dict(initial)
+    async for event in graph.astream(initial):
+        for node_name, node_update in event.items():
+            if isinstance(node_update, dict):
+                final_state = {**final_state, **node_update}
+
+            agent_id = STREAM_NODE_TO_AGENT.get(node_name)
+            if agent_id:
+                scores = final_state.get("confidence_scores") or {}
+                yield {
+                    "type": "agent_completed",
+                    "agent": agent_id,
+                    "confidence": scores.get(agent_id),
+                }
+                idx = STREAM_AGENT_ORDER.index(agent_id)
+                if idx + 1 < len(STREAM_AGENT_ORDER):
+                    yield {
+                        "type": "agent_started",
+                        "agent": STREAM_AGENT_ORDER[idx + 1],
+                    }
+
+            if node_name == "final_report" and final_state.get("error"):
+                yield {"type": "error", "message": final_state["error"]}
+                return
+
+    if final_state.get("error"):
+        yield {"type": "error", "message": final_state["error"]}
+        return
+
+    if not final_state.get("final_report"):
+        yield {"type": "error", "message": "Analysis completed without a final report."}
+        return
+
+    yield {"type": "pipeline_completed", "state": final_state}

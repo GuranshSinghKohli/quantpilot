@@ -1,8 +1,10 @@
 import type {
   AnalysisResponse,
+  ChatResponse,
   FilingsData,
   HistoryEntry,
   MemorySearchResult,
+  PortfolioAnalysis,
   RecommendationsResponse,
   StockData,
   StoredReport,
@@ -114,6 +116,113 @@ export async function fetchAnalysis(ticker: string): Promise<AnalysisResponse> {
     `/api/analysis/${encodeURIComponent(ticker)}`,
     { method: "POST", timeoutMs: ANALYSIS_TIMEOUT_MS }
   );
+}
+
+export type StreamAnalysisCallbacks = {
+  onAgentStarted?: (agent: string) => void;
+  onAgentCompleted?: (agent: string, confidence?: number) => void;
+  onError?: (message: string) => void;
+};
+
+export async function fetchAnalysisStream(
+  ticker: string,
+  callbacks: StreamAnalysisCallbacks = {}
+): Promise<AnalysisResponse> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(
+      `${getBaseUrl()}/api/analysis/${encodeURIComponent(ticker)}/stream`,
+      { method: "POST", signal: controller.signal }
+    );
+
+    if (!response.ok) {
+      throw new ApiError(await parseError(response), response.status);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new ApiError("Streaming not supported by this browser.");
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const raw = line.slice(6).trim();
+        if (!raw) continue;
+
+        let event: {
+          type: string;
+          agent?: string;
+          confidence?: number;
+          message?: string;
+          data?: AnalysisResponse;
+        };
+        try {
+          event = JSON.parse(raw);
+        } catch {
+          continue;
+        }
+
+        if (event.type === "agent_started" && event.agent) {
+          callbacks.onAgentStarted?.(event.agent);
+        } else if (event.type === "agent_completed" && event.agent) {
+          callbacks.onAgentCompleted?.(event.agent, event.confidence);
+        } else if (event.type === "error") {
+          callbacks.onError?.(event.message ?? "Analysis failed.");
+          throw new ApiError(event.message ?? "Analysis failed.");
+        } else if (event.type === "result" && event.data) {
+          return event.data;
+        }
+      }
+    }
+
+    throw new ApiError("Analysis stream ended without a result.");
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ApiError(
+        "Request timed out. The analysis pipeline can take up to 2 minutes — please try again."
+      );
+    }
+    throw new ApiError(
+      `Unable to reach the API at ${getBaseUrl()}. Check that the backend is running.`
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export async function sendChatMessage(
+  ticker: string,
+  question: string,
+  analysisContext?: Record<string, unknown>
+): Promise<ChatResponse> {
+  return apiFetch<ChatResponse>(`/api/chat/${encodeURIComponent(ticker)}`, {
+    method: "POST",
+    body: JSON.stringify({
+      question,
+      analysis_context: analysisContext ?? null,
+    }),
+    timeoutMs: 60_000,
+  });
+}
+
+export async function fetchPortfolioAnalysis(): Promise<PortfolioAnalysis> {
+  return apiFetch<PortfolioAnalysis>("/api/portfolio/analyze", {
+    timeoutMs: 60_000,
+  });
 }
 
 export async function fetchWatchlist(): Promise<WatchlistEntry[]> {

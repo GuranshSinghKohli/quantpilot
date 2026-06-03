@@ -62,7 +62,7 @@ export default function SearchBar({
       <label htmlFor="ticker-search" className="sr-only">
         Stock ticker symbol
       </label>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:block sm:relative">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:relative">
         <input
           id="ticker-search"
           ref={inputRef}
@@ -72,26 +72,26 @@ export default function SearchBar({
             setTicker(e.target.value.toUpperCase());
             setError(null);
           }}
-          placeholder="Search a ticker — AAPL, MSFT, NVDA…"
+          placeholder="NVDA, AAPL, whatever you're curious about…"
           disabled={isLoading}
           autoComplete="off"
-          className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] px-4 py-3.5 pr-4 text-base text-[#e2e8f0] outline-none transition placeholder:text-slate-500 focus:border-accent focus:ring-2 focus:ring-accent/30 focus:glow-blue disabled:opacity-50 sm:px-5 sm:py-4 sm:pr-36 sm:text-lg"
+          className="w-full rounded-2xl border border-violet-500/25 bg-[#0f0f18]/90 px-5 py-4 text-base text-white outline-none ring-violet-500/20 transition placeholder:text-slate-600 focus:border-violet-400/50 focus:ring-2 disabled:opacity-50 sm:py-4 sm:pr-36 sm:text-lg"
         />
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 sm:absolute sm:right-2 sm:top-1/2 sm:w-auto sm:-translate-y-1/2 sm:rounded-lg sm:py-2"
+          className="btn-vibe w-full rounded-xl px-5 py-3.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 sm:absolute sm:right-2 sm:top-1/2 sm:w-auto sm:-translate-y-1/2 sm:rounded-xl sm:px-5 sm:py-2.5"
         >
           {isLoading ? (
             <span className="inline-flex items-center justify-center gap-2">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-              Analyzing…
+              cooking…
             </span>
           ) : (
-            "Run analysis"
+            "run it →"
           )}
         </button>
-        <span className="hidden text-xs text-slate-500 sm:absolute sm:right-28 sm:top-1/2 sm:inline sm:-translate-y-1/2 sm:rounded sm:border sm:border-[#1e1e2e] sm:px-2 sm:py-0.5">
+        <span className="hidden text-[10px] text-slate-600 sm:absolute sm:right-28 sm:top-1/2 sm:inline sm:-translate-y-1/2 sm:rounded-md sm:border sm:border-white/10 sm:bg-white/5 sm:px-2 sm:py-0.5">
           ⌘K
         </span>
       </form>
@@ -99,8 +99,8 @@ export default function SearchBar({
       {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="w-full text-xs text-slate-500 sm:w-auto">
-          {recentTickers.length > 0 ? "Recent" : "Try"}
+        <span className="w-full text-xs text-slate-600 sm:w-auto">
+          {recentTickers.length > 0 ? "recent" : "trending"}
         </span>
         {chips.map((sym) => (
           <button
@@ -108,9 +108,9 @@ export default function SearchBar({
             type="button"
             onClick={() => submit(sym)}
             disabled={isLoading}
-            className="min-h-[36px] rounded-full border border-[#1e1e2e] bg-[#12121a] px-4 py-1.5 text-sm font-medium text-slate-300 transition hover:border-accent hover:bg-accent/5 hover:text-accent disabled:opacity-50"
+            className="min-h-[36px] rounded-full border border-white/[0.08] bg-white/[0.03] px-4 py-1.5 text-sm font-medium text-slate-300 transition hover:border-violet-500/40 hover:bg-violet-500/10 hover:text-violet-200 disabled:opacity-50"
           >
-            {sym}
+            ${sym}
           </button>
         ))}
       </div>

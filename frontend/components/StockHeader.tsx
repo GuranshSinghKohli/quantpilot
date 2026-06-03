@@ -7,8 +7,10 @@ interface StockHeaderProps {
   stock: StockData;
   analysis: AnalysisResponse | null;
   onAddToWatchlist: () => void;
+  onAddToPortfolio: () => void;
   watchlistLoading?: boolean;
   isOnWatchlist?: boolean;
+  isOnPortfolio?: boolean;
 }
 
 function formatCurrency(value: number | null): string {
@@ -32,8 +34,10 @@ export default function StockHeader({
   stock,
   analysis,
   onAddToWatchlist,
+  onAddToPortfolio,
   watchlistLoading,
   isOnWatchlist = false,
+  isOnPortfolio = false,
 }: StockHeaderProps) {
   const companyName =
     analysis?.final_report?.report_title?.split("—")[0]?.trim() ||
@@ -68,22 +72,40 @@ export default function StockHeader({
             {formatCurrency(stock.current_price)}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onAddToWatchlist}
-          disabled={watchlistLoading}
-          className={`rounded-lg border px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
-            isOnWatchlist
-              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15"
-              : "border-accent/50 bg-accent/10 text-accent hover:bg-accent/20"
-          }`}
-        >
-          {watchlistLoading
-            ? "Adding…"
-            : isOnWatchlist
-              ? "✓ On Watchlist"
-              : "+ Add to Watchlist"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onAddToWatchlist}
+            disabled={watchlistLoading}
+            className={`rounded-xl border px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
+              isOnWatchlist
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15"
+                : "border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20"
+            }`}
+          >
+            {watchlistLoading
+              ? "Adding…"
+              : isOnWatchlist
+                ? "✓ On Watchlist"
+                : "+ Watchlist"}
+          </button>
+          <button
+            type="button"
+            onClick={onAddToPortfolio}
+            disabled={watchlistLoading}
+            className={`rounded-xl border px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
+              isOnPortfolio
+                ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/15"
+                : "border-cyan-500/30 bg-cyan-500/5 text-cyan-200 hover:bg-cyan-500/15"
+            }`}
+          >
+            {watchlistLoading
+              ? "Adding…"
+              : isOnPortfolio
+                ? "✓ In Portfolio"
+                : "+ Portfolio"}
+          </button>
+        </div>
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

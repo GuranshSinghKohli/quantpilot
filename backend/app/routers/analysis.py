@@ -1,40 +1,36 @@
+import asyncio
+import json
 import logging
 import time
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi.responses import StreamingResponse
 
-from app.evaluation.confidence import overall_confidence
-from app.evaluation.fact_separator import separate_facts_and_insights
 from app.memory import report_memory
-from app.models.agent_schemas import (
-    AnalysisResponse,
-    FactsAndInsights,
-    FinalReportOutput,
-    FinancialMetricsAgentOutput,
-    NewsAgentOutput,
-    PerAgentConfidence,
-    RiskAgentOutput,
-    SECFilingAgentOutput,
-)
+from app.models.agent_schemas import AnalysisResponse, ChatRequest, ChatResponse, PortfolioAnalysis
 from app.observability.logger import get_logger, log_event
 from app.observability.workflow_tracker import workflow_tracker
-from app.workflows.analysis_graph import run_analysis
+from app.services.portfolio_analyzer import analyze_portfolio
+from app.services.research_chat import answer_research_question
+from app.workflows.analysis_graph import run_analysis, stream_analysis
+from app.workflows.analysis_response import build_analysis_response
 
 router = APIRouter(tags=["analysis"])
 logger = get_logger("analysis_router")
+
+
+def _validate_ticker(ticker: str) -> str:
+    symbol = ticker.upper().strip()
+    if not symbol or len(symbol) > 10:
+        raise HTTPException(status_code=400, detail="Invalid ticker symbol.")
+    return symbol
 
 
 @router.post("/analysis/{ticker}", response_model=AnalysisResponse)
 async def analyze_ticker(
     ticker: str, background_tasks: BackgroundTasks
 ) -> AnalysisResponse:
-    symbol = ticker.upper().strip()
-    if not symbol or len(symbol) > 10:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid ticker symbol.",
-        )
-
+    symbol = _validate_ticker(ticker)
     run = workflow_tracker.start_run(symbol)
     start = time.perf_counter()
 
@@ -59,47 +55,20 @@ async def analyze_ticker(
 
     if state.get("error"):
         workflow_tracker.complete_run(run["run_id"], status="failed")
-        log_event(
-            logger,
-            logging.WARNING,
-            "Analysis route completed with pipeline error",
-            route=f"/api/analysis/{symbol}",
-            ticker=symbol,
-            status_code=502,
-            duration_ms=duration_ms,
-        )
         raise HTTPException(status_code=502, detail=state["error"])
 
-    final_report_raw = state.get("final_report")
-    if not final_report_raw:
+    if not state.get("final_report"):
         workflow_tracker.complete_run(run["run_id"], status="failed")
         raise HTTPException(
             status_code=502,
             detail="Analysis completed without a final report.",
         )
 
-    scores = state.get("confidence_scores") or {}
-    per_agent = PerAgentConfidence(
-        news=scores.get("news", 0.0),
-        financial=scores.get("financial", 0.0),
-        sec=scores.get("sec", 0.0),
-        risk=scores.get("risk", 0.0),
-        report=scores.get("report", 0.0),
-    )
-    overall = overall_confidence(per_agent.model_dump())
-
-    facts_raw = state.get("facts_and_insights") or separate_facts_and_insights(
-        final_report_raw,
-        state.get("metrics_output") or {},
-        state.get("sec_output") or {},
-        state.get("filings_data"),
-        state.get("news_headlines"),
-    )
-
+    response = build_analysis_response(state, run["run_id"])
     workflow_tracker.complete_run(
         run["run_id"],
         status="completed",
-        overall_confidence=overall,
+        overall_confidence=response.overall_confidence_score,
     )
 
     log_event(
@@ -111,38 +80,90 @@ async def analyze_ticker(
         status_code=200,
         duration_ms=duration_ms,
         run_id=run["run_id"],
-        overall_confidence=overall,
-    )
-
-    response = AnalysisResponse(
-        ticker=symbol,
-        final_report=FinalReportOutput.model_validate(final_report_raw),
-        news_output=(
-            NewsAgentOutput.model_validate(state["news_output"])
-            if state.get("news_output")
-            else None
-        ),
-        metrics_output=(
-            FinancialMetricsAgentOutput.model_validate(state["metrics_output"])
-            if state.get("metrics_output")
-            else None
-        ),
-        sec_output=(
-            SECFilingAgentOutput.model_validate(state["sec_output"])
-            if state.get("sec_output")
-            else None
-        ),
-        risk_output=(
-            RiskAgentOutput.model_validate(state["risk_output"])
-            if state.get("risk_output")
-            else None
-        ),
-        run_id=run["run_id"],
-        overall_confidence_score=overall,
-        per_agent_confidence=per_agent,
-        validation_warnings=state.get("validation_warnings") or [],
-        facts_and_insights=FactsAndInsights.model_validate(facts_raw),
+        overall_confidence=response.overall_confidence_score,
     )
 
     background_tasks.add_task(report_memory.persist_analysis, state)
     return response
+
+
+@router.post("/analysis/{ticker}/stream")
+async def analyze_ticker_stream(ticker: str) -> StreamingResponse:
+    symbol = _validate_ticker(ticker)
+    run = workflow_tracker.start_run(symbol)
+
+    async def event_generator():
+        start = time.perf_counter()
+        final_state = None
+        try:
+            async for event in stream_analysis(symbol, run_id=run["run_id"]):
+                if event.get("type") == "pipeline_completed":
+                    final_state = event.get("state")
+                    response = build_analysis_response(final_state, run["run_id"])
+                    workflow_tracker.complete_run(
+                        run["run_id"],
+                        status="completed",
+                        overall_confidence=response.overall_confidence_score,
+                    )
+                    duration_ms = int((time.perf_counter() - start) * 1000)
+                    log_event(
+                        logger,
+                        logging.INFO,
+                        "Analysis stream completed",
+                        route=f"/api/analysis/{symbol}/stream",
+                        ticker=symbol,
+                        duration_ms=duration_ms,
+                        run_id=run["run_id"],
+                    )
+                    payload = {
+                        "type": "result",
+                        "data": response.model_dump(mode="json"),
+                    }
+                    yield f"data: {json.dumps(payload)}\n\n"
+                    asyncio.create_task(report_memory.persist_analysis(final_state))
+                elif event.get("type") == "error":
+                    workflow_tracker.complete_run(run["run_id"], status="failed")
+                    payload = {"type": "error", "message": event.get("message", "")}
+                    yield f"data: {json.dumps(payload)}\n\n"
+                else:
+                    yield f"data: {json.dumps(event)}\n\n"
+        except Exception as exc:
+            workflow_tracker.complete_run(run["run_id"], status="failed")
+            log_event(
+                logger,
+                logging.ERROR,
+                "Analysis stream failed",
+                ticker=symbol,
+                error=str(exc),
+            )
+            payload = {"type": "error", "message": str(exc)}
+            yield f"data: {json.dumps(payload)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/chat/{ticker}", response_model=ChatResponse)
+async def research_chat(ticker: str, body: ChatRequest) -> ChatResponse:
+    symbol = _validate_ticker(ticker)
+    question = (body.question or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question is required.")
+    if len(question) > 2000:
+        raise HTTPException(status_code=400, detail="Question too long.")
+
+    return await answer_research_question(
+        symbol, question, body.analysis_context
+    )
+
+
+@router.get("/portfolio/analyze", response_model=PortfolioAnalysis)
+async def portfolio_analyze() -> PortfolioAnalysis:
+    return await analyze_portfolio()

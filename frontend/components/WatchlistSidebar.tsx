@@ -26,65 +26,71 @@ export default function WatchlistSidebar({
     watchlist.some((e) => e.ticker.toUpperCase() === currentTicker.toUpperCase());
 
   return (
-    <div className="card-surface p-4">
+    <div className="card-surface card-surface-hover p-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-          Watchlist
-        </h3>
+        <div>
+          <h3 className="panel-title">watchlist</h3>
+          <p className="mt-0.5 text-[11px] text-slate-600">stocks you&apos;re tracking</p>
+        </div>
         <button
           type="button"
           onClick={onAdd}
           disabled={!currentTicker || loading}
           title={
             isOnList
-              ? `${currentTicker} is on your watchlist — click to confirm`
-              : addDisabledReason ?? "Add current ticker to watchlist"
+              ? `${currentTicker} is already saved`
+              : addDisabledReason ?? "Save current ticker"
           }
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-accent/50 text-accent transition hover:bg-accent/10 disabled:opacity-40"
+          className="flex h-8 w-8 items-center justify-center rounded-xl border border-violet-500/30 bg-violet-500/10 text-lg text-violet-300 transition hover:bg-violet-500/20 disabled:opacity-40"
         >
           +
         </button>
       </div>
+
       {!currentTicker && (
-        <p className="mt-2 text-xs text-slate-600">
-          Run an analysis first, then add the ticker here.
+        <p className="mt-3 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-xs text-slate-600">
+          run an analysis first, then hit + to save it
         </p>
       )}
 
       <div className="mt-3 space-y-1">
         {watchlist.length === 0 && (
-          <p className="py-6 text-center text-sm leading-relaxed text-slate-500">
-            No tickers saved yet.
+          <p className="py-8 text-center text-sm leading-relaxed text-slate-600">
+            nothing saved yet
             <br />
-            <span className="text-slate-600">Run an analysis, then tap + to track it here.</span>
+            <span className="text-slate-700">your picks show up here</span>
           </p>
         )}
-        {watchlist.map((entry) => (
-          <div
-            key={entry.ticker}
-            className={`flex items-center justify-between rounded-lg px-3 py-2 transition ${
-              currentTicker === entry.ticker
-                ? "bg-accent/10 border border-accent/30"
-                : "hover:bg-[#1e1e2e]/50"
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => onSelect(entry.ticker)}
-              className="flex-1 text-left text-sm font-medium text-slate-200 hover:text-accent"
+        {watchlist.map((entry) => {
+          const active =
+            currentTicker?.toUpperCase() === entry.ticker.toUpperCase();
+          return (
+            <div
+              key={entry.ticker}
+              className={`flex items-center justify-between rounded-xl px-3 py-2 transition ${
+                active
+                  ? "border border-violet-500/30 bg-violet-500/10"
+                  : "border border-transparent hover:bg-white/[0.03]"
+              }`}
             >
-              {entry.ticker}
-            </button>
-            <button
-              type="button"
-              onClick={() => onRemove(entry.ticker)}
-              className="ml-2 text-slate-500 hover:text-red-400"
-              aria-label={`Remove ${entry.ticker}`}
-            >
-              ×
-            </button>
-          </div>
-        ))}
+              <button
+                type="button"
+                onClick={() => onSelect(entry.ticker)}
+                className="font-display flex-1 text-left text-sm font-semibold text-slate-200 hover:text-violet-200"
+              >
+                ${entry.ticker}
+              </button>
+              <button
+                type="button"
+                onClick={() => onRemove(entry.ticker)}
+                className="ml-2 rounded-md px-1.5 text-slate-600 transition hover:bg-red-500/10 hover:text-red-400"
+                aria-label={`Remove ${entry.ticker}`}
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

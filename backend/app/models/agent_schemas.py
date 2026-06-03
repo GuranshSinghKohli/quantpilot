@@ -38,6 +38,19 @@ class RiskAgentOutput(BaseModel):
     error_message: str = ""
 
 
+class DebateAgentOutput(BaseModel):
+    stance: Literal["bull", "bear"] = "bull"
+    thesis: str = ""
+    key_points: List[str] = Field(default_factory=list)
+    confidence_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    error_message: str = ""
+
+
+class DebateOutput(BaseModel):
+    bull: DebateAgentOutput
+    bear: DebateAgentOutput
+
+
 class ReportSection(BaseModel):
     title: str
     content: str
@@ -78,6 +91,8 @@ class PerAgentConfidence(BaseModel):
     financial: float = 0.0
     sec: float = 0.0
     risk: float = 0.0
+    bull: float = 0.0
+    bear: float = 0.0
     report: float = 0.0
 
 
@@ -93,3 +108,42 @@ class AnalysisResponse(BaseModel):
     per_agent_confidence: PerAgentConfidence = Field(default_factory=PerAgentConfidence)
     validation_warnings: List[str] = Field(default_factory=list)
     facts_and_insights: FactsAndInsights = Field(default_factory=FactsAndInsights)
+    debate_output: Optional[DebateOutput] = None
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"] = "user"
+    content: str
+
+
+class ChatRequest(BaseModel):
+    question: str
+    analysis_context: Optional[Dict[str, Any]] = None
+
+
+class ChatResponse(BaseModel):
+    ticker: str
+    answer: str
+    sources_used: List[str] = Field(default_factory=list)
+
+
+class PortfolioHolding(BaseModel):
+    ticker: str
+    current_price: Optional[float] = None
+    pe_ratio: Optional[float] = None
+    risk_level: str = "UNKNOWN"
+    valuation: str = "unknown"
+    weight_pct: float = 0.0
+
+
+class PortfolioAnalysis(BaseModel):
+    holdings: List[PortfolioHolding] = Field(default_factory=list)
+    avg_pe: Optional[float] = None
+    risk_mix: Dict[str, int] = Field(default_factory=dict)
+    sector_note: str = ""
+    weakest_ticker: Optional[str] = None
+    summary: str = ""
+    disclaimer: str = (
+        "Portfolio view is illustrative — not investment advice. "
+        "Based on latest cached or live quotes."
+    )

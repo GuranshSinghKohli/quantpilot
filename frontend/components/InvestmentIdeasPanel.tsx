@@ -57,28 +57,29 @@ export default function InvestmentIdeasPanel({
   }, [load]);
 
   return (
-    <div className="card-surface p-4">
+    <div className="card-surface card-surface-hover p-4">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-            Near-term ideas
-          </h3>
-          <p className="mt-1 text-xs leading-relaxed text-slate-500">
-            AI screens price, valuation &amp; news — not a buy list
+          <h3 className="panel-title">hot picks</h3>
+          <p className="mt-0.5 text-[11px] text-slate-600">
+            AI-scanned setups · not financial advice fr
           </p>
         </div>
         <button
           type="button"
           onClick={load}
           disabled={loading || isLoadingAnalysis}
-          className="shrink-0 rounded-lg border border-line px-2 py-1 text-xs text-slate-400 transition hover:border-accent hover:text-accent disabled:opacity-50"
+          className="shrink-0 rounded-lg border border-white/[0.08] px-2.5 py-1 text-xs text-slate-400 transition hover:border-violet-500/30 hover:text-violet-300 disabled:opacity-50"
         >
-          {loading ? "…" : "Refresh"}
+          {loading ? "…" : "↻"}
         </button>
       </div>
 
       {loading && (
-        <p className="mt-4 text-sm text-slate-500">Scanning popular stocks…</p>
+        <div className="mt-4 space-y-2">
+          <div className="skeleton-shimmer h-16 rounded-xl" />
+          <div className="skeleton-shimmer h-16 rounded-xl" />
+        </div>
       )}
 
       {error && !loading && (
@@ -101,7 +102,7 @@ export default function InvestmentIdeasPanel({
               return (
                 <li
                   key={pick.ticker}
-                  className="rounded-lg border border-line bg-[#0a0a0f]/50 p-3"
+                  className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-3 transition hover:border-violet-500/20"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <button

@@ -95,6 +95,17 @@ def score_risk_agent(
     return _clamp(score)
 
 
+def score_debate_agent(output: Dict[str, Any]) -> float:
+    score = 0.7
+    thesis = output.get("thesis") or ""
+    points = output.get("key_points") or []
+    if len(thesis.split()) < 15:
+        score -= 0.15
+    if len(points) < 2:
+        score -= 0.15
+    return _clamp(score)
+
+
 def score_report_agent(
     output: Dict[str, Any],
     risk_confidence: float,
@@ -111,10 +122,12 @@ def score_report_agent(
 
 def overall_confidence(per_agent: Dict[str, float]) -> float:
     weights = {
-        "news": 0.15,
-        "financial": 0.25,
-        "sec": 0.2,
-        "risk": 0.2,
+        "news": 0.12,
+        "financial": 0.22,
+        "sec": 0.18,
+        "risk": 0.18,
+        "bull": 0.05,
+        "bear": 0.05,
         "report": 0.2,
     }
     total = 0.0

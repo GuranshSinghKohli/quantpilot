@@ -5,21 +5,21 @@ import AgentWorkflow from "@/components/AgentWorkflow";
 import AppFooter from "@/components/AppFooter";
 import AppHeader from "@/components/AppHeader";
 import CitationsPanel from "@/components/CitationsPanel";
+import DebatePanel from "@/components/DebatePanel";
 import FeatureCards from "@/components/FeatureCards";
 import HeroSection from "@/components/HeroSection";
-import HistoryPanel from "@/components/HistoryPanel";
-import InvestmentIdeasPanel from "@/components/InvestmentIdeasPanel";
 import LoadingPipeline from "@/components/LoadingPipeline";
 import ReportDisplay from "@/components/ReportDisplay";
+import ResearchChatPanel from "@/components/ResearchChatPanel";
 import SearchBar from "@/components/SearchBar";
 import SECFilingsPanel from "@/components/SECFilingsPanel";
 import StockHeader from "@/components/StockHeader";
-import WatchlistSidebar from "@/components/WatchlistSidebar";
+import ToolsDock from "@/components/ToolsDock";
 import {
   addToWatchlist,
   ApiError,
   checkApiHealth,
-  fetchAnalysis,
+  fetchAnalysisStream,
   fetchHistory,
   fetchPastReports,
   fetchStockData,
@@ -39,10 +39,20 @@ const INITIAL_STEPS: AgentStep[] = [
   { id: "financial", name: "Financial Agent", status: "waiting" },
   { id: "sec", name: "SEC Agent", status: "waiting" },
   { id: "risk", name: "Risk Agent", status: "waiting" },
+  { id: "bull", name: "Bull Agent", status: "waiting" },
+  { id: "bear", name: "Bear Agent", status: "waiting" },
   { id: "report", name: "Report Agent", status: "waiting" },
 ];
 
-const STEP_DELAYS_MS = [0, 4000, 9000, 14000, 20000];
+const AGENT_INDEX: Record<string, number> = {
+  news: 0,
+  financial: 1,
+  sec: 2,
+  risk: 3,
+  bull: 4,
+  bear: 5,
+  report: 6,
+};
 
 export default function Home() {
   const [currentTicker, setCurrentTicker] = useState<string | null>(null);
@@ -109,21 +119,28 @@ export default function Home() {
     );
   }
 
+  function markAgentStarted(agentId: string) {
+    const index = AGENT_INDEX[agentId];
+    if (index !== undefined) markStepRunning(index);
+  }
+
+  function markAgentCompleted(agentId: string) {
+    const index = AGENT_INDEX[agentId];
+    if (index === undefined) return;
+    setAgentSteps((prev) =>
+      prev.map((step, i) => {
+        if (i <= index) return { ...step, status: "complete" };
+        if (i === index + 1) return { ...step, status: "running" };
+        return step;
+      })
+    );
+  }
+
   function markAllComplete() {
     setAgentSteps((prev) =>
       prev.map((step) => ({ ...step, status: "complete" }))
     );
   }
-
-  useEffect(() => {
-    if (!isLoading) return;
-
-    const timers = STEP_DELAYS_MS.map((delay, index) =>
-      setTimeout(() => markStepRunning(index), delay)
-    );
-
-    return () => timers.forEach(clearTimeout);
-  }, [isLoading]);
 
   async function runAnalysis(ticker: string) {
     const symbol = ticker.toUpperCase();
@@ -142,7 +159,10 @@ export default function Home() {
       const stock = await fetchStockData(symbol);
       setStockData(stock);
 
-      const analysis = await fetchAnalysis(symbol);
+      const analysis = await fetchAnalysisStream(symbol, {
+        onAgentStarted: markAgentStarted,
+        onAgentCompleted: markAgentCompleted,
+      });
       markAllComplete();
       setAnalysisReport(analysis);
       setAnalyzedAt(new Date().toISOString());
@@ -238,10 +258,18 @@ export default function Home() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="relative flex min-h-screen flex-col">
+      <div
+        className="pointer-events-none fixed inset-0 overflow-hidden"
+        aria-hidden
+      >
+        <div className="absolute -left-32 top-1/4 h-96 w-96 rounded-full bg-violet-600/8 blur-3xl" />
+        <div className="absolute -right-32 top-1/3 h-80 w-80 rounded-full bg-cyan-500/6 blur-3xl" />
+      </div>
+
       <AppHeader apiReachable={apiReachable} />
 
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <main className="relative mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <HeroSection compact={hasResults} />
 
         <section className="mt-6 sm:mt-8" aria-label="Search">
@@ -283,15 +311,29 @@ export default function Home() {
           </div>
         )}
 
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:mt-8 lg:grid-cols-12 lg:gap-8">
-          <div className="space-y-6 lg:col-span-8 lg:space-y-8">
-            {stockData && (
+        <ToolsDock
+          watchlist={watchlist}
+          history={history}
+          currentTicker={currentTicker}
+          watchlistLoading={watchlistLoading}
+          historyLoading={historyLoading}
+          isLoadingAnalysis={isLoading}
+          onSelectTicker={runAnalysis}
+          onHistorySelect={handleHistorySelect}
+          onAddWatchlist={handleAddWatchlist}
+          onRemoveWatchlist={handleRemoveWatchlist}
+        />
+
+        <div className="mt-6 space-y-6 sm:mt-8 lg:space-y-8">
+          {stockData && (
               <StockHeader
                 stock={stockData}
                 analysis={analysisReport}
                 onAddToWatchlist={handleAddWatchlist}
+                onAddToPortfolio={handleAddWatchlist}
                 watchlistLoading={watchlistLoading}
                 isOnWatchlist={isOnWatchlist}
+                isOnPortfolio={isOnWatchlist}
               />
             )}
 
@@ -314,61 +356,65 @@ export default function Home() {
 
             {analysisReport && !isLoading && (
               <>
+                {analysisReport.debate_output && (
+                  <DebatePanel debate={analysisReport.debate_output} />
+                )}
                 <ReportDisplay analysis={analysisReport} />
                 <CitationsPanel
                   analysis={analysisReport}
                   analyzedAt={analyzedAt}
                 />
+                {currentTicker && (
+                  <ResearchChatPanel
+                    ticker={currentTicker}
+                    analysis={analysisReport}
+                  />
+                )}
               </>
             )}
 
             {!hasResults && !error && (
               <div className="space-y-6">
-                <div className="card-surface flex flex-col items-center justify-center px-6 py-12 text-center sm:py-16">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/10 text-2xl">
+                <div className="gradient-border relative overflow-hidden px-6 py-12 text-center sm:py-16">
+                  <div
+                    className="pointer-events-none absolute left-1/2 top-8 h-24 w-24 -translate-x-1/2 rounded-full bg-violet-500/20 blur-2xl"
+                    aria-hidden
+                  />
+                  <div className="relative mx-auto flex h-16 w-16 animate-float items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/30 to-cyan-500/20 text-3xl shadow-glow">
                     📊
                   </div>
-                  <p className="mt-5 text-lg font-semibold text-slate-200">
-                    Start with any U.S. ticker
+                  <p className="font-display relative mt-6 text-xl font-bold text-white sm:text-2xl">
+                    pick a ticker, get the{" "}
+                    <span className="gradient-text">full story</span>
                   </p>
-                  <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-500">
-                    Press <strong className="text-slate-400">Run analysis</strong> or pick
-                    a symbol below. Your report will appear here with agent progress,
-                    confidence scores, and sources.
+                  <p className="relative mx-auto mt-3 max-w-md text-sm leading-relaxed text-slate-500">
+                    Seven AI agents stream live — news, fundamentals, SEC filings,
+                    bull vs bear debate, then a full report with chat built in.
                   </p>
+                  {watchlist.length > 0 && (
+                    <div className="relative mt-6 flex flex-wrap justify-center gap-2">
+                      <span className="w-full text-xs text-slate-600">
+                        from your watchlist
+                      </span>
+                      {watchlist.slice(0, 4).map((e) => (
+                        <button
+                          key={e.ticker}
+                          type="button"
+                          onClick={() => runAnalysis(e.ticker)}
+                          className="rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-1.5 text-sm font-medium text-violet-200 transition hover:bg-violet-500/20"
+                        >
+                          analyze ${e.ticker}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
-                    How QuantPilot works
-                  </h2>
+                  <h2 className="panel-title mb-4">what you get</h2>
                   <FeatureCards />
                 </div>
               </div>
             )}
-          </div>
-
-          <aside className="space-y-6 lg:col-span-4">
-            <InvestmentIdeasPanel
-              onSelectTicker={runAnalysis}
-              isLoadingAnalysis={isLoading}
-            />
-            <WatchlistSidebar
-              watchlist={watchlist}
-              currentTicker={currentTicker}
-              onSelect={runAnalysis}
-              onAdd={handleAddWatchlist}
-              onRemove={handleRemoveWatchlist}
-              loading={watchlistLoading}
-              addDisabledReason={
-                !currentTicker ? "Search a ticker first" : null
-              }
-            />
-            <HistoryPanel
-              history={history}
-              onSelect={handleHistorySelect}
-              loading={historyLoading}
-            />
-          </aside>
         </div>
       </main>
 

@@ -1,7 +1,7 @@
 import json
 import logging
 import traceback
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from app.agents.llm import call_openai_json
 from app.models.agent_schemas import FinalReportOutput, ReportSection
@@ -55,6 +55,7 @@ async def generate_report(
     metrics_output: Dict[str, Any],
     sec_output: Dict[str, Any],
     risk_output: Dict[str, Any],
+    debate_output: Optional[Dict[str, Any]] = None,
 ) -> FinalReportOutput:
     fallback = _fallback(
         ticker, news_output, metrics_output, sec_output, risk_output
@@ -68,6 +69,7 @@ async def generate_report(
                 "metrics_output": metrics_output,
                 "sec_output": sec_output,
                 "risk_output": risk_output,
+                "debate_output": debate_output or {},
             },
             default=str,
         )
@@ -75,6 +77,7 @@ async def generate_report(
         result = await call_openai_json(
             system_prompt=(
                 "You are a senior equity research analyst. Write a structured research report. "
+                "Synthesize bull and bear debate when provided. "
                 "Respond ONLY with valid JSON: "
                 '{"ticker": string, "report_title": string, "executive_summary": string, '
                 '"sections": [{"title": string, "content": string}, ...], '

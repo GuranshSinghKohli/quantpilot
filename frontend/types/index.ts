@@ -85,11 +85,25 @@ export interface FactsAndInsights {
   insights: InsightItem[];
 }
 
+export interface DebateSide {
+  stance: "bull" | "bear";
+  thesis: string;
+  key_points: string[];
+  confidence_score: number;
+}
+
+export interface DebateOutput {
+  bull: DebateSide;
+  bear: DebateSide;
+}
+
 export interface PerAgentConfidence {
   news: number;
   financial: number;
   sec: number;
   risk: number;
+  bull: number;
+  bear: number;
   report: number;
 }
 
@@ -100,11 +114,37 @@ export interface AnalysisResponse {
   metrics_output?: MetricsOutput | null;
   sec_output?: SECOutput | null;
   risk_output?: RiskOutput | null;
+  debate_output?: DebateOutput | null;
   run_id?: string;
   overall_confidence_score?: number;
   per_agent_confidence?: PerAgentConfidence;
   validation_warnings?: string[];
   facts_and_insights?: FactsAndInsights;
+}
+
+export interface ChatResponse {
+  ticker: string;
+  answer: string;
+  sources_used: string[];
+}
+
+export interface PortfolioHolding {
+  ticker: string;
+  current_price: number | null;
+  pe_ratio: number | null;
+  risk_level: string;
+  valuation: string;
+  weight_pct: number;
+}
+
+export interface PortfolioAnalysis {
+  holdings: PortfolioHolding[];
+  avg_pe: number | null;
+  risk_mix: Record<string, number>;
+  sector_note: string;
+  weakest_ticker: string | null;
+  summary: string;
+  disclaimer: string;
 }
 
 export interface WatchlistEntry {

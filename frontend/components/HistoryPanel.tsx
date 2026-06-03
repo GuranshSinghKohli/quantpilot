@@ -24,9 +24,9 @@ function formatTime(ts: string): string {
 
 function recBadge(rec: string): string {
   const upper = rec.toUpperCase();
-  if (upper.includes("BUY")) return "text-emerald-400";
-  if (upper.includes("SELL")) return "text-red-400";
-  return "text-amber-400";
+  if (upper.includes("BUY")) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
+  if (upper.includes("SELL")) return "text-red-400 bg-red-500/10 border-red-500/20";
+  return "text-amber-400 bg-amber-500/10 border-amber-500/20";
 }
 
 export default function HistoryPanel({
@@ -37,37 +37,40 @@ export default function HistoryPanel({
   const items = history.slice(0, 10);
 
   return (
-    <div className="card-surface p-4">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-        Recent Analyses
-      </h3>
+    <div className="card-surface card-surface-hover p-4">
+      <h3 className="panel-title">recent runs</h3>
+      <p className="mt-0.5 text-[11px] text-slate-600">tap to reload a report</p>
 
       <div className="mt-3 space-y-2">
-        {items.length === 0 && (
-          <p className="py-4 text-center text-sm text-slate-500">
-            No analyses yet this session
+        {items.length === 0 && !loading && (
+          <p className="py-6 text-center text-sm text-slate-600">
+            no runs yet — go analyze something
           </p>
         )}
         {loading && (
-          <p className="text-sm text-slate-500">Loading history…</p>
+          <p className="text-sm text-slate-600">loading…</p>
         )}
         {items.map((entry, index) => (
           <button
             key={`${entry.ticker}-${entry.timestamp}-${index}`}
             type="button"
             onClick={() => onSelect(entry.ticker)}
-            className="w-full rounded-lg border border-[#1e1e2e] bg-[#0a0a0f]/50 p-3 text-left transition hover:border-accent/40 hover:bg-accent/5"
+            className="group w-full rounded-xl border border-white/[0.05] bg-white/[0.02] p-3 text-left transition hover:border-violet-500/25 hover:bg-violet-500/5"
           >
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-white">{entry.ticker}</span>
+              <span className="font-display font-semibold text-white group-hover:text-violet-200">
+                ${entry.ticker}
+              </span>
               <RiskBadge level={entry.risk_level} size="sm" />
             </div>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-[11px] text-slate-600">
               {formatTime(entry.timestamp)}
             </p>
-            <p className={`mt-1 truncate text-xs font-medium ${recBadge(entry.recommendation)}`}>
-              {entry.recommendation.slice(0, 60)}
-              {entry.recommendation.length > 60 ? "…" : ""}
+            <p
+              className={`mt-2 inline-block truncate max-w-full rounded-md border px-2 py-0.5 text-[10px] font-medium ${recBadge(entry.recommendation)}`}
+            >
+              {entry.recommendation.slice(0, 48)}
+              {entry.recommendation.length > 48 ? "…" : ""}
             </p>
           </button>
         ))}
