@@ -1,4 +1,4 @@
-# QuantPilot AI — AI Quant Research Copilot
+# QuantPilot AI - AI Quant Research Copilot
 
 [![Python](https://img.shields.io/badge/Python-3.9+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.128-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
