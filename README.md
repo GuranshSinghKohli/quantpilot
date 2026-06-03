@@ -9,7 +9,7 @@
 [![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
 [![Railway](https://img.shields.io/badge/Deploy-Railway-0B0D0E?logo=railway&logoColor=white)](https://railway.app/)
 
-**QuantPilot AI** is a production-style research copilot that turns a stock ticker into an institutional-quality equity snapshot. A LangGraph multi-agent pipeline pulls live market data, SEC filings, and news via MCP tools, synthesizes risk, and delivers a structured research report with confidence scoring, fact/insight separation, and vector memory — all through a polished Next.js dashboard.
+**QuantPilot AI** is a production-style research copilot that turns a stock ticker into an institutional- quality equity snapshot. A LangGraph multi-agent pipeline pulls live market data, SEC filings, and news via MCP tools, synthesizes risk, and delivers a structured research report with confidence scoring, fact/insight separation, and vector memory — all through a polished Next.js dashboard.
 
 ---
 
