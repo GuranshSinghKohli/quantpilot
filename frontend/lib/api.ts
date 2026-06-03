@@ -11,8 +11,18 @@ import type {
   WatchlistEntry,
 } from "@/types";
 
-export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
+function normalizeApiUrl(raw: string): string {
+  const trimmed = raw.replace(/\/$/, "");
+  if (!trimmed) return "";
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
+
+export const API_URL = normalizeApiUrl(
+  process.env.NEXT_PUBLIC_API_URL ?? ""
+);
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const ANALYSIS_TIMEOUT_MS = 180_000;
@@ -131,6 +141,39 @@ export async function fetchAnalysisStream(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
 
+  type StreamEvent = {
+    type: string;
+    agent?: string;
+    confidence?: number;
+    message?: string;
+    data?: AnalysisResponse;
+  };
+
+  function handleEvent(event: StreamEvent): AnalysisResponse | null {
+    if (event.type === "agent_started" && event.agent) {
+      callbacks.onAgentStarted?.(event.agent);
+    } else if (event.type === "agent_completed" && event.agent) {
+      callbacks.onAgentCompleted?.(event.agent, event.confidence);
+    } else if (event.type === "error") {
+      callbacks.onError?.(event.message ?? "Analysis failed.");
+      throw new ApiError(event.message ?? "Analysis failed.");
+    } else if (event.type === "result" && event.data) {
+      return event.data;
+    }
+    return null;
+  }
+
+  function parseLine(line: string): AnalysisResponse | null {
+    if (!line.startsWith("data: ")) return null;
+    const raw = line.slice(6).trim();
+    if (!raw) return null;
+    try {
+      return handleEvent(JSON.parse(raw) as StreamEvent);
+    } catch {
+      return null;
+    }
+  }
+
   try {
     const response = await fetch(
       `${getBaseUrl()}/api/analysis/${encodeURIComponent(ticker)}/stream`,
@@ -158,34 +201,16 @@ export async function fetchAnalysisStream(
       buffer = lines.pop() ?? "";
 
       for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const raw = line.slice(6).trim();
-        if (!raw) continue;
-
-        let event: {
-          type: string;
-          agent?: string;
-          confidence?: number;
-          message?: string;
-          data?: AnalysisResponse;
-        };
-        try {
-          event = JSON.parse(raw);
-        } catch {
-          continue;
-        }
-
-        if (event.type === "agent_started" && event.agent) {
-          callbacks.onAgentStarted?.(event.agent);
-        } else if (event.type === "agent_completed" && event.agent) {
-          callbacks.onAgentCompleted?.(event.agent, event.confidence);
-        } else if (event.type === "error") {
-          callbacks.onError?.(event.message ?? "Analysis failed.");
-          throw new ApiError(event.message ?? "Analysis failed.");
-        } else if (event.type === "result" && event.data) {
-          return event.data;
-        }
+        const result = parseLine(line);
+        if (result) return result;
       }
+    }
+
+    // Flush any remaining bytes (last event may lack trailing newline)
+    buffer += decoder.decode();
+    for (const line of buffer.split("\n")) {
+      const result = parseLine(line);
+      if (result) return result;
     }
 
     throw new ApiError("Analysis stream ended without a result.");
@@ -201,6 +226,21 @@ export async function fetchAnalysisStream(
     );
   } finally {
     clearTimeout(timeoutId);
+  }
+}
+
+/** Stream first; fall back to standard POST (more reliable on free-tier hosts). */
+export async function fetchAnalysisWithFallback(
+  ticker: string,
+  callbacks: StreamAnalysisCallbacks = {}
+): Promise<AnalysisResponse> {
+  try {
+    return await fetchAnalysisStream(ticker, callbacks);
+  } catch (streamError) {
+    if (streamError instanceof ApiError) {
+      callbacks.onError?.(streamError.message);
+    }
+    return fetchAnalysis(ticker);
   }
 }
 

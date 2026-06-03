@@ -1,3 +1,4 @@
+import os
 import asyncio
 import logging
 from datetime import datetime, timezone
@@ -6,6 +7,8 @@ from typing import Any, Dict
 from app.memory import chroma_store, session_store
 
 logger = logging.getLogger(__name__)
+
+LIGHTWEIGHT = os.getenv("QUANTPILOT_LIGHTWEIGHT", "").lower() in ("1", "true", "yes")
 
 
 def _extract_metadata(state: Dict[str, Any]) -> Dict[str, str]:
@@ -28,7 +31,8 @@ def save_report_from_state(state: Dict[str, Any]) -> None:
     final_report = state["final_report"]
 
     try:
-        chroma_store.save_report(ticker, final_report, metadata)
+        if not LIGHTWEIGHT:
+            chroma_store.save_report(ticker, final_report, metadata)
     except Exception as exc:
         logger.warning("ChromaDB save failed for %s: %s", ticker, exc)
 

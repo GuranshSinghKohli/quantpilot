@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import time
@@ -120,7 +119,11 @@ async def analyze_ticker_stream(ticker: str) -> StreamingResponse:
                         "data": response.model_dump(mode="json"),
                     }
                     yield f"data: {json.dumps(payload)}\n\n"
-                    asyncio.create_task(report_memory.persist_analysis(final_state))
+                    # Persist after stream completes — avoids overlapping with next request
+                    try:
+                        await report_memory.persist_analysis(final_state)
+                    except Exception:
+                        pass
                 elif event.get("type") == "error":
                     workflow_tracker.complete_run(run["run_id"], status="failed")
                     payload = {"type": "error", "message": event.get("message", "")}

@@ -19,7 +19,7 @@ import {
   addToWatchlist,
   ApiError,
   checkApiHealth,
-  fetchAnalysisStream,
+  fetchAnalysisWithFallback,
   fetchHistory,
   fetchPastReports,
   fetchStockData,
@@ -159,7 +159,7 @@ export default function Home() {
       const stock = await fetchStockData(symbol);
       setStockData(stock);
 
-      const analysis = await fetchAnalysisStream(symbol, {
+      const analysis = await fetchAnalysisWithFallback(symbol, {
         onAgentStarted: markAgentStarted,
         onAgentCompleted: markAgentCompleted,
       });
