@@ -95,7 +95,19 @@ export default function Home() {
   );
 
   useEffect(() => {
-    checkApiHealth().then(setApiReachable);
+    let cancelled = false;
+
+    async function ping() {
+      const ok = await checkApiHealth();
+      if (!cancelled) setApiReachable(ok);
+    }
+
+    ping();
+    const id = window.setInterval(ping, 20_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
   }, []);
 
   const refreshWatchlist = useCallback(async () => {
@@ -175,6 +187,20 @@ export default function Home() {
     setError(null);
     setStockData(null);
     setAnalysisReport(null);
+
+    // Don't spin forever when the API is already known offline (common on
+    // Vercel when NEXT_PUBLIC_API_URL points at a dead Railway service).
+    const reachable = apiReachable ?? (await checkApiHealth());
+    setApiReachable(reachable);
+    if (!reachable) {
+      setIsLoading(false);
+      resetAgentSteps();
+      setError(
+        "Backend API is unreachable. For local use open http://localhost:3000 with the API on :8000. On Vercel, set NEXT_PUBLIC_API_URL to your live Railway URL and redeploy."
+      );
+      return;
+    }
+
     setIsLoading(true);
     resetAgentSteps();
 
@@ -200,6 +226,8 @@ export default function Home() {
         err instanceof ApiError ? err.message : "Analysis failed. Please try again.";
       setError(message);
       resetAgentSteps();
+      // Re-check connectivity after a failed run.
+      checkApiHealth().then(setApiReachable);
     } finally {
       setIsLoading(false);
     }
@@ -311,6 +339,7 @@ export default function Home() {
             onAnalyze={runAnalysis}
             isLoading={isLoading}
             recentTickers={recentTickers}
+            disabled={apiReachable === false}
             loadingLabel={
               currentTicker ? `Analyzing ${currentTicker}…` : "Analyzing…"
             }
@@ -322,11 +351,16 @@ export default function Home() {
             className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 sm:mt-6"
             role="alert"
           >
-            Backend API is unreachable. Start FastAPI locally or set{" "}
-            <code className="rounded bg-black/30 px-1 text-amber-100">
-              NEXT_PUBLIC_API_URL
-            </code>{" "}
-            to your deployed backend.
+            <p className="font-medium text-amber-100">Backend API is offline</p>
+            <p className="mt-1 text-amber-200/90">
+              Local: run FastAPI on port 8000 and open{" "}
+              <code className="rounded bg-black/30 px-1">http://localhost:3000</code>
+              . Production: set{" "}
+              <code className="rounded bg-black/30 px-1">NEXT_PUBLIC_API_URL</code>{" "}
+              on Vercel to your Railway URL, add this site to backend{" "}
+              <code className="rounded bg-black/30 px-1">ALLOWED_ORIGINS</code>, then
+              redeploy.
+            </p>
           </div>
         )}
 
