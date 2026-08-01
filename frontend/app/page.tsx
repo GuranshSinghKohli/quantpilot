@@ -407,13 +407,6 @@ export default function Home() {
               />
             )}
 
-            {analysisReport && !isLoading && currentTicker && (
-              <SECFilingsPanel
-                ticker={currentTicker}
-                secOutput={analysisReport.sec_output}
-              />
-            )}
-
             {(isLoading || analysisReport) && (
               <AgentWorkflow
                 steps={agentSteps}
@@ -433,14 +426,60 @@ export default function Home() {
 
             {analysisReport && !isLoading && (
               <>
-                {analysisReport.debate_output && (
-                  <DebatePanel debate={analysisReport.debate_output} />
-                )}
-                <ResearchExtrasPanel analysis={analysisReport} />
                 {analysisReport.investment_memo && (
                   <InvestmentMemoPanel memo={analysisReport.investment_memo} />
                 )}
-                <ReportDisplay analysis={analysisReport} />
+
+                <details
+                  className="group"
+                  open={!analysisReport.investment_memo}
+                >
+                  <summary className="card-surface flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition hover:border-violet-500/25 [&::-webkit-details-marker]:hidden">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-200">
+                        Full research report
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        Executive summary, analysis sections, and recommendation
+                      </p>
+                    </div>
+                    <span className="text-lg text-slate-500 transition group-open:rotate-45">
+                      +
+                    </span>
+                  </summary>
+                  <div className="mt-3">
+                    <ReportDisplay analysis={analysisReport} />
+                  </div>
+                </details>
+
+                <details className="group">
+                  <summary className="card-surface flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition hover:border-cyan-500/25 [&::-webkit-details-marker]:hidden">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-200">
+                        Supporting agent research
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        Bull vs bear, earnings, macro, verification, and SEC details
+                      </p>
+                    </div>
+                    <span className="text-lg text-slate-500 transition group-open:rotate-45">
+                      +
+                    </span>
+                  </summary>
+                  <div className="mt-3 space-y-6">
+                    {analysisReport.debate_output && (
+                      <DebatePanel debate={analysisReport.debate_output} />
+                    )}
+                    <ResearchExtrasPanel analysis={analysisReport} />
+                    {currentTicker && (
+                      <SECFilingsPanel
+                        ticker={currentTicker}
+                        secOutput={analysisReport.sec_output}
+                      />
+                    )}
+                  </div>
+                </details>
+
                 <CitationsPanel
                   analysis={analysisReport}
                   analyzedAt={analyzedAt}

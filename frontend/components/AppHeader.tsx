@@ -18,8 +18,8 @@ export default function AppHeader({
 }: AppHeaderProps) {
   return (
     <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#07070d]/80 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-        <div className="min-w-0">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-6 lg:px-8">
+        <div className="min-w-0 flex-1">
           <h1 className="font-display truncate text-lg font-bold tracking-tight sm:text-xl">
             <span className="text-white">Quant</span>
             <span className="gradient-text">Pilot</span>
@@ -74,13 +74,6 @@ export default function AppHeader({
               </span>
             </span>
           )}
-          <div className="hidden items-center gap-1.5 md:flex">
-            {["LangGraph", "MCP", "Postgres"].map((tag) => (
-              <span key={tag} className="vibe-pill px-2 py-0.5 text-slate-500">
-                {tag}
-              </span>
-            ))}
-          </div>
           <AuthPanel user={user} onUserChange={onUserChange} />
         </div>
       </div>
