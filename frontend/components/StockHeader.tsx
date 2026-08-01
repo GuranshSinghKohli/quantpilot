@@ -7,14 +7,12 @@ interface StockHeaderProps {
   stock: StockData;
   analysis: AnalysisResponse | null;
   onAddToWatchlist: () => void;
-  onAddToPortfolio: () => void;
   watchlistLoading?: boolean;
   isOnWatchlist?: boolean;
-  isOnPortfolio?: boolean;
 }
 
 function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "-";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -23,7 +21,7 @@ function formatCurrency(value: number | null): string {
 }
 
 function formatLargeNumber(value: number | null): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "-";
   return new Intl.NumberFormat("en-US", {
     notation: "compact",
     maximumFractionDigits: 2,
@@ -34,26 +32,25 @@ export default function StockHeader({
   stock,
   analysis,
   onAddToWatchlist,
-  onAddToPortfolio,
   watchlistLoading,
   isOnWatchlist = false,
-  isOnPortfolio = false,
 }: StockHeaderProps) {
   const companyName =
-    analysis?.final_report?.report_title?.split("—")[0]?.trim() ||
-    analysis?.final_report?.report_title?.split("-")[0]?.trim() ||
-    stock.ticker;
+    analysis?.final_report?.report_title
+      ?.split(/\s*(?:\u2014|:)\s+/)[0]
+      ?.trim() || stock.ticker;
 
   const riskLevel = analysis?.risk_output?.risk_level;
+  const memoDecision = analysis?.investment_memo?.decision;
 
   const stats = [
     { label: "Market Cap", value: formatLargeNumber(stock.market_cap) },
-    { label: "P/E Ratio", value: stock.pe_ratio?.toFixed(2) ?? "—" },
+    { label: "P/E Ratio", value: stock.pe_ratio?.toFixed(2) ?? "-" },
     { label: "52W High", value: formatCurrency(stock.fifty_two_week_high) },
     { label: "52W Low", value: formatCurrency(stock.fifty_two_week_low) },
     {
       label: "Valuation",
-      value: analysis?.metrics_output?.valuation_rating ?? "—",
+      value: analysis?.metrics_output?.valuation_rating ?? "-",
     },
   ];
 
@@ -66,6 +63,11 @@ export default function StockHeader({
               {stock.ticker}
             </h2>
             {riskLevel && <RiskBadge level={riskLevel} />}
+            {memoDecision && (
+              <span className="rounded-full border border-white/[0.1] bg-white/[0.04] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+                Memo: {memoDecision}
+              </span>
+            )}
           </div>
           <p className="mt-1 text-slate-400">{companyName}</p>
           <p className="mt-3 text-4xl font-semibold text-white">
@@ -89,22 +91,6 @@ export default function StockHeader({
                 ? "✓ On Watchlist"
                 : "+ Watchlist"}
           </button>
-          <button
-            type="button"
-            onClick={onAddToPortfolio}
-            disabled={watchlistLoading}
-            className={`rounded-xl border px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
-              isOnPortfolio
-                ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/15"
-                : "border-cyan-500/30 bg-cyan-500/5 text-cyan-200 hover:bg-cyan-500/15"
-            }`}
-          >
-            {watchlistLoading
-              ? "Adding…"
-              : isOnPortfolio
-                ? "✓ In Portfolio"
-                : "+ Portfolio"}
-          </button>
         </div>
       </div>
 
@@ -112,7 +98,7 @@ export default function StockHeader({
         {stats.map((stat) => (
           <div
             key={stat.label}
-            className="rounded-lg border border-[#1e1e2e] bg-[#0a0a0f]/50 px-3 py-2"
+            className="rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2"
           >
             <p className="text-xs text-slate-500">{stat.label}</p>
             <p className="mt-0.5 text-sm font-semibold text-slate-200">

@@ -53,6 +53,20 @@ uvicorn app.main:app --reload --port 8000
 | `get_price_history` | `ticker`, `period` (default `1mo`) | OHLCV rows |
 | `get_recent_filings` | `ticker`, `limit` (default 3) | SEC filings with type, date, URL |
 | `get_company_facts` | `ticker` | CIK, company name, SIC, state |
+| `get_ir_materials` | `ticker`, `max_pages` | Investor-relations pages via OpenClaw or allowlisted HTTP |
+| `fetch_browser_page` | `url` | Single allowlisted IR/public page excerpt |
+| `get_shareholder_letter` | `ticker` | Best-effort shareholder / annual letter excerpt |
+| `snapshot_active_browser_tab` | *(none)* | Reads the active tab of the user's own signed-in browser via OpenClaw's existing-session attach — used for authenticated pages (e.g. brokerage positions) we must never fetch ourselves |
+
+## Phase 11 — Browser MCP + OpenClaw
+
+IR tools prefer **OpenClaw** when `OPENCLAW_BROWSER_URL` (and token) are set. Otherwise they use allowlisted **httpx** fetches of known IR URLs / company website paths. Set `BROWSER_MCP_ENABLED=false` to disable.
+
+Agents `news_agent`, `financial_metrics_agent`, `sec_filing_agent`, and `earnings_agent` (IR) use MCP tools.
+
+## Phase 11.1 — Portfolio Auto-Sync
+
+`snapshot_active_browser_tab` is the backbone of the Portfolio Sync feature (`POST /api/portfolio/sync/preview`): the user opens their broker's positions page in their own already-signed-in Chrome, and OpenClaw's existing-session driver reads the visible text — no credentials or login flow ever touch QuantPilot. If OpenClaw isn't configured, the same endpoint accepts pasted page text instead, so the feature works with zero extra setup. Either way, a broker-agnostic LLM extraction step (`app/agents/portfolio_sync_agent.py`, with a regex fallback when no OpenAI key is set) turns raw text into `{ticker, shares, avg_cost}` rows for the user to review before saving.
 
 ## Test tools directly
 
@@ -70,8 +84,6 @@ print(get_stock_price('AAPL'))
 ```bash
 curl -X POST http://localhost:8000/api/analysis/AAPL
 ```
-
-Agents `news_agent`, `financial_metrics_agent`, and `sec_filing_agent` use MCP tools.
 
 ## How agents connect
 

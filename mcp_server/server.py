@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / "backend" / ".env")
 
-from mcp_server.tools import sec_tools, stock_tools
+from mcp_server.tools import browser_tools, sec_tools, stock_tools
 
 HANDLERS = {
     "get_stock_price": stock_tools.get_stock_price,
@@ -22,6 +22,10 @@ HANDLERS = {
     "get_price_history": stock_tools.get_price_history,
     "get_recent_filings": sec_tools.get_recent_filings,
     "get_company_facts": sec_tools.get_company_facts,
+    "get_ir_materials": browser_tools.get_ir_materials,
+    "fetch_browser_page": browser_tools.fetch_browser_page,
+    "get_shareholder_letter": browser_tools.get_shareholder_letter,
+    "snapshot_active_browser_tab": browser_tools.snapshot_active_browser_tab,
 }
 
 
@@ -59,6 +63,26 @@ def _run_official_mcp() -> None:
     def get_company_facts(ticker: str) -> dict:
         """Fetch SEC company facts (CIK, name, SIC, state)."""
         return sec_tools.get_company_facts(ticker)
+
+    @mcp.tool()
+    def get_ir_materials(ticker: str, max_pages: int = 2) -> dict:
+        """Fetch investor-relations pages via OpenClaw browser or allowlisted HTTP."""
+        return browser_tools.get_ir_materials(ticker, max_pages=max_pages)
+
+    @mcp.tool()
+    def fetch_browser_page(url: str) -> dict:
+        """Fetch a single allowlisted IR/public page (OpenClaw when configured)."""
+        return browser_tools.fetch_browser_page(url)
+
+    @mcp.tool()
+    def get_shareholder_letter(ticker: str) -> dict:
+        """Best-effort shareholder / annual letter excerpt from IR materials."""
+        return browser_tools.get_shareholder_letter(ticker)
+
+    @mcp.tool()
+    def snapshot_active_browser_tab() -> dict:
+        """Read the active tab of the user's real signed-in browser via OpenClaw."""
+        return browser_tools.snapshot_active_browser_tab()
 
     mcp.run(transport="stdio")
 

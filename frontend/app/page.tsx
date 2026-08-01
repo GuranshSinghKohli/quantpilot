@@ -9,7 +9,9 @@ import DebatePanel from "@/components/DebatePanel";
 import FeatureCards from "@/components/FeatureCards";
 import HeroSection from "@/components/HeroSection";
 import LoadingPipeline from "@/components/LoadingPipeline";
+import InvestmentMemoPanel from "@/components/InvestmentMemoPanel";
 import ReportDisplay from "@/components/ReportDisplay";
+import ResearchExtrasPanel from "@/components/ResearchExtrasPanel";
 import ResearchChatPanel from "@/components/ResearchChatPanel";
 import SearchBar from "@/components/SearchBar";
 import SECFilingsPanel from "@/components/SECFilingsPanel";
@@ -29,6 +31,7 @@ import {
 import type {
   AgentStep,
   AnalysisResponse,
+  AuthUser,
   HistoryEntry,
   StockData,
   WatchlistEntry,
@@ -38,20 +41,28 @@ const INITIAL_STEPS: AgentStep[] = [
   { id: "news", name: "News Agent", status: "waiting" },
   { id: "financial", name: "Financial Agent", status: "waiting" },
   { id: "sec", name: "SEC Agent", status: "waiting" },
+  { id: "earnings", name: "Earnings Agent", status: "waiting" },
+  { id: "macro", name: "Macro Agent", status: "waiting" },
   { id: "risk", name: "Risk Agent", status: "waiting" },
   { id: "bull", name: "Bull Agent", status: "waiting" },
   { id: "bear", name: "Bear Agent", status: "waiting" },
+  { id: "verification", name: "Verification Agent", status: "waiting" },
   { id: "report", name: "Report Agent", status: "waiting" },
+  { id: "memo", name: "Memo Agent", status: "waiting" },
 ];
 
 const AGENT_INDEX: Record<string, number> = {
   news: 0,
   financial: 1,
   sec: 2,
-  risk: 3,
-  bull: 4,
-  bear: 5,
-  report: 6,
+  earnings: 3,
+  macro: 4,
+  risk: 5,
+  bull: 6,
+  bear: 7,
+  verification: 8,
+  report: 9,
+  memo: 10,
 };
 
 export default function Home() {
@@ -69,8 +80,13 @@ export default function Home() {
   const [analyzedAt, setAnalyzedAt] = useState<string | undefined>();
   const [apiReachable, setApiReachable] = useState<boolean | null>(null);
   const [watchlistSuccess, setWatchlistSuccess] = useState<string | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
 
   const hasResults = Boolean(stockData || analysisReport || isLoading);
+  const currentAgentStep = agentSteps.find((step) => step.status === "running");
+  const completedAgentCount = agentSteps.filter(
+    (step) => step.status === "complete"
+  ).length;
   const isOnWatchlist = Boolean(
     currentTicker &&
       watchlist.some(
@@ -87,7 +103,7 @@ export default function Home() {
       const wl = await fetchWatchlist();
       setWatchlist(wl);
     } catch {
-      // watchlist fetch failed — keep local state
+      // watchlist fetch failed; keep local state
     }
   }, []);
 
@@ -103,7 +119,18 @@ export default function Home() {
 
   useEffect(() => {
     refreshSidebar();
-  }, [refreshSidebar]);
+  }, [refreshSidebar, user]);
+
+  const handleUserChange = useCallback((next: AuthUser | null) => {
+    setUser(next);
+  }, []);
+
+  const handleSourcesClick = useCallback(() => {
+    document.getElementById("data-sources")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, []);
 
   function resetAgentSteps() {
     setAgentSteps(INITIAL_STEPS.map((s) => ({ ...s, status: "waiting" as const })));
@@ -146,6 +173,7 @@ export default function Home() {
     const symbol = ticker.toUpperCase();
     setCurrentTicker(symbol);
     setError(null);
+    setStockData(null);
     setAnalysisReport(null);
     setIsLoading(true);
     resetAgentSteps();
@@ -267,7 +295,13 @@ export default function Home() {
         <div className="absolute -right-32 top-1/3 h-80 w-80 rounded-full bg-cyan-500/6 blur-3xl" />
       </div>
 
-      <AppHeader apiReachable={apiReachable} />
+      <AppHeader
+        apiReachable={apiReachable}
+        user={user}
+        onUserChange={handleUserChange}
+        sourcesAvailable={Boolean(analysisReport && !isLoading)}
+        onSourcesClick={handleSourcesClick}
+      />
 
       <main className="relative mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <HeroSection compact={hasResults} />
@@ -277,6 +311,9 @@ export default function Home() {
             onAnalyze={runAnalysis}
             isLoading={isLoading}
             recentTickers={recentTickers}
+            loadingLabel={
+              currentTicker ? `Analyzing ${currentTicker}…` : "Analyzing…"
+            }
           />
         </section>
 
@@ -312,6 +349,7 @@ export default function Home() {
         )}
 
         <ToolsDock
+          user={user}
           watchlist={watchlist}
           history={history}
           currentTicker={currentTicker}
@@ -330,10 +368,8 @@ export default function Home() {
                 stock={stockData}
                 analysis={analysisReport}
                 onAddToWatchlist={handleAddWatchlist}
-                onAddToPortfolio={handleAddWatchlist}
                 watchlistLoading={watchlistLoading}
                 isOnWatchlist={isOnWatchlist}
-                isOnPortfolio={isOnWatchlist}
               />
             )}
 
@@ -352,12 +388,23 @@ export default function Home() {
               />
             )}
 
-            {isLoading && <LoadingPipeline />}
+            {isLoading && (
+              <LoadingPipeline
+                ticker={currentTicker}
+                currentStep={currentAgentStep}
+                completedCount={completedAgentCount}
+                totalCount={agentSteps.length}
+              />
+            )}
 
             {analysisReport && !isLoading && (
               <>
                 {analysisReport.debate_output && (
                   <DebatePanel debate={analysisReport.debate_output} />
+                )}
+                <ResearchExtrasPanel analysis={analysisReport} />
+                {analysisReport.investment_memo && (
+                  <InvestmentMemoPanel memo={analysisReport.investment_memo} />
                 )}
                 <ReportDisplay analysis={analysisReport} />
                 <CitationsPanel
@@ -388,8 +435,9 @@ export default function Home() {
                     <span className="gradient-text">full story</span>
                   </p>
                   <p className="relative mx-auto mt-3 max-w-md text-sm leading-relaxed text-slate-500">
-                    Seven AI agents stream live — news, fundamentals, SEC filings,
-                    bull vs bear debate, then a full report with chat built in.
+                    Eleven AI agents stream live: news, fundamentals, SEC, earnings,
+                    macro, risk, bull vs bear, verification, report, then a
+                    shareable investment memo — with chat built in.
                   </p>
                   {watchlist.length > 0 && (
                     <div className="relative mt-6 flex flex-wrap justify-center gap-2">

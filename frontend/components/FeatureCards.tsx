@@ -1,35 +1,35 @@
 const FEATURES = [
   {
-    id: "market",
-    icon: "📈",
-    title: "Live market data",
-    body: "Price, P/E, market cap — straight from Yahoo. Same vibes as a Bloomberg terminal, minus the $24k/year.",
-    gradient: "from-emerald-500/20 to-cyan-500/5",
-    border: "hover:border-emerald-500/30",
+    id: "pipeline",
+    icon: "🤖",
+    title: "11-agent pipeline",
+    body: "News, financials, SEC, earnings, macro, risk, bull vs bear, verification, report, and a shareable investment memo.",
+    gradient: "from-violet-500/20 to-fuchsia-500/5",
+    border: "hover:border-violet-500/30",
   },
   {
     id: "sec",
     icon: "🏛️",
-    title: "SEC filing reads",
-    body: "10-K, 10-Q, 8-K pulled from EDGAR. We scan for red flags so you don't have to read 200 pages.",
+    title: "SEC + IR evidence",
+    body: "EDGAR filings plus allowlisted investor-relations pages. Facts stay separated from model insight.",
     gradient: "from-amber-500/20 to-orange-500/5",
     border: "hover:border-amber-500/30",
   },
   {
-    id: "debate",
-    icon: "⚔️",
-    title: "Bull vs bear",
-    body: "Two agents argue both sides before the final report drops. Real adversarial energy, not one-sided hype.",
-    gradient: "from-violet-500/20 to-pink-500/5",
-    border: "hover:border-violet-500/30",
+    id: "portfolio",
+    icon: "◈",
+    title: "Portfolio OS",
+    body: "Watchlist, broker position sync, daily briefings, and smart alerts on holdings you actually care about.",
+    gradient: "from-cyan-500/20 to-blue-500/5",
+    border: "hover:border-cyan-500/30",
   },
   {
     id: "chat",
     icon: "💬",
-    title: "RAG chat",
-    body: "Ask follow-ups after the report. Grounded in your analysis + past research stored in vector memory.",
-    gradient: "from-cyan-500/20 to-blue-500/5",
-    border: "hover:border-cyan-500/30",
+    title: "Grounded follow-ups",
+    body: "Ask questions after the report. Answers stay tied to this run plus past research in vector memory.",
+    gradient: "from-emerald-500/20 to-teal-500/5",
+    border: "hover:border-emerald-500/30",
   },
 ];
 
@@ -39,9 +39,7 @@ interface FeatureCardsProps {
 
 export default function FeatureCards({ className = "" }: FeatureCardsProps) {
   return (
-    <div
-      className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${className}`}
-    >
+    <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${className}`}>
       {FEATURES.map((feature) => (
         <article
           key={feature.id}

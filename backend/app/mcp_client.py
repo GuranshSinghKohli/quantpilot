@@ -18,8 +18,15 @@ MCP_SERVER_SCRIPT = PROJECT_ROOT / "mcp_server" / "server.py"
 _session = None
 _lock = asyncio.Lock()
 MCP_TIMEOUT_SECONDS = 5
+MCP_BROWSER_TIMEOUT_SECONDS = int(os.getenv("MCP_BROWSER_TIMEOUT_SECONDS", "45"))
 MCP_MAX_RETRIES = 2
 MCP_RETRY_DELAY_SECONDS = 1
+BROWSER_TOOL_NAMES = {
+    "get_ir_materials",
+    "fetch_browser_page",
+    "get_shareholder_letter",
+    "snapshot_active_browser_tab",
+}
 
 logger = get_logger("mcp_client")
 
@@ -39,7 +46,12 @@ class _MinimalMCPSession:
         self._process = process
         self._next_id = 1
 
-    async def _request(self, method: str, params: Optional[Dict[str, Any]] = None) -> Any:
+    async def _request(
+        self,
+        method: str,
+        params: Optional[Dict[str, Any]] = None,
+        timeout: float = MCP_TIMEOUT_SECONDS,
+    ) -> Any:
         msg_id = self._next_id
         self._next_id += 1
         payload = {"jsonrpc": "2.0", "id": msg_id, "method": method, "params": params or {}}
@@ -50,7 +62,7 @@ class _MinimalMCPSession:
         while True:
             response_line = await asyncio.wait_for(
                 self._process.stdout.readline(),
-                timeout=MCP_TIMEOUT_SECONDS,
+                timeout=timeout,
             )
             if not response_line:
                 raise MCPClientError("MCP server closed connection unexpectedly.")
@@ -74,9 +86,16 @@ class _MinimalMCPSession:
         self._process.stdin.write((json.dumps(notify) + "\n").encode())
         await self._process.stdin.drain()
 
-    async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    async def call_tool(
+        self,
+        name: str,
+        arguments: Dict[str, Any],
+        timeout: float = MCP_TIMEOUT_SECONDS,
+    ) -> Dict[str, Any]:
         result = await self._request(
-            "tools/call", {"name": name, "arguments": arguments}
+            "tools/call",
+            {"name": name, "arguments": arguments},
+            timeout=timeout,
         )
         content = result.get("content") or []
         if not content:
@@ -92,10 +111,15 @@ class _OfficialMCPSession:
         self._session = session
         self._stdio_context = stdio_context
 
-    async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    async def call_tool(
+        self,
+        name: str,
+        arguments: Dict[str, Any],
+        timeout: float = MCP_TIMEOUT_SECONDS,
+    ) -> Dict[str, Any]:
         result = await asyncio.wait_for(
             self._session.call_tool(name, arguments=arguments),
-            timeout=MCP_TIMEOUT_SECONDS,
+            timeout=timeout,
         )
         for block in result.content:
             if hasattr(block, "text"):
@@ -183,17 +207,41 @@ async def get_mcp_session():
             ) from exc
 
 
-async def call_tool(tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+def _timeout_for_tool(tool_name: str, timeout: Optional[float] = None) -> float:
+    if timeout is not None:
+        return float(timeout)
+    if tool_name in BROWSER_TOOL_NAMES:
+        return float(MCP_BROWSER_TIMEOUT_SECONDS)
+    return float(MCP_TIMEOUT_SECONDS)
+
+
+def _max_retries_for_tool(tool_name: str) -> int:
+    """Browser tools drive a real browser; a timeout means slow, not flaky.
+
+    Retrying multiplies an already long wait by the attempt count and can push
+    the whole analysis past the client's budget, so they get a single shot.
+    """
+    if tool_name in BROWSER_TOOL_NAMES:
+        return 0
+    return MCP_MAX_RETRIES
+
+
+async def call_tool(
+    tool_name: str,
+    arguments: Dict[str, Any],
+    timeout: Optional[float] = None,
+) -> Dict[str, Any]:
     ticker = arguments.get("ticker", "")
     last_error: Optional[Exception] = None
+    call_timeout = _timeout_for_tool(tool_name, timeout)
+    max_retries = _max_retries_for_tool(tool_name)
 
-    for attempt in range(MCP_MAX_RETRIES + 1):
+    for attempt in range(max_retries + 1):
         start = time.perf_counter()
         try:
             session = await get_mcp_session()
-            result = await asyncio.wait_for(
-                session.call_tool(tool_name, arguments),
-                timeout=MCP_TIMEOUT_SECONDS,
+            result = await session.call_tool(
+                tool_name, arguments, timeout=call_timeout
             )
             duration_ms = int((time.perf_counter() - start) * 1000)
             log_event(
@@ -212,7 +260,7 @@ async def call_tool(tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]
             last_error = exc
         except asyncio.TimeoutError as exc:
             last_error = MCPUnavailableError(
-                f"MCP tool '{tool_name}' timed out after {MCP_TIMEOUT_SECONDS}s."
+                f"MCP tool '{tool_name}' timed out after {call_timeout}s."
             )
         except json.JSONDecodeError as exc:
             last_error = MCPClientError(f"MCP tool '{tool_name}' returned invalid JSON.")
@@ -224,7 +272,7 @@ async def call_tool(tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]
         duration_ms = int((time.perf_counter() - start) * 1000)
         log_event(
             logger,
-            logging.WARNING if attempt < MCP_MAX_RETRIES else logging.ERROR,
+            logging.WARNING if attempt < max_retries else logging.ERROR,
             "MCP tool call failed",
             tool_name=tool_name,
             ticker=ticker,
@@ -233,13 +281,13 @@ async def call_tool(tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]
             attempt=attempt + 1,
             error=str(last_error),
         )
-        if attempt < MCP_MAX_RETRIES:
+        if attempt < max_retries:
             await asyncio.sleep(MCP_RETRY_DELAY_SECONDS)
 
     if isinstance(last_error, MCPClientError):
         raise MCPUnavailableError(
             f"MCP server unreachable for tool '{tool_name}' after "
-            f"{MCP_MAX_RETRIES + 1} attempts: {last_error}"
+            f"{max_retries + 1} attempts: {last_error}"
         ) from last_error
     raise MCPUnavailableError(
         f"MCP server unreachable for tool '{tool_name}' after retries."

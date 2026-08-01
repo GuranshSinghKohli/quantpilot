@@ -22,12 +22,12 @@
                 │                                     │
                 ▼                                     ▼
 ┌───────────────────────────────┐     ┌───────────────────────────────────┐
-│   LANGGRAPH WORKFLOW          │     │   MEMORY LAYER                     │
-│   fetch_data → 5 agents       │     │   ChromaDB (vector reports)        │
-│   sequential StateGraph       │     │   Session history (JSON)           │
-└───────────────┬───────────────┘     │   Watchlist (JSON)                 │
-                │                     └───────────────────────────────────┘
-                ▼
+│   LANGGRAPH WORKFLOW          │     │   MEMORY / DATA LAYER               │
+│   fetch_data → agents         │     │   PostgreSQL (users, portfolios,    │
+│   sequential StateGraph       │     │     holdings / watchlist)           │
+└───────────────┬───────────────┘     │   ChromaDB (vector reports)         │
+                │                     │   Session history (in-memory)       │
+                ▼                     └───────────────────────────────────┘
 ┌───────────────────────────────┐
 │   5 AI AGENTS (GPT-4o-mini)   │
 │   news · financial · SEC      │
@@ -55,17 +55,17 @@
 
 **Vercel (Next.js)** — React UI with typed API client, timeout handling, and environment-based backend URL. Static/SSR deployment with zero server management.
 
-**Railway (FastAPI)** — REST API gateway, CORS, exception handling, and background tasks (e.g. persisting reports after analysis). Hosts the LangGraph runtime and spawns the MCP server as a subprocess.
+**Railway (FastAPI)** — REST API gateway, CORS, JWT auth, exception handling, and background tasks (e.g. persisting reports after analysis). Hosts the LangGraph runtime and spawns the MCP server as a subprocess. Phase 7 adds PostgreSQL for users, portfolios, and watchlist holdings.
 
-**LangGraph workflow** — `StateGraph` orchestrates six nodes: data fetch, then news → financial → SEC → risk → report. State carries agent outputs, confidence scores, validation warnings, and `facts_and_insights`.
+**LangGraph workflow** — `StateGraph` orchestrates data fetch, then news → financial → SEC → earnings → macro → risk → bull → bear → verification → report → investment memo (Phase 12). State carries agent outputs, confidence scores, validation warnings, and `facts_and_insights`.
 
-**Memory layer** — ChromaDB stores embedded report text for semantic search; JSON files back session history and watchlist. Designed for local dev; production should use managed vector storage.
+**Memory / data layer** — PostgreSQL (or local SQLite) stores users, portfolios, holdings, daily briefings, alert rules, and alert events. Redis (optional; in-memory fallback) caches quotes and queues alert evaluation jobs. ChromaDB stores embedded report text for semantic search. Session history remains in-process memory. APScheduler runs daily briefings and interval alert checks.
 
-**AI agents** — Specialized prompts per domain. Each agent returns structured JSON validated by Pydantic; failures degrade to safe fallbacks without crashing the graph.
+**AI agents** — Specialized prompts per domain. Each agent returns structured JSON validated by Pydantic; failures degrade to safe fallbacks without crashing the graph. Phase 12 adds an Investment Memo agent that compresses the full report into a shareable decision brief (`decision`, conviction, thesis, catalysts, risks).
 
-**MCP server** — Model Context Protocol tools (`get_stock_price`, `get_stock_fundamentals`, `get_stock_news`, `get_recent_filings`, etc.) decouple agents from raw API clients.
+**MCP server** — Model Context Protocol tools (`get_stock_price`, `get_stock_fundamentals`, `get_stock_news`, `get_recent_filings`, `get_ir_materials`, `snapshot_active_browser_tab`, etc.) decouple agents from raw API clients. Phase 11 adds browser/IR tools that prefer OpenClaw when configured and fall back to allowlisted HTTP fetches. Phase 11.1 adds a Portfolio Auto-Sync flow: the Portfolio Sync agent (`app/agents/portfolio_sync_agent.py`) extracts `{ticker, shares, avg_cost}` from a pasted brokerage positions page or an OpenClaw existing-session snapshot of the user's own signed-in browser — no credentials ever pass through QuantPilot — and the Portfolio Analyzer then weights the basket by real position sizes instead of equal-weight.
 
-**External APIs** — Yahoo Finance (yfinance), SEC EDGAR (httpx), and OpenAI for generation and embeddings.
+**External APIs** — Yahoo Finance (yfinance), SEC EDGAR (httpx), optional OpenClaw browser control for IR pages, and OpenAI for generation and embeddings.
 
 ---
 
@@ -105,11 +105,16 @@ Optimized for Next.js frontends: preview deployments, env injection at build tim
 
 ---
 
-## Observability (Phase 6)
+## Observability (Phase 6 + Phase 12)
 
 - JSON structured logs → `backend/logs/quantpilot.log`
 - In-memory workflow runs → `GET /api/observability/runs`
 - Per-agent confidence scores and `facts_and_insights` on every analysis response
+- Phase 12 optional exporters (env-gated, safe no-ops when unset):
+  - **LangSmith** — `LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY`
+  - **Sentry** — `SENTRY_DSN`
+  - **OpenTelemetry** — `OTEL_ENABLED` / `OTEL_EXPORTER_OTLP_ENDPOINT`
+- GitHub Actions CI runs backend pytest + frontend `tsc` / lint on every PR
 
 ---
 
@@ -117,8 +122,9 @@ Optimized for Next.js frontends: preview deployments, env injection at build tim
 
 1. User submits ticker on Vercel UI  
 2. `POST /api/analysis/{ticker}` on Railway  
-3. WorkflowRun created; LangGraph executes six nodes  
+3. WorkflowRun created; LangGraph executes fetch + 10 agent nodes  
 4. MCP tools fetch market + SEC data; OpenAI structures each agent output  
+
 5. Validators apply safe defaults; confidence scored; facts separated from insights  
 6. Response returned; report saved to ChromaDB in background  
 7. UI renders report, confidence meter, citations panel  

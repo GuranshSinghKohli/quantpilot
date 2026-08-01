@@ -1,13 +1,22 @@
 import type {
   AnalysisResponse,
+  AlertEvent,
+  AlertRule,
+  AlertType,
+  AuthResponse,
+  AuthUser,
   ChatResponse,
+  DailyBriefing,
   FilingsData,
   HistoryEntry,
   MemorySearchResult,
   PortfolioAnalysis,
+  PortfolioSummary,
+  PortfolioSyncOutput,
   RecommendationsResponse,
   StockData,
   StoredReport,
+  SyncedPosition,
   WatchlistEntry,
 } from "@/types";
 
@@ -26,6 +35,9 @@ export const API_URL = normalizeApiUrl(
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const ANALYSIS_TIMEOUT_MS = 180_000;
+const AUTH_TOKEN_KEY = "quantpilot_token";
+
+export type { AuthUser, AuthResponse };
 
 export class ApiError extends Error {
   status?: number;
@@ -35,6 +47,17 @@ export class ApiError extends Error {
     this.name = "ApiError";
     this.status = status;
   }
+}
+
+export function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setAuthToken(token: string | null): void {
+  if (typeof window === "undefined") return;
+  if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
+  else localStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
 function getBaseUrl(): string {
@@ -76,6 +99,10 @@ async function apiFetch<T>(
     if (fetchOptions.body !== undefined && fetchOptions.body !== null) {
       headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
     }
+    const token = getAuthToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
 
     const response = await fetch(`${getBaseUrl()}${path}`, {
       ...fetchOptions,
@@ -92,7 +119,7 @@ async function apiFetch<T>(
     if (error instanceof ApiError) throw error;
     if (error instanceof Error && error.name === "AbortError") {
       throw new ApiError(
-        "Request timed out. The analysis pipeline can take up to 2 minutes — please try again."
+        "Request timed out. The analysis pipeline can take up to 2 minutes. Please try again."
       );
     }
     const base = getBaseUrl();
@@ -111,6 +138,47 @@ export async function checkApiHealth(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function register(
+  email: string,
+  password: string
+): Promise<AuthResponse> {
+  const auth = await apiFetch<AuthResponse>("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  setAuthToken(auth.access_token);
+  return auth;
+}
+
+export async function login(
+  email: string,
+  password: string
+): Promise<AuthResponse> {
+  const auth = await apiFetch<AuthResponse>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  setAuthToken(auth.access_token);
+  return auth;
+}
+
+export async function fetchMe(): Promise<AuthUser | null> {
+  if (!getAuthToken()) return null;
+  try {
+    return await apiFetch<AuthUser>("/api/auth/me");
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      setAuthToken(null);
+      return null;
+    }
+    throw err;
+  }
+}
+
+export function logout(): void {
+  setAuthToken(null);
 }
 
 export async function fetchStockData(ticker: string): Promise<StockData> {
@@ -175,9 +243,13 @@ export async function fetchAnalysisStream(
   }
 
   try {
+    const headers: Record<string, string> = {};
+    const token = getAuthToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
     const response = await fetch(
       `${getBaseUrl()}/api/analysis/${encodeURIComponent(ticker)}/stream`,
-      { method: "POST", signal: controller.signal }
+      { method: "POST", signal: controller.signal, headers }
     );
 
     if (!response.ok) {
@@ -206,7 +278,6 @@ export async function fetchAnalysisStream(
       }
     }
 
-    // Flush any remaining bytes (last event may lack trailing newline)
     buffer += decoder.decode();
     for (const line of buffer.split("\n")) {
       const result = parseLine(line);
@@ -218,7 +289,7 @@ export async function fetchAnalysisStream(
     if (error instanceof ApiError) throw error;
     if (error instanceof Error && error.name === "AbortError") {
       throw new ApiError(
-        "Request timed out. The analysis pipeline can take up to 2 minutes — please try again."
+        "Request timed out. The analysis pipeline can take up to 2 minutes. Please try again."
       );
     }
     throw new ApiError(
@@ -262,6 +333,102 @@ export async function sendChatMessage(
 export async function fetchPortfolioAnalysis(): Promise<PortfolioAnalysis> {
   return apiFetch<PortfolioAnalysis>("/api/portfolio/analyze", {
     timeoutMs: 60_000,
+  });
+}
+
+export async function previewPortfolioSync(
+  options: { rawText?: string; useOpenclaw?: boolean }
+): Promise<PortfolioSyncOutput> {
+  return apiFetch<PortfolioSyncOutput>("/api/portfolio/sync/preview", {
+    method: "POST",
+    body: JSON.stringify({
+      raw_text: options.rawText ?? null,
+      use_openclaw: options.useOpenclaw ?? false,
+    }),
+    timeoutMs: 60_000,
+  });
+}
+
+export async function confirmPortfolioSync(
+  positions: SyncedPosition[]
+): Promise<PortfolioSummary> {
+  return apiFetch<PortfolioSummary>("/api/portfolio/sync/confirm", {
+    method: "POST",
+    body: JSON.stringify({ positions }),
+  });
+}
+
+export async function fetchLatestBriefing(): Promise<DailyBriefing> {
+  return apiFetch<DailyBriefing>("/api/portfolio/briefing");
+}
+
+export async function generateBriefing(): Promise<DailyBriefing> {
+  return apiFetch<DailyBriefing>("/api/portfolio/briefing/generate", {
+    method: "POST",
+    timeoutMs: 180_000,
+  });
+}
+
+export async function fetchBriefings(limit = 7): Promise<DailyBriefing[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return apiFetch<DailyBriefing[]>(`/api/portfolio/briefings?${params}`);
+}
+
+export async function fetchAlertRules(): Promise<AlertRule[]> {
+  return apiFetch<AlertRule[]>("/api/alerts/rules");
+}
+
+export async function createAlertRule(body: {
+  ticker: string;
+  alert_type: AlertType | string;
+  threshold: number;
+  cooldown_minutes?: number;
+  note?: string;
+}): Promise<AlertRule> {
+  return apiFetch<AlertRule>("/api/alerts/rules", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteAlertRule(ruleId: number): Promise<void> {
+  await apiFetch(`/api/alerts/rules/${ruleId}`, { method: "DELETE" });
+}
+
+export async function fetchAlertEvents(
+  unreadOnly = false
+): Promise<AlertEvent[]> {
+  const params = new URLSearchParams({
+    unread_only: unreadOnly ? "true" : "false",
+    limit: "50",
+  });
+  return apiFetch<AlertEvent[]>(`/api/alerts/events?${params}`);
+}
+
+export async function fetchAlertUnreadCount(): Promise<number> {
+  const res = await apiFetch<{ count: number }>("/api/alerts/unread-count");
+  return res.count;
+}
+
+export async function markAlertRead(eventId: number): Promise<AlertEvent> {
+  return apiFetch<AlertEvent>(`/api/alerts/events/${eventId}/read`, {
+    method: "POST",
+  });
+}
+
+export async function markAllAlertsRead(): Promise<void> {
+  await apiFetch("/api/alerts/events/read-all", { method: "POST" });
+}
+
+export async function evaluateAlerts(): Promise<{
+  evaluated_rules: number;
+  triggered: number;
+  redis_mode: string;
+  events: AlertEvent[];
+}> {
+  return apiFetch("/api/alerts/evaluate", {
+    method: "POST",
+    timeoutMs: 120_000,
   });
 }
 

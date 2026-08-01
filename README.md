@@ -16,7 +16,7 @@
 ## What it does
 
 - **One-click equity research** - Enter a ticker (e.g. `AAPL`) and receive a full multi-section report with executive summary and BUY/HOLD/SELL-style recommendation
-- **Transparent agent pipeline** - Watch five specialized agents run in sequence: news, financial metrics, SEC filings, risk, and report synthesis
+- **Transparent agent pipeline** - Watch ten specialized agents run in sequence: news, financial, SEC, earnings, macro, risk, bull/bear debate, verification, and report synthesis
 - **Grounded citations** - Facts (prices, filings, headlines) are separated from LLM-generated insights for auditability
 - **Confidence scoring** - Heuristic per-agent and overall confidence based on data completeness — not a black box
 - **Persistent memory** - Past reports stored in ChromaDB with semantic search, session history, and a watchlist
@@ -45,9 +45,10 @@ Full diagram and technology rationale: **[ARCHITECTURE.md](./ARCHITECTURE.md)**
 | Frontend | Next.js 14, TypeScript, Tailwind | Dashboard UI, API client, deploy on Vercel |
 | Backend | FastAPI, Pydantic, uvicorn | REST API, CORS, background tasks |
 | Orchestration | LangGraph | Stateful multi-agent workflow |
-| Agents | OpenAI GPT-4o-mini | News, valuation, SEC, risk, report synthesis |
+| Agents | OpenAI GPT-4o-mini | News, valuation, SEC, earnings, macro, risk, debate, verification, report |
 | Tools | MCP (stdio server) | Standardized financial tool interface |
-| Memory | ChromaDB, JSON stores | Vector report search, history, watchlist |
+| Memory | ChromaDB, PostgreSQL | Vector reports; users / portfolios / watchlist |
+| Auth | JWT + bcrypt | Register / login, user-scoped holdings |
 | Data | yfinance, SEC EDGAR | Market data and filings |
 | Observability | JSON logging, workflow tracker | Agent timing, confidence, failures |
 | Deployment | Railway (API), Vercel (UI) | Production hosting |
@@ -64,7 +65,13 @@ Full diagram and technology rationale: **[ARCHITECTURE.md](./ARCHITECTURE.md)**
 | **4** | MCP tools | `mcp_server/`, stdio client, agent refactor to tools |
 | **5** | Frontend | Dark dashboard, report UI, citations, watchlist sidebar |
 | **6** | Reliability | Confidence, validation, facts/insights, logging, workflow runs |
-| **7** | Deployment | Railway + Vercel, README, architecture docs, portfolio polish |
+| **7** | Data layer | PostgreSQL (SQLite local), JWT auth, user portfolios, migrate watchlist off JSON |
+| **8** | Portfolio & scheduling | Portfolio Agent, APScheduler daily briefings, in-app Briefing panel |
+| **9** | Alerts & Redis | Redis cache/queues (memory fallback), smart alerts, Alerts panel |
+| **10** | Deeper research | Earnings, Macro, Verification agents in LangGraph (10-agent pipeline) |
+| **11** | Browser MCP | OpenClaw-backed IR / shareholder letter tools + allowlisted HTTP fallback |
+| **11.1** | Portfolio Sync | Broker-agnostic position import (paste or OpenClaw existing-session snapshot) with real share-weighted analysis |
+| **12** | Ship polish | Investment Memo agent, LangSmith/OTel/Sentry hooks, GitHub Actions CI |
 
 ---
 
@@ -159,10 +166,13 @@ Quick summary:
 
 - Real-time streaming of agent steps (SSE / WebSockets)
 - CrewAI for parallel news / financial / SEC agents
-- Redis for production session and workflow persistence
-- User authentication and saved portfolios
+- ~~Earnings / Macro / Verification agents (Phase 10)~~
+- ~~Browser MCP + OpenClaw (Phase 11)~~
+- ~~Portfolio Auto-Sync Agent — broker position import via paste or OpenClaw (Phase 11.1)~~
+- ~~Investment Memo Agent + LangSmith/OTel/Sentry + CI (Phase 12)~~
 - ChromaDB Cloud for durable vector memory on Railway
-- Backtesting hooks and price alert integrations
+- Email delivery for alerts/briefings
+- Dip Watch — alert-triggered re-analysis with buy/wait/avoid cards
 
 ---
 

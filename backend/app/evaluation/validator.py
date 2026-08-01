@@ -3,11 +3,15 @@ from typing import Any, Dict, List, Tuple, Type
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from app.models.agent_schemas import (
+    EarningsAgentOutput,
     FinalReportOutput,
     FinancialMetricsAgentOutput,
+    InvestmentMemoOutput,
+    MacroAgentOutput,
     NewsAgentOutput,
     RiskAgentOutput,
     SECFilingAgentOutput,
+    VerificationAgentOutput,
 )
 
 
@@ -48,7 +52,31 @@ class ValidatedRiskOutput(RiskAgentOutput):
     error_message: str = ""
 
 
+class ValidatedEarningsOutput(EarningsAgentOutput):
+    confidence_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    validation_warning: str = ""
+    error_message: str = ""
+
+
+class ValidatedMacroOutput(MacroAgentOutput):
+    confidence_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    validation_warning: str = ""
+    error_message: str = ""
+
+
+class ValidatedVerificationOutput(VerificationAgentOutput):
+    confidence_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    validation_warning: str = ""
+    error_message: str = ""
+
+
 class ValidatedFinalReport(FinalReportOutput):
+    confidence_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    validation_warning: str = ""
+    error_message: str = ""
+
+
+class ValidatedInvestmentMemo(InvestmentMemoOutput):
     confidence_score: float = Field(default=0.5, ge=0.0, le=1.0)
     validation_warning: str = ""
     error_message: str = ""
@@ -61,6 +89,24 @@ def _normalize_recommendation(rec: str) -> str:
     if "SELL" in upper:
         return "SELL"
     return "HOLD"
+
+
+def _normalize_memo_decision(rec: str) -> str:
+    upper = (rec or "").upper()
+    if "BUY" in upper and "SELL" not in upper:
+        return "BUY"
+    if "SELL" in upper:
+        return "SELL"
+    if "WATCH" in upper:
+        return "WATCH"
+    return "HOLD"
+
+
+def _normalize_conviction(value: str) -> str:
+    lower = (value or "").strip().lower()
+    if lower in ("low", "medium", "high"):
+        return lower
+    return "medium"
 
 
 def validate_output(
@@ -87,6 +133,22 @@ def validate_output(
                 {"title": "Risk Factors", "content": "See risk assessment for details."},
             ]
             warnings.append("Report sections below minimum; default sections added.")
+
+    if model_cls is InvestmentMemoOutput or model_cls is ValidatedInvestmentMemo:
+        merged["decision"] = _normalize_memo_decision(merged.get("decision", "HOLD"))
+        merged["conviction"] = _normalize_conviction(merged.get("conviction", "medium"))
+        if not merged.get("one_liner"):
+            merged["one_liner"] = merged.get("investment_thesis", "")[:280]
+        if not merged.get("key_numbers"):
+            merged["key_numbers"] = ["Limited quantitative inputs available."]
+        if not merged.get("risks"):
+            merged["risks"] = ["Review full report risk section."]
+        if len(merged.get("investment_thesis", "").split()) < 20:
+            merged["investment_thesis"] = (
+                (merged.get("investment_thesis") or "")
+                + " Memo generated with limited validated inputs; treat as educational only."
+            ).strip()
+            warnings.append("Investment thesis was too short and was extended.")
 
     try:
         validated = model_cls.model_validate(merged)
@@ -149,10 +211,47 @@ def validate_risk(data: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
     return validate_output(ValidatedRiskOutput, data, defaults)
 
 
+def validate_earnings(data: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
+    defaults = {
+        "earnings_summary": "Earnings context unavailable from current data feeds.",
+        "tone": "unknown",
+        "key_points": ["Limited earnings signals"],
+        "next_catalyst": "Monitor upcoming earnings calendar and filings.",
+        "sources": data.get("sources") or [],
+        "confidence_score": data.get("confidence_score", 0.5),
+        "error_message": data.get("error_message", ""),
+    }
+    return validate_output(ValidatedEarningsOutput, data, defaults)
+
+
+def validate_macro(data: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
+    defaults = {
+        "macro_summary": "No strong macro linkage identified from available headlines.",
+        "relevance": "none",
+        "themes": ["limited macro signal"],
+        "portfolio_implications": ["Revisit after major CPI/FOMC prints."],
+        "confidence_score": data.get("confidence_score", 0.5),
+        "error_message": data.get("error_message", ""),
+    }
+    return validate_output(ValidatedMacroOutput, data, defaults)
+
+
+def validate_verification(data: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
+    defaults = {
+        "verified_claims": ["Core market/filing inputs present where available."],
+        "unsupported_claims": [],
+        "coverage_notes": ["Verification completed with limited inputs."],
+        "groundedness_score": data.get("groundedness_score", 0.5),
+        "confidence_score": data.get("confidence_score", 0.5),
+        "error_message": data.get("error_message", ""),
+    }
+    return validate_output(ValidatedVerificationOutput, data, defaults)
+
+
 def validate_report(data: Dict[str, Any], ticker: str) -> Tuple[Dict[str, Any], List[str]]:
     defaults = {
         "ticker": ticker,
-        "report_title": f"{ticker} — QuantPilot Research Report",
+        "report_title": f"{ticker}: QuantPilot Research Report",
         "executive_summary": (
             "Automated research report generated with limited validated inputs. "
             "Review all metrics and filings before acting on this analysis."
@@ -170,3 +269,33 @@ def validate_report(data: Dict[str, Any], ticker: str) -> Tuple[Dict[str, Any], 
         "error_message": data.get("error_message", ""),
     }
     return validate_output(ValidatedFinalReport, data, defaults)
+
+
+def validate_memo(data: Dict[str, Any], ticker: str) -> Tuple[Dict[str, Any], List[str]]:
+    defaults = {
+        "ticker": ticker,
+        "memo_title": f"{ticker} Investment Memo",
+        "one_liner": f"Automated investment memo for {ticker}.",
+        "investment_thesis": (
+            f"Multi-agent research memo for {ticker} generated with limited "
+            "validated inputs. Review the full report before deciding."
+        ),
+        "key_numbers": ["Limited quantitative inputs available."],
+        "catalysts": [],
+        "risks": ["Review full report risk section."],
+        "bull_case_summary": "Bull case unavailable.",
+        "bear_case_summary": "Bear case unavailable.",
+        "decision": "HOLD",
+        "conviction": "medium",
+        "time_horizon": "3-12 months",
+        "what_would_change_my_mind": [
+            "Material change in fundamentals or filings.",
+        ],
+        "disclaimer": (
+            "This investment memo is generated by AI for educational purposes only "
+            "and is not financial advice."
+        ),
+        "confidence_score": data.get("confidence_score", 0.5),
+        "error_message": data.get("error_message", ""),
+    }
+    return validate_output(ValidatedInvestmentMemo, data, defaults)

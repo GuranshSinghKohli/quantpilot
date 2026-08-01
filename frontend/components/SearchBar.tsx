@@ -6,6 +6,7 @@ interface SearchBarProps {
   onAnalyze: (ticker: string) => void;
   isLoading: boolean;
   recentTickers: string[];
+  loadingLabel?: string;
 }
 
 const QUICK_PICKS = ["AAPL", "MSFT", "NVDA", "TSLA"];
@@ -14,6 +15,7 @@ export default function SearchBar({
   onAnalyze,
   isLoading,
   recentTickers,
+  loadingLabel = "Analyzing…",
 }: SearchBarProps) {
   const [ticker, setTicker] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +87,7 @@ export default function SearchBar({
           {isLoading ? (
             <span className="inline-flex items-center justify-center gap-2">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-              cooking…
+              {loadingLabel}
             </span>
           ) : (
             "run it →"

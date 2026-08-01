@@ -22,7 +22,7 @@ DEFAULT_SCAN_TICKERS = [
 ]
 
 DISCLAIMER = (
-    "AI-generated screening for educational purposes only — not financial advice. "
+    "AI-generated screening for educational purposes only, not financial advice. "
     "Past patterns do not guarantee future returns. Always do your own research "
     "before investing."
 )
@@ -91,26 +91,26 @@ def _score_ticker(
         if position < 0.35:
             score += 0.14
             reasons.append(
-                "Price in lower third of 52-week range — room for near-term recovery"
+                "Price in lower third of 52-week range, room for near-term recovery"
             )
         elif position > 0.88:
             score -= 0.1
-            reasons.append("Trading near 52-week high — less near-term upside headroom")
+            reasons.append("Trading near 52-week high, less near-term upside headroom")
         else:
             score += 0.06
-            reasons.append("Mid-range vs 52-week high/low — balanced momentum setup")
+            reasons.append("Mid-range vs 52-week high/low, balanced momentum setup")
 
     if stock.pe_ratio is not None:
         pe = stock.pe_ratio
         if 0 < pe < 18:
             score += 0.1
-            reasons.append(f"P/E near {pe:.1f} — relatively modest valuation")
+            reasons.append(f"P/E near {pe:.1f}, relatively modest valuation")
         elif pe > 40:
             score -= 0.08
-            reasons.append(f"P/E near {pe:.1f} — premium valuation")
+            reasons.append(f"P/E near {pe:.1f}, premium valuation")
         elif 18 <= pe <= 30:
             score += 0.04
-            reasons.append(f"P/E near {pe:.1f} — fair-to-moderate valuation")
+            reasons.append(f"P/E near {pe:.1f}, fair-to-moderate valuation")
 
     news_delta, news_reason = _news_sentiment(headlines)
     score += news_delta
@@ -141,9 +141,9 @@ async def _scan_one(ticker: str) -> Optional[RecommendationPick]:
         score, outlook, reasons = _score_ticker(stock, headlines)
 
         near_term = {
-            "bullish": "Near-term outlook: constructive — signals favor potential upside",
-            "neutral": "Near-term outlook: mixed — wait for clearer trend",
-            "bearish": "Near-term outlook: cautious — headwinds in current data",
+            "bullish": "Near-term outlook: constructive, signals favor potential upside",
+            "neutral": "Near-term outlook: mixed, wait for clearer trend",
+            "bearish": "Near-term outlook: cautious, headwinds in current data",
         }[outlook]
 
         return RecommendationPick(

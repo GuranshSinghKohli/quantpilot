@@ -1,4 +1,4 @@
-"""Build AnalysisResponse from LangGraph state — shared by sync and stream routes."""
+"""Build AnalysisResponse from LangGraph state, shared by sync and stream routes."""
 
 from typing import Any, Dict
 
@@ -8,13 +8,18 @@ from app.models.agent_schemas import (
     AnalysisResponse,
     DebateAgentOutput,
     DebateOutput,
+    EarningsAgentOutput,
     FactsAndInsights,
     FinalReportOutput,
     FinancialMetricsAgentOutput,
+    InvestmentMemoOutput,
+    IrMaterialsOutput,
+    MacroAgentOutput,
     NewsAgentOutput,
     PerAgentConfidence,
     RiskAgentOutput,
     SECFilingAgentOutput,
+    VerificationAgentOutput,
 )
 
 
@@ -27,10 +32,14 @@ def build_analysis_response(state: Dict[str, Any], run_id: str) -> AnalysisRespo
         news=scores.get("news", 0.0),
         financial=scores.get("financial", 0.0),
         sec=scores.get("sec", 0.0),
+        earnings=scores.get("earnings", 0.0),
+        macro=scores.get("macro", 0.0),
         risk=scores.get("risk", 0.0),
         bull=scores.get("bull", 0.0),
         bear=scores.get("bear", 0.0),
+        verification=scores.get("verification", 0.0),
         report=scores.get("report", 0.0),
+        memo=scores.get("memo", 0.0),
     )
     overall = overall_confidence(per_agent.model_dump())
 
@@ -53,6 +62,11 @@ def build_analysis_response(state: Dict[str, Any], run_id: str) -> AnalysisRespo
     return AnalysisResponse(
         ticker=symbol,
         final_report=FinalReportOutput.model_validate(final_report_raw),
+        investment_memo=(
+            InvestmentMemoOutput.model_validate(state["investment_memo"])
+            if state.get("investment_memo")
+            else None
+        ),
         news_output=(
             NewsAgentOutput.model_validate(state["news_output"])
             if state.get("news_output")
@@ -68,9 +82,29 @@ def build_analysis_response(state: Dict[str, Any], run_id: str) -> AnalysisRespo
             if state.get("sec_output")
             else None
         ),
+        earnings_output=(
+            EarningsAgentOutput.model_validate(state["earnings_output"])
+            if state.get("earnings_output")
+            else None
+        ),
+        ir_materials=(
+            IrMaterialsOutput.model_validate(state["ir_materials"])
+            if state.get("ir_materials")
+            else None
+        ),
+        macro_output=(
+            MacroAgentOutput.model_validate(state["macro_output"])
+            if state.get("macro_output")
+            else None
+        ),
         risk_output=(
             RiskAgentOutput.model_validate(state["risk_output"])
             if state.get("risk_output")
+            else None
+        ),
+        verification_output=(
+            VerificationAgentOutput.model_validate(state["verification_output"])
+            if state.get("verification_output")
             else None
         ),
         run_id=run_id,

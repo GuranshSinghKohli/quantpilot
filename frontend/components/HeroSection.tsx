@@ -52,11 +52,11 @@ export default function HeroSection({ compact = false }: HeroSectionProps) {
                 QuantPilot
               </span>
               <span className="vibe-pill px-2 py-0.5 text-violet-300/90">
-                7 agents deep
+                11 agents deep
               </span>
             </div>
             <p className="mt-1.5 text-sm leading-snug text-slate-400 sm:text-base">
-              Drop a ticker — get the{" "}
+              Drop a ticker. Get the{" "}
               <span className="font-medium text-slate-200">full breakdown</span>{" "}
               with live data, SEC tea, and bull vs bear drama.
             </p>
@@ -84,20 +84,23 @@ export default function HeroSection({ compact = false }: HeroSectionProps) {
             AI research copilot
           </p>
           <h2 className="font-display mt-4 max-w-2xl text-2xl font-bold leading-tight tracking-tight text-white sm:text-3xl lg:text-4xl">
-            Stock research that actually{" "}
-            <span className="gradient-text">hits different</span>
+            Research that argues with itself,{" "}
+            <span className="gradient-text">so you don&apos;t have to</span>
           </h2>
           <p className="mt-4 max-w-xl text-sm leading-relaxed text-slate-400 sm:text-base">
-            Seven AI agents pull live prices, news, and SEC filings — then debate
-            bull vs bear before dropping a full report. No fluff, just receipts.
+            Eleven AI agents pull live prices, news, filings, earnings, and macro
+            context, then debate, verify, and draft a shareable investment memo.
+            No fluff, just receipts.
           </p>
 
           <ul className="mt-6 flex flex-wrap gap-2">
             {[
               "live streaming",
+              "earnings + macro",
               "bull × bear debate",
-              "RAG chat",
-              "portfolio view",
+              "verification",
+              "investment memo",
+              "alerts & briefings",
             ].map((tag) => (
               <li
                 key={tag}

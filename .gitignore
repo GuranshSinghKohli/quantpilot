@@ -48,6 +48,8 @@ data/chroma_db/
 data/watchlist.json
 backend/data/chroma_db/
 backend/data/watchlist.json
+backend/data/*.db
+backend/tests/_test_*.db
 
 # Docker
 .docker/

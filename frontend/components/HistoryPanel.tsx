@@ -44,7 +44,7 @@ export default function HistoryPanel({
       <div className="mt-3 space-y-2">
         {items.length === 0 && !loading && (
           <p className="py-6 text-center text-sm text-slate-600">
-            no runs yet — go analyze something
+            no runs yet. Go analyze something
           </p>
         )}
         {loading && (

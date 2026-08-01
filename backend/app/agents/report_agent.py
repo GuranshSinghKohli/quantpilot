@@ -19,7 +19,7 @@ def _fallback(
 ) -> FinalReportOutput:
     return FinalReportOutput(
         ticker=ticker,
-        report_title=f"{ticker} — QuantPilot Research Snapshot",
+        report_title=f"{ticker}: QuantPilot Research Snapshot",
         executive_summary=(
             f"Automated multi-agent snapshot for {ticker}. "
             f"News sentiment: {news_output.get('sentiment', 'neutral')}. "
@@ -44,7 +44,7 @@ def _fallback(
                 content=", ".join(risk_output.get("risk_factors", [])),
             ),
         ],
-        recommendation="Hold — conduct further due diligence before investing.",
+        recommendation="Hold. Conduct further due diligence before investing.",
     )
 
 
@@ -56,6 +56,9 @@ async def generate_report(
     sec_output: Dict[str, Any],
     risk_output: Dict[str, Any],
     debate_output: Optional[Dict[str, Any]] = None,
+    earnings_output: Optional[Dict[str, Any]] = None,
+    macro_output: Optional[Dict[str, Any]] = None,
+    verification_output: Optional[Dict[str, Any]] = None,
 ) -> FinalReportOutput:
     fallback = _fallback(
         ticker, news_output, metrics_output, sec_output, risk_output
@@ -68,8 +71,11 @@ async def generate_report(
                 "news_output": news_output,
                 "metrics_output": metrics_output,
                 "sec_output": sec_output,
+                "earnings_output": earnings_output or {},
+                "macro_output": macro_output or {},
                 "risk_output": risk_output,
                 "debate_output": debate_output or {},
+                "verification_output": verification_output or {},
             },
             default=str,
         )
@@ -77,7 +83,9 @@ async def generate_report(
         result = await call_openai_json(
             system_prompt=(
                 "You are a senior equity research analyst. Write a structured research report. "
-                "Synthesize bull and bear debate when provided. "
+                "Synthesize bull/bear debate, earnings, macro, and verification flags when provided. "
+                "Prefer verified claims; call out unsupported claims cautiously. "
+                "This is research tooling, not financial advice. "
                 "Respond ONLY with valid JSON: "
                 '{"ticker": string, "report_title": string, "executive_summary": string, '
                 '"sections": [{"title": string, "content": string}, ...], '

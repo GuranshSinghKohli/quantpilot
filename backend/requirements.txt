@@ -10,5 +10,26 @@ openai==2.37.0
 langgraph==0.6.11
 langchain-core==0.3.86
 chromadb==1.5.9
+# Phase 7 — data layer + auth
+SQLAlchemy==2.0.41
+psycopg2-binary==2.9.10
+PyJWT==2.10.1
+bcrypt==4.3.0
+# Phase 8 — scheduling
+APScheduler==3.10.4
+# Phase 9 — Redis cache / queues
+redis==5.2.1
+# Phase 12 — observability (optional at runtime; safe no-ops without keys)
+langsmith==0.3.45
+sentry-sdk[fastapi]==2.32.0
+# Keep OpenTelemetry aligned with chromadb's transitive pins (1.41.x).
+opentelemetry-api==1.41.1
+opentelemetry-sdk==1.41.1
+opentelemetry-exporter-otlp-proto-http==1.41.1
+opentelemetry-instrumentation-fastapi==0.62b1
 # MCP SDK optional (Python 3.10+); Python 3.9 uses built-in stdio fallback in mcp_server/
 # mcp>=1.0.0
+
+# Dev / CI
+pytest==8.3.5
+pytest-asyncio==0.25.3

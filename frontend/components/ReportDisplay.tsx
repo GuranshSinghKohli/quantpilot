@@ -192,7 +192,7 @@ export default function ReportDisplay({ analysis }: ReportDisplayProps) {
           <div className="card-surface max-h-[80vh] w-full max-w-2xl overflow-hidden">
             <div className="flex items-center justify-between border-b border-[#1e1e2e] p-4">
               <h3 className="font-semibold text-white">
-                Past Reports — {analysis.ticker}
+                Past Reports: {analysis.ticker}
               </h3>
               <button
                 type="button"

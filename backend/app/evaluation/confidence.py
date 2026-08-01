@@ -84,12 +84,60 @@ def score_sec_agent(
     return _clamp(score)
 
 
+def score_earnings_agent(output: Dict[str, Any]) -> float:
+    score = 0.7
+    summary = output.get("earnings_summary") or ""
+    points = output.get("key_points") or []
+    if len(summary.split()) < 20:
+        score -= 0.15
+    if len(points) < 2:
+        score -= 0.1
+    if output.get("tone") == "unknown":
+        score -= 0.1
+    return _clamp(score)
+
+
+def score_macro_agent(output: Dict[str, Any]) -> float:
+    score = 0.65
+    themes = output.get("themes") or []
+    if not themes or themes == ["limited macro signal"]:
+        score -= 0.15
+    if (output.get("relevance") or "none") in ("none", "low"):
+        score -= 0.1
+    if len(output.get("macro_summary") or "") < 40:
+        score -= 0.1
+    return _clamp(score)
+
+
+def score_verification_agent(output: Dict[str, Any]) -> float:
+    grounded = output.get("groundedness_score")
+    if isinstance(grounded, (int, float)):
+        score = float(grounded)
+    else:
+        score = 0.5
+    unsupported = output.get("unsupported_claims") or []
+    if unsupported:
+        score -= 0.05 * min(4, len(unsupported))
+    verified = output.get("verified_claims") or []
+    if not verified:
+        score -= 0.1
+    return _clamp(score)
+
+
 def score_risk_agent(
     news_confidence: float,
     financial_confidence: float,
     sec_confidence: float,
+    earnings_confidence: float = 0.5,
+    macro_confidence: float = 0.5,
 ) -> float:
-    score = (news_confidence + financial_confidence + sec_confidence) / 3.0
+    score = (
+        news_confidence
+        + financial_confidence
+        + sec_confidence
+        + earnings_confidence
+        + macro_confidence
+    ) / 5.0
     if min(news_confidence, financial_confidence, sec_confidence) < 0.5:
         score -= 0.1
     return _clamp(score)
@@ -120,15 +168,36 @@ def score_report_agent(
     return _clamp(score)
 
 
+def score_memo_agent(
+    output: Dict[str, Any],
+    report_confidence: float = 0.5,
+) -> float:
+    score = report_confidence
+    thesis = output.get("investment_thesis") or ""
+    if len(thesis.split()) < 25:
+        score -= 0.1
+    if not output.get("key_numbers"):
+        score -= 0.1
+    if not output.get("risks"):
+        score -= 0.1
+    if (output.get("decision") or "").upper() not in {"BUY", "HOLD", "SELL", "WATCH"}:
+        score -= 0.1
+    return _clamp(score)
+
+
 def overall_confidence(per_agent: Dict[str, float]) -> float:
     weights = {
-        "news": 0.12,
-        "financial": 0.22,
-        "sec": 0.18,
-        "risk": 0.18,
-        "bull": 0.05,
-        "bear": 0.05,
-        "report": 0.2,
+        "news": 0.09,
+        "financial": 0.14,
+        "sec": 0.11,
+        "earnings": 0.07,
+        "macro": 0.05,
+        "risk": 0.12,
+        "bull": 0.04,
+        "bear": 0.04,
+        "verification": 0.09,
+        "report": 0.13,
+        "memo": 0.12,
     }
     total = 0.0
     weight_sum = 0.0

@@ -1,10 +1,9 @@
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from app.models.agent_schemas import PortfolioAnalysis, PortfolioHolding
 from app.observability.logger import get_logger, log_event
-from app.routers.watchlist import _load_watchlist
 from app.services.yahoo_finance import get_stock_data
 
 logger = get_logger("portfolio_analyzer")
@@ -37,18 +36,33 @@ def _risk_from_pe_and_price(
     return "MEDIUM"
 
 
-async def _analyze_holding(ticker: str) -> PortfolioHolding:
+async def _analyze_holding(
+    ticker: str, position: Optional[Dict[str, float]] = None
+) -> PortfolioHolding:
+    position = position or {}
     try:
         stock = await get_stock_data(ticker)
         pe = stock.pe_ratio
         price = stock.current_price
         high = stock.fifty_two_week_high
+        shares = position.get("shares")
+        avg_cost = position.get("avg_cost")
+        market_value = shares * price if shares and price else None
+        gain_pct = (
+            round(((price - avg_cost) / avg_cost) * 100, 2)
+            if price and avg_cost and avg_cost > 0
+            else None
+        )
         return PortfolioHolding(
             ticker=ticker,
             current_price=price,
             pe_ratio=pe,
             risk_level=_risk_from_pe_and_price(pe, price, high),
             valuation=_valuation_from_pe(pe),
+            shares=shares,
+            avg_cost=avg_cost,
+            market_value=round(market_value, 2) if market_value else None,
+            unrealized_gain_pct=gain_pct,
         )
     except Exception as exc:
         log_event(
@@ -58,20 +72,29 @@ async def _analyze_holding(ticker: str) -> PortfolioHolding:
             ticker=ticker,
             error=str(exc),
         )
-        return PortfolioHolding(ticker=ticker)
+        return PortfolioHolding(
+            ticker=ticker,
+            shares=position.get("shares"),
+            avg_cost=position.get("avg_cost"),
+        )
 
 
-async def analyze_portfolio() -> PortfolioAnalysis:
-    entries = _load_watchlist()
-    tickers = [e.get("ticker", "").upper() for e in entries if e.get("ticker")]
-    tickers = list(dict.fromkeys(tickers))
+async def analyze_portfolio(
+    tickers: Optional[List[str]] = None,
+    positions: Optional[Dict[str, Dict[str, float]]] = None,
+) -> PortfolioAnalysis:
+    raw = tickers or []
+    tickers = list(dict.fromkeys(t.upper().strip() for t in raw if t and t.strip()))
+    positions = positions or {}
 
     if not tickers:
         return PortfolioAnalysis(
             summary="Your watchlist is empty. Add tickers to see a portfolio basket view.",
         )
 
-    holdings = await asyncio.gather(*[_analyze_holding(t) for t in tickers])
+    holdings = await asyncio.gather(
+        *[_analyze_holding(t, positions.get(t)) for t in tickers]
+    )
 
     pe_values = [h.pe_ratio for h in holdings if h.pe_ratio and h.pe_ratio > 0]
     avg_pe = round(sum(pe_values) / len(pe_values), 2) if pe_values else None
@@ -81,9 +104,17 @@ async def analyze_portfolio() -> PortfolioAnalysis:
         risk_mix[h.risk_level] = risk_mix.get(h.risk_level, 0) + 1
 
     n = len(holdings)
+    total_market_value = sum(h.market_value for h in holdings if h.market_value)
+    weighted_by_real_positions = total_market_value > 0 and all(
+        h.market_value for h in holdings
+    )
     equal_weight = round(100.0 / n, 1) if n else 0.0
     weighted: List[PortfolioHolding] = []
     for h in holdings:
+        if weighted_by_real_positions and h.market_value:
+            weight = round((h.market_value / total_market_value) * 100, 1)
+        else:
+            weight = equal_weight
         weighted.append(
             PortfolioHolding(
                 ticker=h.ticker,
@@ -91,7 +122,11 @@ async def analyze_portfolio() -> PortfolioAnalysis:
                 pe_ratio=h.pe_ratio,
                 risk_level=h.risk_level,
                 valuation=h.valuation,
-                weight_pct=equal_weight,
+                weight_pct=weight,
+                shares=h.shares,
+                avg_cost=h.avg_cost,
+                market_value=h.market_value,
+                unrealized_gain_pct=h.unrealized_gain_pct,
             )
         )
 
@@ -108,14 +143,16 @@ async def analyze_portfolio() -> PortfolioAnalysis:
         weakest = max_pe_h.ticker if max_pe_h else None
 
     sector_note = (
-        f"Equal-weight basket of {n} watchlist name{'s' if n != 1 else ''}. "
-        "Sector breakdown requires additional data feeds."
+        ("Weighted by real position sizes (shares × price). " if weighted_by_real_positions else "Equal-weight basket. ")
+        + f"{n} name{'s' if n != 1 else ''}. Sector breakdown requires additional data feeds."
     )
 
     summary_parts = [
         f"{n} holding{'s' if n != 1 else ''}",
         f"avg P/E {avg_pe}" if avg_pe else "partial P/E data",
     ]
+    if weighted_by_real_positions:
+        summary_parts.append(f"${total_market_value:,.0f} total value")
     if weakest:
         summary_parts.append(f"watch {weakest} closely")
 
@@ -126,4 +163,6 @@ async def analyze_portfolio() -> PortfolioAnalysis:
         sector_note=sector_note,
         weakest_ticker=weakest,
         summary=" · ".join(p for p in summary_parts if p),
+        total_market_value=round(total_market_value, 2) if total_market_value else None,
+        weighted_by_real_positions=weighted_by_real_positions,
     )

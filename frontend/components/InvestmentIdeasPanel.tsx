@@ -62,7 +62,7 @@ export default function InvestmentIdeasPanel({
         <div>
           <h3 className="panel-title">hot picks</h3>
           <p className="mt-0.5 text-[11px] text-slate-600">
-            AI-scanned setups · not financial advice fr
+            AI-scanned setups · not financial advice
           </p>
         </div>
         <button

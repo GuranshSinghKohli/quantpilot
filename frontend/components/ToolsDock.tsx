@@ -1,22 +1,33 @@
 "use client";
 
 import { useState } from "react";
+import AlertsPanel from "@/components/AlertsPanel";
+import BriefingPanel from "@/components/BriefingPanel";
 import HistoryPanel from "@/components/HistoryPanel";
 import InvestmentIdeasPanel from "@/components/InvestmentIdeasPanel";
 import PortfolioPanel from "@/components/PortfolioPanel";
 import WatchlistSidebar from "@/components/WatchlistSidebar";
-import type { HistoryEntry, WatchlistEntry } from "@/types";
+import type { AuthUser, HistoryEntry, WatchlistEntry } from "@/types";
 
-export type ToolsTab = "watchlist" | "portfolio" | "ideas" | "history";
+export type ToolsTab =
+  | "watchlist"
+  | "portfolio"
+  | "briefing"
+  | "alerts"
+  | "ideas"
+  | "history";
 
 const TABS: { id: ToolsTab; label: string; icon: string }[] = [
   { id: "watchlist", label: "Watchlist", icon: "★" },
   { id: "portfolio", label: "Portfolio", icon: "◈" },
+  { id: "briefing", label: "Briefing", icon: "◎" },
+  { id: "alerts", label: "Alerts", icon: "⚑" },
   { id: "ideas", label: "Hot picks", icon: "↑" },
   { id: "history", label: "History", icon: "↺" },
 ];
 
 interface ToolsDockProps {
+  user: AuthUser | null;
   watchlist: WatchlistEntry[];
   history: HistoryEntry[];
   currentTicker: string | null;
@@ -30,6 +41,7 @@ interface ToolsDockProps {
 }
 
 export default function ToolsDock({
+  user,
   watchlist,
   history,
   currentTicker,
@@ -42,6 +54,7 @@ export default function ToolsDock({
   onRemoveWatchlist,
 }: ToolsDockProps) {
   const [active, setActive] = useState<ToolsTab | null>(null);
+  const [alertUnread, setAlertUnread] = useState(0);
 
   function toggle(tab: ToolsTab) {
     setActive((prev) => (prev === tab ? null : tab));
@@ -57,7 +70,9 @@ export default function ToolsDock({
               ? watchlist.length
               : tab.id === "history" && history.length > 0
                 ? history.length
-                : null;
+                : tab.id === "alerts" && alertUnread > 0
+                  ? alertUnread
+                  : null;
 
           return (
             <button
@@ -73,7 +88,9 @@ export default function ToolsDock({
             >
               <span
                 className={`flex h-6 w-6 items-center justify-center rounded-lg text-xs ${
-                  isActive ? "bg-violet-500/25 text-violet-300" : "bg-white/[0.05] text-slate-500"
+                  isActive
+                    ? "bg-violet-500/25 text-violet-300"
+                    : "bg-white/[0.05] text-slate-500"
                 }`}
                 aria-hidden
               >
@@ -112,7 +129,17 @@ export default function ToolsDock({
             />
           )}
           {active === "portfolio" && (
-            <PortfolioPanel onSelectTicker={onSelectTicker} />
+            <PortfolioPanel onSelectTicker={onSelectTicker} user={user} />
+          )}
+          {active === "briefing" && (
+            <BriefingPanel user={user} onSelectTicker={onSelectTicker} />
+          )}
+          {active === "alerts" && (
+            <AlertsPanel
+              user={user}
+              onSelectTicker={onSelectTicker}
+              onUnreadChange={setAlertUnread}
+            />
           )}
           {active === "ideas" && (
             <InvestmentIdeasPanel

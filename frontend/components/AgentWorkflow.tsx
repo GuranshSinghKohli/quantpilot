@@ -12,10 +12,14 @@ const ICONS: Record<string, string> = {
   news: "📰",
   financial: "📊",
   sec: "📄",
+  earnings: "💹",
+  macro: "🌐",
   risk: "⚖️",
   bull: "🐂",
   bear: "🐻",
+  verification: "✅",
   report: "📝",
+  memo: "📋",
 };
 
 function StatusIndicator({ status }: { status: AgentStep["status"] }) {
@@ -54,7 +58,7 @@ export default function AgentWorkflow({
             ✓
           </span>
           <span className="text-sm text-slate-400">
-            all <span className="font-medium text-emerald-400/90">7 agents</span> finished — report ready
+            all <span className="font-medium text-emerald-400/90">{steps.length} agents</span> finished. Report ready
           </span>
         </div>
       );

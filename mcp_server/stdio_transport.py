@@ -77,6 +77,41 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
             "required": ["ticker"],
         },
     ),
+    _tool_def(
+        "get_ir_materials",
+        "Fetch investor-relations pages via OpenClaw browser or allowlisted HTTP.",
+        {
+            "type": "object",
+            "properties": {
+                "ticker": {"type": "string"},
+                "max_pages": {"type": "integer", "default": 2},
+            },
+            "required": ["ticker"],
+        },
+    ),
+    _tool_def(
+        "fetch_browser_page",
+        "Fetch a single allowlisted IR/public page (OpenClaw when configured).",
+        {
+            "type": "object",
+            "properties": {"url": {"type": "string"}},
+            "required": ["url"],
+        },
+    ),
+    _tool_def(
+        "get_shareholder_letter",
+        "Best-effort shareholder / annual letter excerpt from IR materials.",
+        {
+            "type": "object",
+            "properties": {"ticker": {"type": "string"}},
+            "required": ["ticker"],
+        },
+    ),
+    _tool_def(
+        "snapshot_active_browser_tab",
+        "Read the active tab of the user's real signed-in browser via OpenClaw.",
+        {"type": "object", "properties": {}, "required": []},
+    ),
 ]
 
 

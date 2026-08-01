@@ -5,28 +5,40 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict
 
 from langgraph.graph import END, StateGraph
 
+from app.agents.bear_agent import argue_bear
+from app.agents.bull_agent import argue_bull
+from app.agents.earnings_agent import analyze_earnings
 from app.agents.financial_metrics_agent import analyze_financial_metrics
+from app.agents.investment_memo_agent import generate_investment_memo
+from app.agents.macro_agent import analyze_macro
 from app.agents.news_agent import analyze_news
 from app.agents.report_agent import generate_report
 from app.agents.risk_agent import assess_risk
 from app.agents.sec_filing_agent import analyze_sec_filings
-from app.agents.bull_agent import argue_bull
-from app.agents.bear_agent import argue_bear
+from app.agents.verification_agent import verify_claims
 from app.evaluation.confidence import (
     score_debate_agent,
+    score_earnings_agent,
     score_financial_agent,
+    score_macro_agent,
+    score_memo_agent,
     score_news_agent,
     score_report_agent,
     score_risk_agent,
     score_sec_agent,
+    score_verification_agent,
 )
 from app.evaluation.fact_separator import separate_facts_and_insights
 from app.evaluation.validator import (
+    validate_earnings,
     validate_financial,
+    validate_macro,
+    validate_memo,
     validate_news,
     validate_report,
     validate_risk,
     validate_sec,
+    validate_verification,
 )
 from app.observability.logger import get_logger, log_event
 from app.observability.workflow_tracker import workflow_tracker
@@ -45,11 +57,16 @@ class AnalysisState(TypedDict, total=False):
     news_output: Dict[str, Any]
     metrics_output: Dict[str, Any]
     sec_output: Dict[str, Any]
+    earnings_output: Dict[str, Any]
+    ir_materials: Dict[str, Any]
+    macro_output: Dict[str, Any]
     risk_output: Dict[str, Any]
     bull_output: Dict[str, Any]
     bear_output: Dict[str, Any]
     debate_output: Dict[str, Any]
+    verification_output: Dict[str, Any]
     final_report: Dict[str, Any]
+    investment_memo: Dict[str, Any]
     confidence_scores: Dict[str, float]
     validation_warnings: List[str]
     facts_and_insights: Dict[str, Any]
@@ -135,10 +152,14 @@ async def _execute_agent_step(
         "news_agent": "news",
         "financial_agent": "financial",
         "sec_agent": "sec",
+        "earnings_agent": "earnings",
+        "macro_agent": "macro",
         "risk_agent": "risk",
         "bull_agent": "bull",
         "bear_agent": "bear",
+        "verification_agent": "verification",
         "report_agent": "report",
+        "memo_agent": "memo",
     }
     scores = dict(state.get("confidence_scores") or {})
     scores[agent_key_map.get(agent_name, agent_name)] = validated.get(
@@ -216,6 +237,45 @@ async def sec_analysis(state: AnalysisState) -> AnalysisState:
     )
 
 
+async def earnings_analysis(state: AnalysisState) -> AnalysisState:
+    ir_materials: Dict[str, Any] = {}
+
+    async def run_earnings():
+        nonlocal ir_materials
+        output, ir_materials = await analyze_earnings(
+            state["ticker"],
+            state.get("metrics_output") or {},
+            state.get("filings_data") or {},
+            state.get("news_headlines") or [],
+        )
+        return output
+
+    updated = await _execute_agent_step(
+        state,
+        "earnings_agent",
+        run_earnings,
+        validate_earnings,
+        score_earnings_agent,
+        "earnings_output",
+    )
+    return {**updated, "ir_materials": ir_materials}
+
+
+async def macro_analysis(state: AnalysisState) -> AnalysisState:
+    return await _execute_agent_step(
+        state,
+        "macro_agent",
+        lambda: analyze_macro(
+            state["ticker"],
+            state.get("news_headlines") or [],
+            state.get("news_output") or {},
+        ),
+        validate_macro,
+        score_macro_agent,
+        "macro_output",
+    )
+
+
 async def risk_assessment(state: AnalysisState) -> AnalysisState:
     if state.get("error"):
         return state
@@ -224,6 +284,8 @@ async def risk_assessment(state: AnalysisState) -> AnalysisState:
     news_conf = scores.get("news", 0.5)
     fin_conf = scores.get("financial", 0.5)
     sec_conf = scores.get("sec", 0.5)
+    earn_conf = scores.get("earnings", 0.5)
+    macro_conf = scores.get("macro", 0.5)
 
     async def run_risk():
         return await assess_risk(
@@ -238,12 +300,26 @@ async def risk_assessment(state: AnalysisState) -> AnalysisState:
         "risk_agent",
         run_risk,
         validate_risk,
-        lambda raw, **_: score_risk_agent(news_conf, fin_conf, sec_conf),
+        lambda raw, **_: score_risk_agent(
+            news_conf, fin_conf, sec_conf, earn_conf, macro_conf
+        ),
         "risk_output",
     )
     risk_out = updated.get("risk_output") or {}
-    risk_conf = score_risk_agent(news_conf, fin_conf, sec_conf)
+    risk_conf = score_risk_agent(news_conf, fin_conf, sec_conf, earn_conf, macro_conf)
     risk_out["confidence_score"] = risk_conf
+    # Fold earnings/macro catalysts into risk factors when present
+    extra = []
+    earn = state.get("earnings_output") or {}
+    if earn.get("tone") == "negative":
+        extra.append("Earnings tone flagged negative")
+    macro = state.get("macro_output") or {}
+    if macro.get("relevance") == "high":
+        extra.append("Elevated macro relevance to this name")
+    if extra:
+        factors = list(risk_out.get("risk_factors") or [])
+        factors.extend(extra)
+        risk_out["risk_factors"] = factors
     scores = dict(updated.get("confidence_scores") or {})
     scores["risk"] = risk_conf
     return {**updated, "risk_output": risk_out, "confidence_scores": scores}
@@ -303,6 +379,31 @@ async def bear_debate(state: AnalysisState) -> AnalysisState:
     return {**updated, "debate_output": debate}
 
 
+async def verification_analysis(state: AnalysisState) -> AnalysisState:
+    if state.get("error"):
+        return state
+
+    async def run_verification():
+        return await verify_claims(
+            state["ticker"],
+            state.get("news_output") or {},
+            state.get("metrics_output") or {},
+            state.get("sec_output") or {},
+            state.get("earnings_output") or {},
+            state.get("macro_output") or {},
+            state.get("debate_output") or {},
+        )
+
+    return await _execute_agent_step(
+        state,
+        "verification_agent",
+        run_verification,
+        validate_verification,
+        score_verification_agent,
+        "verification_output",
+    )
+
+
 async def final_report(state: AnalysisState) -> AnalysisState:
     if state.get("error"):
         return state
@@ -320,6 +421,9 @@ async def final_report(state: AnalysisState) -> AnalysisState:
             state.get("sec_output") or {},
             state.get("risk_output") or {},
             state.get("debate_output") or {},
+            state.get("earnings_output") or {},
+            state.get("macro_output") or {},
+            state.get("verification_output") or {},
         )
 
     updated = await _execute_agent_step(
@@ -352,6 +456,37 @@ async def final_report(state: AnalysisState) -> AnalysisState:
     }
 
 
+async def investment_memo(state: AnalysisState) -> AnalysisState:
+    if state.get("error"):
+        return state
+
+    scores = state.get("confidence_scores") or {}
+    report_conf = scores.get("report", 0.5)
+    ticker = state["ticker"]
+
+    async def run_memo():
+        return await generate_investment_memo(
+            ticker,
+            state.get("final_report") or {},
+            stock_data=state.get("stock_data") or {},
+            metrics_output=state.get("metrics_output") or {},
+            risk_output=state.get("risk_output") or {},
+            debate_output=state.get("debate_output") or {},
+            earnings_output=state.get("earnings_output") or {},
+            macro_output=state.get("macro_output") or {},
+            verification_output=state.get("verification_output") or {},
+        )
+
+    return await _execute_agent_step(
+        state,
+        "memo_agent",
+        run_memo,
+        lambda raw: validate_memo(raw, ticker),
+        lambda raw, **_: score_memo_agent(raw, report_conf),
+        "investment_memo",
+    )
+
+
 def _build_graph():
     workflow = StateGraph(AnalysisState)
 
@@ -359,20 +494,28 @@ def _build_graph():
     workflow.add_node("news_analysis", news_analysis)
     workflow.add_node("financial_analysis", financial_analysis)
     workflow.add_node("sec_analysis", sec_analysis)
+    workflow.add_node("earnings_analysis", earnings_analysis)
+    workflow.add_node("macro_analysis", macro_analysis)
     workflow.add_node("risk_assessment", risk_assessment)
     workflow.add_node("bull_debate", bull_debate)
     workflow.add_node("bear_debate", bear_debate)
+    workflow.add_node("verification_analysis", verification_analysis)
     workflow.add_node("final_report", final_report)
+    workflow.add_node("investment_memo", investment_memo)
 
     workflow.set_entry_point("fetch_data")
     workflow.add_edge("fetch_data", "news_analysis")
     workflow.add_edge("news_analysis", "financial_analysis")
     workflow.add_edge("financial_analysis", "sec_analysis")
-    workflow.add_edge("sec_analysis", "risk_assessment")
+    workflow.add_edge("sec_analysis", "earnings_analysis")
+    workflow.add_edge("earnings_analysis", "macro_analysis")
+    workflow.add_edge("macro_analysis", "risk_assessment")
     workflow.add_edge("risk_assessment", "bull_debate")
     workflow.add_edge("bull_debate", "bear_debate")
-    workflow.add_edge("bear_debate", "final_report")
-    workflow.add_edge("final_report", END)
+    workflow.add_edge("bear_debate", "verification_analysis")
+    workflow.add_edge("verification_analysis", "final_report")
+    workflow.add_edge("final_report", "investment_memo")
+    workflow.add_edge("investment_memo", END)
 
     return workflow.compile()
 
@@ -404,20 +547,28 @@ STREAM_NODE_TO_AGENT: Dict[str, Optional[str]] = {
     "news_analysis": "news",
     "financial_analysis": "financial",
     "sec_analysis": "sec",
+    "earnings_analysis": "earnings",
+    "macro_analysis": "macro",
     "risk_assessment": "risk",
     "bull_debate": "bull",
     "bear_debate": "bear",
+    "verification_analysis": "verification",
     "final_report": "report",
+    "investment_memo": "memo",
 }
 
 STREAM_AGENT_ORDER = [
     "news",
     "financial",
     "sec",
+    "earnings",
+    "macro",
     "risk",
     "bull",
     "bear",
+    "verification",
     "report",
+    "memo",
 ]
 
 
@@ -458,7 +609,7 @@ async def stream_analysis(
                         "agent": STREAM_AGENT_ORDER[idx + 1],
                     }
 
-            if node_name == "final_report" and final_state.get("error"):
+            if node_name in ("final_report", "investment_memo") and final_state.get("error"):
                 yield {"type": "error", "message": final_state["error"]}
                 return
 

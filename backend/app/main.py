@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 import logging
 import time
 
@@ -5,26 +6,46 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_allowed_origins
+from app.db.session import init_db
 from app.exceptions import register_exception_handlers
+from app.jobs.scheduler import shutdown_scheduler, start_scheduler
 from app.models.schemas import HealthResponse
+from app.observability.instrumentation import init_observability
 from app.observability.logger import get_logger, log_event
 from app.routers import (
+    alerts,
     analysis,
+    auth,
     filings,
     memory,
     observability,
+    portfolio,
     recommendations,
     stocks,
     watchlist,
 )
 
+request_logger = get_logger("api")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    init_db()
+    start_scheduler()
+    log_event(request_logger, logging.INFO, "QuantPilot API started")
+    yield
+    shutdown_scheduler()
+
+
 app = FastAPI(
     title="QuantPilot API",
-    description="QuantPilot API — production quant research copilot with multi-agent pipeline",
+    description="QuantPilot API, production quant research copilot with multi-agent pipeline",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
-request_logger = get_logger("api")
+# Phase 12 — LangSmith / Sentry / OpenTelemetry (all optional via env)
+init_observability(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,11 +57,14 @@ app.add_middleware(
 
 register_exception_handlers(app)
 
+app.include_router(auth.router, prefix="/api")
 app.include_router(stocks.router, prefix="/api")
 app.include_router(filings.router, prefix="/api")
 app.include_router(analysis.router, prefix="/api")
 app.include_router(memory.router, prefix="/api")
 app.include_router(watchlist.router, prefix="/api")
+app.include_router(portfolio.router, prefix="/api")
+app.include_router(alerts.router, prefix="/api")
 app.include_router(observability.router, prefix="/api")
 app.include_router(recommendations.router, prefix="/api")
 

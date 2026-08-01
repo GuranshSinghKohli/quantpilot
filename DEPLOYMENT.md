@@ -48,6 +48,8 @@ In **Variables**, add:
 | `OPENAI_API_KEY` | Your OpenAI key |
 | `SEC_EDGAR_USER_AGENT` | `QuantPilot/1.0 (your-email@example.com)` |
 | `ALLOWED_ORIGINS` | `http://localhost:3000` (add Vercel URL after frontend deploy) |
+| `DATABASE_URL` | From Railway Postgres plugin (required for durable watchlists) |
+| `JWT_SECRET_KEY` | Long random secret for signing auth tokens |
 
 ### 5. Start command
 
@@ -71,6 +73,15 @@ No manual override needed unless you prefer the dashboard.
 ChromaDB uses **local file storage** under `backend/data/chroma_db/`. On Railway, this **resets on redeploy** (ephemeral filesystem).
 
 > For persistent vector memory in production, migrate to [ChromaDB Cloud](https://www.trychroma.com/) or another managed vector DB. Local storage is fine for portfolio demos and interviews.
+
+### PostgreSQL on Railway (Phase 7)
+
+1. In your Railway project → **New** → **Database** → **PostgreSQL**
+2. Open the API service → **Variables** → **Add Reference** → select `DATABASE_URL` from the Postgres plugin
+3. Set `JWT_SECRET_KEY` to a long random value
+4. Redeploy the API — tables (`users`, `portfolios`, `holdings`) are created on startup
+
+Watchlists and saved portfolios now survive redeploys. Without `DATABASE_URL`, the API falls back to a local SQLite file (fine for laptop dev only).
 
 ---
 

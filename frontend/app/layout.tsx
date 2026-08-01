@@ -13,7 +13,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "QuantPilot — AI Quant Research Copilot",
+  title: "QuantPilot: AI Quant Research Copilot",
   description:
     "Turn any stock ticker into a research-grade equity report. Multi-agent AI analyzes market data, news, and SEC filings.",
 };
