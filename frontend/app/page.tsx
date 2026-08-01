@@ -193,11 +193,9 @@ export default function Home() {
     const reachable = apiReachable ?? (await checkApiHealth());
     setApiReachable(reachable);
     if (!reachable) {
+      // Amber offline banner already explains this — don't also set a red error.
       setIsLoading(false);
       resetAgentSteps();
-      setError(
-        "Backend API is unreachable. For local use open http://localhost:3000 with the API on :8000. On Vercel, set NEXT_PUBLIC_API_URL to your live Railway URL and redeploy."
-      );
       return;
     }
 
@@ -373,7 +371,7 @@ export default function Home() {
           </div>
         )}
 
-        {error && (
+        {error && apiReachable !== false && (
           <div
             className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300 sm:mt-6"
             role="alert"
