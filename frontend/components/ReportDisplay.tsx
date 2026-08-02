@@ -6,6 +6,8 @@ import { fetchPastReports } from "@/lib/api";
 
 interface ReportDisplayProps {
   analysis: AnalysisResponse;
+  /** When true, hide summary/recommendation that the investment memo already shows. */
+  omitOverlappingSummary?: boolean;
 }
 
 function getRecommendationStyle(rec: string): {
@@ -45,13 +47,18 @@ function confidenceColor(score: number): string {
   return "bg-red-500";
 }
 
-export default function ReportDisplay({ analysis }: ReportDisplayProps) {
+export default function ReportDisplay({
+  analysis,
+  omitOverlappingSummary = false,
+}: ReportDisplayProps) {
   const { final_report: report } = analysis;
   const confidence = analysis.overall_confidence_score ?? 0;
   const confidencePct = Math.round(confidence * 100);
   const recStyle = getRecommendationStyle(report.recommendation);
-  const [openSections, setOpenSections] = useState<Set<number>>(
-    () => new Set(report.sections.map((_, i) => i))
+  const [openSections, setOpenSections] = useState<Set<number>>(() =>
+    omitOverlappingSummary
+      ? new Set()
+      : new Set(report.sections.map((_, i) => i))
   );
   const [showPast, setShowPast] = useState(false);
   const [pastReports, setPastReports] = useState<StoredReport[]>([]);
@@ -111,11 +118,13 @@ export default function ReportDisplay({ analysis }: ReportDisplayProps) {
             </div>
           )}
         </div>
-        <span
-          className={`rounded-lg border px-4 py-2 text-sm font-bold ${recStyle.bg} ${recStyle.text}`}
-        >
-          {recStyle.label}
-        </span>
+        {!omitOverlappingSummary && (
+          <span
+            className={`rounded-lg border px-4 py-2 text-sm font-bold ${recStyle.bg} ${recStyle.text}`}
+          >
+            {recStyle.label}
+          </span>
+        )}
       </div>
 
       {analysis.validation_warnings && analysis.validation_warnings.length > 0 && (
@@ -129,14 +138,23 @@ export default function ReportDisplay({ analysis }: ReportDisplayProps) {
         </div>
       )}
 
-      <div className="mt-6 rounded-xl border border-accent/30 bg-accent/5 p-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-accent">
-          Executive Summary
-        </h3>
-        <p className="mt-3 leading-relaxed text-slate-300">
-          {report.executive_summary}
+      {!omitOverlappingSummary && (
+        <div className="mt-6 rounded-xl border border-accent/30 bg-accent/5 p-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-accent">
+            Executive Summary
+          </h3>
+          <p className="mt-3 leading-relaxed text-slate-300">
+            {report.executive_summary}
+          </p>
+        </div>
+      )}
+
+      {omitOverlappingSummary && (
+        <p className="mt-4 text-xs leading-relaxed text-slate-500">
+          Decision and thesis are in the investment memo above. This section has
+          the detailed agent write-ups only.
         </p>
-      </div>
+      )}
 
       <div className="mt-4 space-y-2">
         {report.sections.map((section, index) => (
@@ -163,10 +181,12 @@ export default function ReportDisplay({ analysis }: ReportDisplayProps) {
         ))}
       </div>
 
-      <div className="mt-6 rounded-lg border border-[#1e1e2e] bg-[#0a0a0f]/50 p-4">
-        <p className="text-xs text-slate-500">Recommendation</p>
-        <p className="mt-1 text-slate-300">{report.recommendation}</p>
-      </div>
+      {!omitOverlappingSummary && (
+        <div className="mt-6 rounded-lg border border-[#1e1e2e] bg-[#0a0a0f]/50 p-4">
+          <p className="text-xs text-slate-500">Recommendation</p>
+          <p className="mt-1 text-slate-300">{report.recommendation}</p>
+        </div>
+      )}
 
       <div className="mt-6 flex flex-wrap gap-3">
         <button

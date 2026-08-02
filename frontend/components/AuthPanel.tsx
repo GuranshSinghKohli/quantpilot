@@ -172,8 +172,8 @@ export default function AuthPanel({ user, onUserChange }: AuthPanelProps) {
             </button>
           </form>
           <p className="mt-3 text-[10px] leading-relaxed text-slate-600">
-            Signed-in portfolios persist in the database. Guests share a local
-            anonymous watchlist.
+            Signed-in accounts keep private history and portfolios. Guests get
+            a device-local history id (not shared with other browsers).
           </p>
         </div>
       )}

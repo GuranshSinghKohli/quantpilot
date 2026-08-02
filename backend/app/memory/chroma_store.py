@@ -86,6 +86,7 @@ def save_report(ticker: str, report_dict: Dict[str, Any], metadata: Dict[str, An
             "timestamp": timestamp,
             "recommendation": metadata.get("recommendation", ""),
             "risk_level": metadata.get("risk_level", ""),
+            "owner_key": metadata.get("owner_key", ""),
         }
     )
 
@@ -114,10 +115,20 @@ def save_report(ticker: str, report_dict: Dict[str, Any], metadata: Dict[str, An
         raise
 
 
-def search_similar(query_text: str, n_results: int = 3) -> List[Dict[str, Any]]:
+def search_similar(
+    query_text: str,
+    n_results: int = 3,
+    owner_key: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     collection = _get_embedding_collection()
     try:
-        results = collection.query(query_texts=[query_text], n_results=n_results)
+        kwargs: Dict[str, Any] = {
+            "query_texts": [query_text],
+            "n_results": n_results,
+        }
+        if owner_key:
+            kwargs["where"] = {"owner_key": owner_key}
+        results = collection.query(**kwargs)
         log_event(
             chroma_logger,
             logging.INFO,
@@ -140,7 +151,10 @@ def search_similar(query_text: str, n_results: int = 3) -> List[Dict[str, Any]]:
         raise
 
 
-def get_by_ticker(ticker: str) -> List[Dict[str, Any]]:
+def get_by_ticker(
+    ticker: str,
+    owner_key: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     collection = _get_read_collection()
     if collection is None:
         log_event(
@@ -153,7 +167,16 @@ def get_by_ticker(ticker: str) -> List[Dict[str, Any]]:
         )
         return []
     try:
-        results = collection.get(where={"ticker": ticker.upper()})
+        if owner_key:
+            where: Dict[str, Any] = {
+                "$and": [
+                    {"ticker": ticker.upper()},
+                    {"owner_key": owner_key},
+                ]
+            }
+        else:
+            where = {"ticker": ticker.upper()}
+        results = collection.get(where=where)
         log_event(
             chroma_logger,
             logging.INFO,
@@ -176,11 +199,14 @@ def get_by_ticker(ticker: str) -> List[Dict[str, Any]]:
         raise
 
 
-def list_all_tickers() -> List[str]:
+def list_all_tickers(owner_key: Optional[str] = None) -> List[str]:
     collection = _get_read_collection()
     if collection is None:
         return []
-    results = collection.get()
+    if owner_key:
+        results = collection.get(where={"owner_key": owner_key})
+    else:
+        results = collection.get()
     tickers = set()
     for meta in results.get("metadatas") or []:
         if meta and meta.get("ticker"):

@@ -351,13 +351,14 @@ export default function Home() {
           >
             <p className="font-medium text-amber-100">Backend API is offline</p>
             <p className="mt-1 text-amber-200/90">
-              Local: run FastAPI on port 8000 and open{" "}
-              <code className="rounded bg-black/30 px-1">http://localhost:3000</code>
-              . Production: set{" "}
+              This Vercel site talks to your deployed API (not your laptop). Wake
+              the Render/Railway backend, confirm{" "}
               <code className="rounded bg-black/30 px-1">NEXT_PUBLIC_API_URL</code>{" "}
-              on Vercel to your Railway URL, add this site to backend{" "}
-              <code className="rounded bg-black/30 px-1">ALLOWED_ORIGINS</code>, then
-              redeploy.
+              on Vercel, and include this site in backend{" "}
+              <code className="rounded bg-black/30 px-1">ALLOWED_ORIGINS</code>.
+              For local work use{" "}
+              <code className="rounded bg-black/30 px-1">http://localhost:3000</code>{" "}
+              with the API on port 8000.
             </p>
           </div>
         )}
@@ -435,10 +436,12 @@ export default function Home() {
                   <summary className="card-surface flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition hover:border-violet-500/25 [&::-webkit-details-marker]:hidden">
                     <div>
                       <p className="text-sm font-semibold text-slate-200">
-                        Full research report
+                        Detailed research sections
                       </p>
                       <p className="mt-0.5 text-xs text-slate-500">
-                        Executive summary, analysis sections, and recommendation
+                        {analysisReport.investment_memo
+                          ? "Long-form agent write-ups (thesis/decision already in the memo)"
+                          : "Executive summary, analysis sections, and recommendation"}
                       </p>
                     </div>
                     <span className="text-lg text-slate-500 transition group-open:rotate-45">
@@ -446,7 +449,12 @@ export default function Home() {
                     </span>
                   </summary>
                   <div className="mt-3">
-                    <ReportDisplay analysis={analysisReport} />
+                    <ReportDisplay
+                      analysis={analysisReport}
+                      omitOverlappingSummary={Boolean(
+                        analysisReport.investment_memo
+                      )}
+                    />
                   </div>
                 </details>
 
@@ -454,10 +462,13 @@ export default function Home() {
                   <summary className="card-surface flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition hover:border-cyan-500/25 [&::-webkit-details-marker]:hidden">
                     <div>
                       <p className="text-sm font-semibold text-slate-200">
-                        Supporting agent research
+                        Source agent evidence
                       </p>
                       <p className="mt-0.5 text-xs text-slate-500">
-                        Bull vs bear, earnings, macro, verification, and SEC details
+                        Earnings, macro, verification, and SEC filings
+                        {!analysisReport.investment_memo
+                          ? " · plus bull vs bear"
+                          : ""}
                       </p>
                     </div>
                     <span className="text-lg text-slate-500 transition group-open:rotate-45">
@@ -465,9 +476,10 @@ export default function Home() {
                     </span>
                   </summary>
                   <div className="mt-3 space-y-6">
-                    {analysisReport.debate_output && (
-                      <DebatePanel debate={analysisReport.debate_output} />
-                    )}
+                    {!analysisReport.investment_memo &&
+                      analysisReport.debate_output && (
+                        <DebatePanel debate={analysisReport.debate_output} />
+                      )}
                     <ResearchExtrasPanel analysis={analysisReport} />
                     {currentTicker && (
                       <SECFilingsPanel

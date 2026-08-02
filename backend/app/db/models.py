@@ -144,3 +144,28 @@ class AlertEvent(Base):
 
     user: Mapped["User"] = relationship()
     rule: Mapped[Optional["AlertRule"]] = relationship(back_populates="events")
+
+
+class AnalysisRun(Base):
+    """Per-owner analysis history entry (authenticated user or guest device)."""
+
+    __tablename__ = "analysis_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    # owner_key is "user:{id}" for signed-in accounts or "guest:{uuid}" for a
+    # browser device. History is never shared across different owner keys.
+    owner_key: Mapped[str] = mapped_column(String(80), index=True)
+    user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    ticker: Mapped[str] = mapped_column(String(16), index=True)
+    recommendation: Mapped[str] = mapped_column(String(512), default="")
+    risk_level: Mapped[str] = mapped_column(String(32), default="")
+    chroma_doc_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utc_now, index=True
+    )
+
+    user: Mapped[Optional["User"]] = relationship()

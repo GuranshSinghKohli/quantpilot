@@ -36,6 +36,7 @@ export const API_URL = normalizeApiUrl(
 const DEFAULT_TIMEOUT_MS = 30_000;
 const ANALYSIS_TIMEOUT_MS = 180_000;
 const AUTH_TOKEN_KEY = "quantpilot_token";
+const GUEST_ID_KEY = "quantpilot_guest_id";
 
 export type { AuthUser, AuthResponse };
 
@@ -58,6 +59,29 @@ export function setAuthToken(token: string | null): void {
   if (typeof window === "undefined") return;
   if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
   else localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+/** Stable per-browser id so guest history is not shared across devices. */
+export function getGuestId(): string | null {
+  if (typeof window === "undefined") return null;
+  let id = localStorage.getItem(GUEST_ID_KEY);
+  if (!id) {
+    id =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID().replace(/-/g, "")
+        : `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+    localStorage.setItem(GUEST_ID_KEY, id);
+  }
+  return id;
+}
+
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const token = getAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const guestId = getGuestId();
+  if (guestId) headers["X-Guest-Id"] = guestId;
+  return headers;
 }
 
 function getBaseUrl(): string {
@@ -94,14 +118,11 @@ async function apiFetch<T>(
 
   try {
     const headers: Record<string, string> = {
+      ...authHeaders(),
       ...(fetchOptions.headers as Record<string, string>),
     };
     if (fetchOptions.body !== undefined && fetchOptions.body !== null) {
       headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
-    }
-    const token = getAuthToken();
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
     }
 
     const response = await fetch(`${getBaseUrl()}${path}`, {
@@ -132,12 +153,18 @@ async function apiFetch<T>(
 }
 
 export async function checkApiHealth(): Promise<boolean> {
-  try {
-    await apiFetch<{ status: string }>("/health", { timeoutMs: 8_000 });
-    return true;
-  } catch {
-    return false;
+  // Production hosts (e.g. Render free tier) can cold-start past a short timeout.
+  // One quick probe, then one longer retry before declaring offline.
+  const attempts = [8_000, 25_000];
+  for (const timeoutMs of attempts) {
+    try {
+      await apiFetch<{ status: string }>("/health", { timeoutMs });
+      return true;
+    } catch {
+      // try next budget
+    }
   }
+  return false;
 }
 
 export async function register(
@@ -243,9 +270,7 @@ export async function fetchAnalysisStream(
   }
 
   try {
-    const headers: Record<string, string> = {};
-    const token = getAuthToken();
-    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const headers: Record<string, string> = { ...authHeaders() };
 
     const response = await fetch(
       `${getBaseUrl()}/api/analysis/${encodeURIComponent(ticker)}/stream`,

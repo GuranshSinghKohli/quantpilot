@@ -3,7 +3,7 @@ import logging
 import time
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -14,7 +14,7 @@ from app.memory import report_memory
 from app.models.agent_schemas import AnalysisResponse, ChatRequest, ChatResponse, PortfolioAnalysis
 from app.observability.logger import get_logger, log_event
 from app.observability.workflow_tracker import workflow_tracker
-from app.services import watchlist_store
+from app.services import analysis_history_store, watchlist_store
 from app.services.portfolio_analyzer import analyze_portfolio
 from app.services.research_chat import answer_research_question
 from app.workflows.analysis_graph import run_analysis, stream_analysis
@@ -31,11 +31,24 @@ def _validate_ticker(ticker: str) -> str:
     return symbol
 
 
+def _resolve_owner(
+    user: Optional[User],
+    x_guest_id: Optional[str],
+) -> tuple[Optional[str], Optional[int]]:
+    owner_key = analysis_history_store.resolve_owner_key(user, x_guest_id)
+    user_id = user.id if user is not None else None
+    return owner_key, user_id
+
+
 @router.post("/analysis/{ticker}", response_model=AnalysisResponse)
 async def analyze_ticker(
-    ticker: str, background_tasks: BackgroundTasks
+    ticker: str,
+    background_tasks: BackgroundTasks,
+    user: Optional[User] = Depends(get_optional_user),
+    x_guest_id: Optional[str] = Header(default=None, alias="X-Guest-Id"),
 ) -> AnalysisResponse:
     symbol = _validate_ticker(ticker)
+    owner_key, user_id = _resolve_owner(user, x_guest_id)
     run = workflow_tracker.start_run(symbol)
     start = time.perf_counter()
 
@@ -86,15 +99,26 @@ async def analyze_ticker(
         duration_ms=duration_ms,
         run_id=run["run_id"],
         overall_confidence=response.overall_confidence_score,
+        owner_key=owner_key or "",
     )
 
-    background_tasks.add_task(report_memory.persist_analysis, state)
+    background_tasks.add_task(
+        report_memory.save_report_from_state,
+        state,
+        owner_key=owner_key,
+        user_id=user_id,
+    )
     return response
 
 
 @router.post("/analysis/{ticker}/stream")
-async def analyze_ticker_stream(ticker: str) -> StreamingResponse:
+async def analyze_ticker_stream(
+    ticker: str,
+    user: Optional[User] = Depends(get_optional_user),
+    x_guest_id: Optional[str] = Header(default=None, alias="X-Guest-Id"),
+) -> StreamingResponse:
     symbol = _validate_ticker(ticker)
+    owner_key, user_id = _resolve_owner(user, x_guest_id)
     run = workflow_tracker.start_run(symbol)
 
     async def event_generator():
@@ -119,15 +143,19 @@ async def analyze_ticker_stream(ticker: str) -> StreamingResponse:
                         ticker=symbol,
                         duration_ms=duration_ms,
                         run_id=run["run_id"],
+                        owner_key=owner_key or "",
                     )
                     payload = {
                         "type": "result",
                         "data": response.model_dump(mode="json"),
                     }
                     yield f"data: {json.dumps(payload)}\n\n"
-                    # Persist after stream completes — avoids overlapping with next request
                     try:
-                        await report_memory.persist_analysis(final_state)
+                        await report_memory.persist_analysis(
+                            final_state,
+                            owner_key=owner_key,
+                            user_id=user_id,
+                        )
                     except Exception:
                         pass
                 elif event.get("type") == "error":
