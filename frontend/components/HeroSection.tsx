@@ -36,6 +36,24 @@ function QuantPilotMark({ className = "h-10 w-10" }: { className?: string }) {
   );
 }
 
+const STEPS = [
+  {
+    n: "1",
+    title: "Ask why it moved",
+    body: "Type a ticker and choose 1 day, week, month, or year.",
+  },
+  {
+    n: "2",
+    title: "Read the case",
+    body: "Evidence Ledger ranks claims with linked receipts.",
+  },
+  {
+    n: "3",
+    title: "Optional tools",
+    body: "Search past cases, alerts, or a full research report.",
+  },
+];
+
 export default function HeroSection({ compact = false }: HeroSectionProps) {
   if (compact) {
     return (
@@ -56,9 +74,8 @@ export default function HeroSection({ compact = false }: HeroSectionProps) {
               </span>
             </div>
             <p className="mt-1.5 text-sm leading-snug text-slate-400 sm:text-base">
-              Ask why it moved. Get{" "}
-              <span className="font-medium text-slate-200">ranked claims</span>{" "}
-              with evidence, not a vague vibe check.
+              Start above with a ticker. The ledger below holds your open case
+              and past investigations.
             </p>
           </div>
         </div>
@@ -79,37 +96,35 @@ export default function HeroSection({ compact = false }: HeroSectionProps) {
 
       <div className="relative z-10 flex items-start gap-5">
         <QuantPilotMark className="hidden h-14 w-14 sm:flex" />
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="vibe-pill inline-block px-3 py-1 text-violet-300">
             Autonomous investigation engine
           </p>
           <h2 className="font-display mt-4 max-w-2xl text-2xl font-bold leading-tight tracking-tight text-white sm:text-3xl lg:text-4xl">
             Why did this move?{" "}
-            <span className="gradient-text">We dig until we know.</span>
+            <span className="gradient-text">Evidence, not vibes.</span>
           </h2>
           <p className="mt-4 max-w-xl text-sm leading-relaxed text-slate-400 sm:text-base">
-            Drop a ticker to open an Evidence Ledger case. Rank claims against
-            filings, news, and IR receipts. Full research reports are optional
-            backup when you want the whole squad.
+            QuantPilot opens a case when a stock moves, gathers news and filings,
+            ranks competing explanations, and stress-tests the lead before you
+            decide anything.
           </p>
 
-          <ul className="mt-6 flex flex-wrap gap-2">
-            {[
-              "why did it move",
-              "evidence ledger",
-              "ranked claims",
-              "bull × bear",
-              "investment memo",
-              "alerts & briefings",
-            ].map((tag) => (
+          <ol className="mt-6 grid gap-3 sm:grid-cols-3">
+            {STEPS.map((step) => (
               <li
-                key={tag}
-                className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1 text-xs text-slate-400"
+                key={step.n}
+                className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-3"
               >
-                {tag}
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-300/80">
+                  {step.n}. {step.title}
+                </p>
+                <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+                  {step.body}
+                </p>
               </li>
             ))}
-          </ul>
+          </ol>
         </div>
       </div>
     </section>

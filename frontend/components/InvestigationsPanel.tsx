@@ -262,15 +262,15 @@ export default function InvestigationsPanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-300/80">
-            Primary workspace
+            Step 2 · Your cases
           </p>
           <h3 className="font-display mt-1 text-base font-semibold text-white">
             Evidence Ledger
           </h3>
           <p className="mt-1 max-w-xl text-sm text-slate-500">
-            Investigate detects the move, plans evidence, verifies claim links,
-            stress-tests the lead with Devil&apos;s Advocate, then ranks weighted
-            hypotheses.
+            Results from Investigate land here: ranked claims, linked evidence,
+            verification, and Devil&apos;s Advocate. Use the finder below only to
+            reopen an old case — not to start a new one.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -335,69 +335,82 @@ export default function InvestigationsPanel({
         </p>
       )}
 
-      <form
-        onSubmit={(e) => void handleSearch(e)}
-        className="mt-4 flex flex-wrap gap-2"
-        role="search"
-        aria-label="Search investigations"
-      >
-        <input
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-            if (!e.target.value.trim()) {
-              setSearchHits([]);
-              setSearchMode(null);
-            }
-          }}
-          placeholder='Search cases — e.g. "export curb NVDA" or "guidance cut"'
-          className="min-w-[14rem] flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-white outline-none focus:border-violet-500/40"
-        />
-        <button
-          type="submit"
-          disabled={searching || !searchQuery.trim()}
-          className="rounded-lg border border-white/[0.1] bg-white/[0.04] px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-violet-500/30 disabled:opacity-40"
+      <details className="mt-4 rounded-xl border border-white/[0.06] bg-white/[0.015] px-3 py-2">
+        <summary className="cursor-pointer list-none text-xs font-medium text-slate-400 marker:content-none [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex items-center gap-2">
+            <span className="text-slate-500">Find a past case</span>
+            <span className="font-normal text-slate-600">
+              (search old investigations — not for new tickers)
+            </span>
+          </span>
+        </summary>
+        <form
+          onSubmit={(e) => void handleSearch(e)}
+          className="mt-3 flex flex-wrap gap-2"
+          role="search"
+          aria-label="Find past investigations"
         >
-          {searching ? "Searching…" : "Search ledger"}
-        </button>
-      </form>
-      {searchMode && (
-        <p className="mt-2 text-[11px] text-slate-600">
-          {searchHits.length} hit{searchHits.length === 1 ? "" : "s"} · {searchMode}
-          {searchHits.length === 0 ? " — try ticker, claim, or evidence wording" : ""}
-        </p>
-      )}
-      {searchHits.length > 0 && (
-        <ul className="mt-2 space-y-1.5">
-          {searchHits.map((hit) => (
-            <li key={hit.investigation_id}>
-              <button
-                type="button"
-                onClick={() => {
-                  onSelectedChange(hit.investigation_id, hit.ticker);
-                  void loadDetail(hit.investigation_id, false);
-                }}
-                className="w-full rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-left transition hover:border-violet-500/30 hover:bg-violet-500/5"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-display text-sm font-semibold text-white">
-                    ${hit.ticker}
-                  </span>
-                  <span className="text-[10px] text-slate-500">
-                    {hit.match_sources.join(" · ") || "match"}
-                  </span>
-                  <span className="text-[10px] text-slate-600">
-                    score {hit.score.toFixed(1)}
-                  </span>
-                </div>
-                <p className="mt-0.5 line-clamp-2 text-xs text-slate-400">
-                  {hit.snippet || hit.summary}
-                </p>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+          <input
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              if (!e.target.value.trim()) {
+                setSearchHits([]);
+                setSearchMode(null);
+              }
+            }}
+            placeholder='e.g. "export curb" or "guidance cut"'
+            className="min-w-[14rem] flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-white outline-none focus:border-violet-500/40"
+          />
+          <button
+            type="submit"
+            disabled={searching || !searchQuery.trim()}
+            className="rounded-lg border border-white/[0.1] bg-white/[0.04] px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-violet-500/30 disabled:opacity-40"
+          >
+            {searching ? "Searching…" : "Find cases"}
+          </button>
+        </form>
+        {searchMode && (
+          <p className="mt-2 text-[11px] text-slate-600">
+            {searchHits.length} hit{searchHits.length === 1 ? "" : "s"} ·{" "}
+            {searchMode}
+            {searchHits.length === 0
+              ? " — try wording from a claim or evidence snippet"
+              : ""}
+          </p>
+        )}
+        {searchHits.length > 0 && (
+          <ul className="mt-2 space-y-1.5">
+            {searchHits.map((hit) => (
+              <li key={hit.investigation_id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelectedChange(hit.investigation_id, hit.ticker);
+                    void loadDetail(hit.investigation_id, false);
+                  }}
+                  className="w-full rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-left transition hover:border-violet-500/30 hover:bg-violet-500/5"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-display text-sm font-semibold text-white">
+                      ${hit.ticker}
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      {hit.match_sources.join(" · ") || "match"}
+                    </span>
+                    <span className="text-[10px] text-slate-600">
+                      score {hit.score.toFixed(1)}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-slate-400">
+                    {hit.snippet || hit.summary}
+                  </p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
 
       {error && (
         <p className="mt-3 text-sm text-red-400" role="alert">
@@ -451,11 +464,11 @@ export default function InvestigationsPanel({
           {!selected && (
             <div className="rounded-xl border border-dashed border-white/[0.08] px-4 py-10 text-center">
               <p className="font-display text-sm font-semibold text-slate-300">
-                No open investigation
+                No open case yet
               </p>
               <p className="mx-auto mt-2 max-w-sm text-sm text-slate-500">
-                Drop a ticker in search to open a case. Claims and evidence live
-                here — the research report is optional backup.
+                Use the ticker bar above (Step 1) to investigate. Your ranked
+                claims and evidence will show up here.
               </p>
             </div>
           )}
@@ -476,6 +489,9 @@ export default function InvestigationsPanel({
                     {selected.trigger_reason === "scheduled"
                       ? "scheduled scan"
                       : selected.trigger_reason}
+                    {selected.window_label
+                      ? ` · window ${selected.window_label}`
+                      : ""}
                     {selected.move_pct != null
                       ? ` · ${selected.move_pct > 0 ? "+" : ""}${selected.move_pct.toFixed(1)}%`
                       : ""}

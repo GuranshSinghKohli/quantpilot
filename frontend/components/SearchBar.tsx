@@ -2,8 +2,10 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 
+export type InvestigateWindow = "1d" | "1w" | "1mo" | "1y";
+
 interface SearchBarProps {
-  onInvestigate: (ticker: string) => void;
+  onInvestigate: (ticker: string, windowLabel: InvestigateWindow) => void;
   onDeepResearch?: (ticker: string) => void;
   isLoading: boolean;
   recentTickers: string[];
@@ -12,6 +14,13 @@ interface SearchBarProps {
 }
 
 const QUICK_PICKS = ["AAPL", "MSFT", "NVDA", "TSLA"];
+
+const WINDOWS: { value: InvestigateWindow; label: string; hint: string }[] = [
+  { value: "1d", label: "1 day", hint: "Today’s move" },
+  { value: "1w", label: "1 week", hint: "Last ~5 sessions" },
+  { value: "1mo", label: "1 month", hint: "Past month" },
+  { value: "1y", label: "1 year", hint: "Past year" },
+];
 
 export default function SearchBar({
   onInvestigate,
@@ -22,6 +31,7 @@ export default function SearchBar({
   disabled = false,
 }: SearchBarProps) {
   const [ticker, setTicker] = useState("");
+  const [windowLabel, setWindowLabel] = useState<InvestigateWindow>("1d");
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const locked = isLoading || disabled;
@@ -55,7 +65,7 @@ export default function SearchBar({
     setError(null);
     const symbol = value.trim().toUpperCase();
     setTicker(symbol);
-    onInvestigate(symbol);
+    onInvestigate(symbol, windowLabel);
   }
 
   function submitDeepResearch() {
@@ -78,6 +88,16 @@ export default function SearchBar({
 
   return (
     <div className="w-full">
+      <div className="mb-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-300/80">
+          Step 1 · Start here
+        </p>
+        <p className="mt-1 text-sm text-slate-500">
+          Enter a ticker and pick how far back to look. This opens a new case in
+          the Evidence Ledger below — it is not a search of past cases.
+        </p>
+      </div>
+
       <label htmlFor="ticker-search" className="sr-only">
         Stock ticker to investigate
       </label>
@@ -92,7 +112,7 @@ export default function SearchBar({
               setTicker(e.target.value.toUpperCase());
               setError(null);
             }}
-            placeholder="Why did NVDA move? Drop a ticker…"
+            placeholder="Ticker — e.g. TSLA"
             disabled={locked}
             autoComplete="off"
             className={`w-full rounded-2xl border border-violet-500/25 bg-[#0f0f18]/90 px-5 py-4 text-base text-white outline-none ring-violet-500/20 transition placeholder:text-slate-600 focus:border-violet-400/50 focus:ring-2 disabled:opacity-50 sm:text-lg ${
@@ -127,11 +147,36 @@ export default function SearchBar({
             )}
           </button>
         </div>
+
+        <fieldset disabled={locked} className="min-w-0">
+          <legend className="sr-only">Investigation time window</legend>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-slate-600">Look back</span>
+            {WINDOWS.map((w) => {
+              const active = windowLabel === w.value;
+              return (
+                <button
+                  key={w.value}
+                  type="button"
+                  title={w.hint}
+                  onClick={() => setWindowLabel(w.value)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
+                    active
+                      ? "border-violet-500/50 bg-violet-500/20 text-violet-100"
+                      : "border-white/[0.08] bg-white/[0.03] text-slate-400 hover:border-violet-500/30 hover:text-slate-200"
+                  }`}
+                >
+                  {w.label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
       </form>
 
       {onDeepResearch && (
         <p className="mt-2 text-xs text-slate-600">
-          Opens the Evidence Ledger.{" "}
+          Opens a new Evidence Ledger case for the selected window.{" "}
           <button
             type="button"
             onClick={submitDeepResearch}

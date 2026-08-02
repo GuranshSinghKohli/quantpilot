@@ -132,12 +132,16 @@ async def detect_move(ticker: str, window: str = "1d") -> MoveSnapshot:
 
 
 def _period_for_window(window_label: str) -> str:
+    """Map investigation window → yfinance history period covering that move."""
     mapping = {
         "1d": "5d",
         "intraday": "5d",
-        "5d": "1mo",
-        "1w": "1mo",
-        "1mo": "3mo",
+        "5d": "5d",
+        "1w": "5d",
+        "1mo": "1mo",
+        "3mo": "3mo",
+        "1y": "1y",
+        "ytd": "ytd",
     }
     return mapping.get(window_label, "1mo")
 

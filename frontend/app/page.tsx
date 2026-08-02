@@ -14,7 +14,7 @@ import InvestmentMemoPanel from "@/components/InvestmentMemoPanel";
 import ReportDisplay from "@/components/ReportDisplay";
 import ResearchExtrasPanel from "@/components/ResearchExtrasPanel";
 import ResearchChatPanel from "@/components/ResearchChatPanel";
-import SearchBar from "@/components/SearchBar";
+import SearchBar, { type InvestigateWindow } from "@/components/SearchBar";
 import SECFilingsPanel from "@/components/SECFilingsPanel";
 import StockHeader from "@/components/StockHeader";
 import ToolsDock from "@/components/ToolsDock";
@@ -202,8 +202,18 @@ export default function Home() {
     []
   );
 
-  async function runInvestigate(ticker: string) {
+  async function runInvestigate(
+    ticker: string,
+    windowLabel: InvestigateWindow | string = "1d"
+  ) {
     const symbol = ticker.toUpperCase();
+    const window =
+      windowLabel === "1w" ||
+      windowLabel === "1mo" ||
+      windowLabel === "1y" ||
+      windowLabel === "1d"
+        ? windowLabel
+        : "1d";
     setError(null);
     setCurrentTicker(symbol);
     setRecentTickers((prev) => {
@@ -213,14 +223,19 @@ export default function Home() {
 
     const reachable = apiReachable ?? (await checkApiHealth());
     setApiReachable(reachable);
-    if (!reachable) return;
+    if (!reachable) {
+      setError(
+        "Backend API is offline — Investigate is disabled until the API is reachable."
+      );
+      return;
+    }
 
     setIsOpeningInvestigation(true);
     try {
       const detail = await investigateTicker({
         ticker: symbol,
         trigger_reason: "on_demand",
-        window_label: "1d",
+        window_label: window,
         skip_if_noise: false,
       });
       setActiveInvestigationId(detail.id);
@@ -596,13 +611,13 @@ export default function Home() {
                   ⌕
                 </div>
                 <p className="font-display relative mt-6 text-xl font-bold text-white sm:text-2xl">
-                  ask why it moved, get{" "}
-                  <span className="gradient-text">ranked claims</span>
+                  start with a ticker{" "}
+                  <span className="gradient-text">above</span>
                 </p>
                 <p className="relative mx-auto mt-3 max-w-md text-sm leading-relaxed text-slate-500">
-                  Investigate opens an Evidence Ledger case. Optional deep
-                  research gathers filings, news, and a memo you can attach as
-                  evidence.
+                  Pick day / week / month / year, hit investigate, then read the
+                  case in the Evidence Ledger. Past-case search is optional and
+                  tucked under “Find a past case.”
                 </p>
                 {watchlist.length > 0 && (
                   <div className="relative mt-6 flex flex-wrap justify-center gap-2">
