@@ -29,10 +29,22 @@ import type {
 } from "@/types";
 
 function normalizeApiUrl(raw: string): string {
-  const trimmed = raw.replace(/\/$/, "");
+  let trimmed = (raw || "").trim().replace(/\/$/, "");
   if (!trimmed) return "";
+
+  // Recover from accidental local-path prefixes, e.g.
+  // "/Users/.../https://quantpilot-api-gwdz.onrender.com"
+  const embedded = trimmed.match(/https?:\/\/[^\s]+/i);
+  if (embedded) {
+    trimmed = embedded[0].replace(/\/$/, "");
+  }
+
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     return trimmed;
+  }
+  // Reject filesystem-looking values instead of inventing https://Users/...
+  if (trimmed.startsWith("/") || /^[A-Za-z]:\\/.test(trimmed)) {
+    return "";
   }
   return `https://${trimmed}`;
 }
