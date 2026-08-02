@@ -189,3 +189,19 @@ class InvestigationSearchResponse(BaseModel):
     query: str
     mode: str = "keyword"
     results: List[InvestigationSearchHit] = Field(default_factory=list)
+
+
+class SmartSummaryResponse(BaseModel):
+    headline: str = ""
+    bullets: List[str] = Field(default_factory=list)
+    takeaway: str = ""
+    source: str = "heuristic"
+
+
+class SmartSummarizeTextRequest(BaseModel):
+    title: str = Field(default="", max_length=280)
+    body: str = Field(..., min_length=1, max_length=20000)
+
+
+class InvestigationChatRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=2000)

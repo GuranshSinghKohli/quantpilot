@@ -134,12 +134,18 @@ async def run_investigation(
         plan = await investigation_planner_agent.plan_investigation(
             move, asset_hint=move.asset_class or "equity"
         )
+        move_prefix = (move.detail or "").strip()
+        collect_note = f"Collecting evidence: {plan.get('focus', '')[:200]}"
         evidence_ledger_store.set_status(
             db,
             owner_key=owner_key,
             investigation_id=investigation_id,
             status="collecting",
-            summary=f"Collecting evidence: {plan.get('focus', '')[:240]}",
+            summary=(
+                f"{move_prefix} {collect_note}".strip()
+                if move_prefix
+                else collect_note
+            )[:2000],
         )
 
         evidence_rows = await _collect_evidence(move, plan)
@@ -253,7 +259,8 @@ async def run_investigation(
             )
 
         summary = _finalize_summary(
-            ranked.get("summary") or move.detail,
+            move,
+            ranked.get("summary") or "",
             da_payload,
             final_hypotheses,
         )
@@ -499,7 +506,8 @@ async def _evidence_from_tool(ticker: str, tool: str) -> List[Dict[str, Any]]:
                     "retrieval_method": "mcp",
                     "title": str(title)[:280],
                     "excerpt": f"{h.get('publisher') or 'News'}: {title}",
-                    "source_url": link,
+                    "source_url": link
+                    or f"https://finance.yahoo.com/quote/{ticker}/news",
                     "raw_payload": h,
                 }
             )
@@ -521,7 +529,12 @@ async def _evidence_from_tool(ticker: str, tool: str) -> List[Dict[str, Any]]:
                         or f.get("accession_number")
                         or title
                     )[:2000],
-                    "source_url": str(f.get("document_url") or f.get("url") or "")[:1024],
+                    "source_url": str(
+                        f.get("document_url")
+                        or f.get("url")
+                        or f.get("filing_url")
+                        or f"https://www.sec.gov/edgar/search/#/entityName={ticker}"
+                    )[:1024],
                     "raw_payload": f,
                 }
             )
@@ -532,7 +545,7 @@ async def _evidence_from_tool(ticker: str, tool: str) -> List[Dict[str, Any]]:
                     "retrieval_method": "mcp",
                     "title": "Filings lookup",
                     "excerpt": str(result.get("error"))[:500],
-                    "source_url": "",
+                    "source_url": f"https://www.sec.gov/edgar/search/#/entityName={ticker}",
                     "raw_payload": result,
                 }
             )
@@ -548,8 +561,36 @@ async def _evidence_from_tool(ticker: str, tool: str) -> List[Dict[str, Any]]:
                 "retrieval_method": "mcp",
                 "title": f"{ticker} fundamentals snapshot",
                 "excerpt": json.dumps(result, default=str)[:2000],
-                "source_url": "",
+                "source_url": f"https://finance.yahoo.com/quote/{ticker}/key-statistics",
                 "raw_payload": result,
+            }
+        ]
+
+    if tool == "get_stock_price":
+        return [
+            {
+                "source_type": "price",
+                "retrieval_method": "mcp",
+                "title": f"{ticker} price snapshot",
+                "excerpt": json.dumps(result, default=str)[:2000],
+                "source_url": f"https://finance.yahoo.com/quote/{ticker}",
+                "raw_payload": result,
+            }
+        ]
+
+    if tool == "get_price_history":
+        period = str(result.get("period") or "1mo")
+        return [
+            {
+                "source_type": "price",
+                "retrieval_method": "mcp",
+                "title": f"{ticker} price history ({period})",
+                "excerpt": json.dumps(
+                    {"period": period, "points": len(result.get("history") or [])},
+                    default=str,
+                )[:2000],
+                "source_url": f"https://finance.yahoo.com/quote/{ticker}/history",
+                "raw_payload": {"period": period, "count": len(result.get("history") or [])},
             }
         ]
 
@@ -704,11 +745,46 @@ def _provider_to_method(provider: str) -> str:
     return "mcp"
 
 
+def _human_window(window_label: str) -> str:
+    mapping = {
+        "1d": "1 day",
+        "intraday": "1 day",
+        "1w": "1 week",
+        "5d": "1 week",
+        "1mo": "1 month",
+        "3mo": "3 months",
+        "6mo": "6 months",
+        "1y": "1 year",
+        "ytd": "year to date",
+    }
+    key = (window_label or "1d").strip().lower()
+    return mapping.get(key, window_label or "the selected window")
+
+
 def _finalize_summary(
+    move: MoveSnapshot,
     base: str,
     da_payload: Dict[str, Any],
     hypotheses: List[Dict[str, Any]],
 ) -> str:
+    """Lead with move size, then cause, then DA check — matches Evidence Ledger UX."""
+    window = _human_window(move.window_label or "1d")
+    ticker = move.ticker or "Ticker"
+    move_pct = move.move_pct
+    if move_pct is None:
+        move_line = f"{ticker} move over {window} could not be measured cleanly."
+    else:
+        abs_move = abs(float(move_pct))
+        if float(move_pct) < -0.05:
+            move_line = f"{ticker} fell {abs_move:.1f}% over {window}."
+        elif float(move_pct) > 0.05:
+            move_line = f"{ticker} rose {abs_move:.1f}% over {window}."
+        else:
+            sign = "+" if float(move_pct) >= 0 else ""
+            move_line = (
+                f"{ticker} was roughly flat ({sign}{float(move_pct):.1f}%) over {window}."
+            )
+
     lead = hypotheses[0]["statement"] if hypotheses else "n/a"
     outcome = da_payload.get("outcome") or "held"
     da_line = {
@@ -717,11 +793,21 @@ def _finalize_summary(
         "demoted": "Devil's Advocate demoted the leading hypothesis; a competitor was promoted.",
     }.get(str(outcome), f"Devil's Advocate outcome: {outcome}.")
     parts = [
+        move_line,
+        f"Leading cause: {lead}",
         (base or "").strip(),
-        f"Top hypothesis after verification: {lead}",
         da_line,
     ]
-    return " ".join(p for p in parts if p)[:2000]
+    # Drop empty / duplicate fragments
+    cleaned: List[str] = []
+    seen = set()
+    for part in parts:
+        text = (part or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        cleaned.append(text)
+    return " ".join(cleaned)[:2000]
 
 
 def _tool_args(ticker: str, tool: str) -> Dict[str, Any]:

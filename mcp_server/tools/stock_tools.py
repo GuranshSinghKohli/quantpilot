@@ -38,19 +38,32 @@ def get_stock_fundamentals(ticker: str) -> Dict[str, Any]:
     }
 
 
+def _news_link(value: Any) -> str:
+    """Normalize yfinance news URL fields (string or {url: ...})."""
+    if isinstance(value, dict):
+        return str(value.get("url") or value.get("href") or "")[:1024]
+    if value:
+        return str(value)[:1024]
+    return ""
+
+
 def get_stock_news(ticker: str, limit: int = 5) -> Dict[str, Any]:
     symbol = validate_ticker(ticker)
     news = yf.Ticker(symbol).news or []
     headlines: List[Dict[str, Any]] = []
     for item in news[: max(1, min(limit, 20))]:
         content = item.get("content") or item
+        link = (
+            _news_link(content.get("canonicalUrl"))
+            or _news_link(content.get("clickThroughUrl"))
+            or _news_link(item.get("link"))
+            or _news_link(content.get("link"))
+        )
         headlines.append(
             {
                 "title": content.get("title") or item.get("title", ""),
                 "publisher": content.get("publisher") or item.get("publisher", ""),
-                "link": content.get("canonicalUrl")
-                or content.get("clickThroughUrl")
-                or item.get("link", ""),
+                "link": link,
                 "published": content.get("pubDate") or item.get("providerPublishTime"),
             }
         )

@@ -460,6 +460,13 @@ export interface InvestigationSearchResponse {
   results: InvestigationSearchHit[];
 }
 
+export interface SmartSummary {
+  headline: string;
+  bullets: string[];
+  takeaway: string;
+  source: string;
+}
+
 export interface TriggerPreviewResponse {
   ticker: string;
   should_investigate: boolean;

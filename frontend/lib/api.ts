@@ -26,6 +26,7 @@ import type {
   EvidenceItem,
   Claim,
   ClaimEvidenceLink,
+  SmartSummary,
 } from "@/types";
 
 function normalizeApiUrl(raw: string): string {
@@ -673,5 +674,38 @@ export async function completeInvestigation(
   return apiFetch<InvestigationDetail>(
     `/api/investigations/${investigationId}/complete${qs ? `?${qs}` : ""}`,
     { method: "POST" }
+  );
+}
+
+export async function smartSummarizeInvestigation(
+  investigationId: number
+): Promise<SmartSummary> {
+  return apiFetch<SmartSummary>(
+    `/api/investigations/${investigationId}/smart-summarize`,
+    { method: "POST" }
+  );
+}
+
+export async function smartSummarizeText(
+  title: string,
+  body: string
+): Promise<SmartSummary> {
+  return apiFetch<SmartSummary>("/api/smart-summarize", {
+    method: "POST",
+    body: JSON.stringify({ title, body }),
+  });
+}
+
+export async function sendInvestigationChat(
+  investigationId: number,
+  question: string
+): Promise<ChatResponse> {
+  return apiFetch<ChatResponse>(
+    `/api/investigations/${investigationId}/chat`,
+    {
+      method: "POST",
+      body: JSON.stringify({ question }),
+      timeoutMs: 60_000,
+    }
   );
 }

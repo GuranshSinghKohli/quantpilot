@@ -40,7 +40,7 @@ const STEPS = [
   {
     n: "1",
     title: "Ask why it moved",
-    body: "Type a ticker and choose 1 day, week, month, or year.",
+    body: "Type a ticker and choose day, week, month, 6 months, or year.",
   },
   {
     n: "2",

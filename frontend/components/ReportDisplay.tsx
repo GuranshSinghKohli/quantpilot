@@ -1,8 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import type { AnalysisResponse, FinalReport, StoredReport } from "@/types";
-import { fetchPastReports } from "@/lib/api";
+import type {
+  AnalysisResponse,
+  FinalReport,
+  SmartSummary,
+  StoredReport,
+} from "@/types";
+import { ApiError, fetchPastReports, smartSummarizeText } from "@/lib/api";
 
 interface ReportDisplayProps {
   analysis: AnalysisResponse;
@@ -64,6 +69,9 @@ export default function ReportDisplay({
   const [pastReports, setPastReports] = useState<StoredReport[]>([]);
   const [pastLoading, setPastLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [smartSummary, setSmartSummary] = useState<SmartSummary | null>(null);
+  const [summarizing, setSummarizing] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   function toggleSection(index: number) {
     setOpenSections((prev) => {
@@ -78,6 +86,26 @@ export default function ReportDisplay({
     await navigator.clipboard.writeText(reportToText(report));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleSmartSummarize() {
+    setSummarizing(true);
+    setSummaryError(null);
+    try {
+      const summary = await smartSummarizeText(
+        report.report_title,
+        reportToText(report)
+      );
+      setSmartSummary(summary);
+    } catch (err) {
+      setSummaryError(
+        err instanceof ApiError
+          ? err.message
+          : "Smart Summarize failed. Try again."
+      );
+    } finally {
+      setSummarizing(false);
+    }
   }
 
   async function handleViewPast() {
@@ -203,7 +231,49 @@ export default function ReportDisplay({
         >
           View Past Reports
         </button>
+        <button
+          type="button"
+          onClick={() => void handleSmartSummarize()}
+          disabled={summarizing}
+          className="rounded-lg border border-violet-500/40 bg-violet-500/15 px-4 py-2 text-sm font-medium text-violet-100 transition hover:bg-violet-500/25 disabled:opacity-50"
+        >
+          {summarizing ? "Summarizing…" : "Smart Summarize"}
+        </button>
       </div>
+
+      {summaryError && (
+        <p className="mt-3 text-sm text-red-400" role="alert">
+          {summaryError}
+        </p>
+      )}
+
+      {smartSummary && (
+        <div className="mt-4 rounded-xl border border-violet-500/30 bg-violet-500/[0.06] px-4 py-4 space-y-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-300/80">
+            Smart summary
+          </p>
+          <p className="text-base font-medium text-white">
+            {smartSummary.headline}
+          </p>
+          <ul className="space-y-1.5">
+            {smartSummary.bullets.map((bullet, i) => (
+              <li
+                key={`${i}-${bullet.slice(0, 24)}`}
+                className="flex gap-2 text-sm text-slate-300"
+              >
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />
+                <span>{bullet}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm text-slate-200">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Takeaway ·{" "}
+            </span>
+            {smartSummary.takeaway}
+          </p>
+        </div>
+      )}
 
       <p className="mt-6 text-xs text-slate-600">{report.disclaimer}</p>
 

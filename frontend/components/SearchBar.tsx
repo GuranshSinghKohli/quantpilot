@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useId, useRef, useState } from "react";
 
-export type InvestigateWindow = "1d" | "1w" | "1mo" | "1y";
+export type InvestigateWindow = "1d" | "1w" | "1mo" | "6mo" | "1y";
 
 interface SearchBarProps {
   onInvestigate: (ticker: string, windowLabel: InvestigateWindow) => void;
@@ -11,14 +11,21 @@ interface SearchBarProps {
   recentTickers: string[];
   loadingLabel?: string;
   disabled?: boolean;
+  windowLabel?: InvestigateWindow;
+  onWindowLabelChange?: (windowLabel: InvestigateWindow) => void;
 }
 
 const QUICK_PICKS = ["AAPL", "MSFT", "NVDA", "TSLA"];
 
-const WINDOWS: { value: InvestigateWindow; label: string; hint: string }[] = [
-  { value: "1d", label: "1 day", hint: "Today’s move" },
+export const INVESTIGATE_WINDOWS: {
+  value: InvestigateWindow;
+  label: string;
+  hint: string;
+}[] = [
+  { value: "1d", label: "1 day", hint: "Today's move" },
   { value: "1w", label: "1 week", hint: "Last ~5 sessions" },
   { value: "1mo", label: "1 month", hint: "Past month" },
+  { value: "6mo", label: "6 months", hint: "Past 6 months" },
   { value: "1y", label: "1 year", hint: "Past year" },
 ];
 
@@ -29,12 +36,25 @@ export default function SearchBar({
   recentTickers,
   loadingLabel = "Investigating…",
   disabled = false,
+  windowLabel: controlledWindow,
+  onWindowLabelChange,
 }: SearchBarProps) {
+  const groupId = useId();
   const [ticker, setTicker] = useState("");
-  const [windowLabel, setWindowLabel] = useState<InvestigateWindow>("1d");
+  const [internalWindow, setInternalWindow] =
+    useState<InvestigateWindow>("1d");
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const locked = isLoading || disabled;
+
+  const windowLabel = controlledWindow ?? internalWindow;
+
+  function setWindowLabel(next: InvestigateWindow) {
+    if (controlledWindow === undefined) {
+      setInternalWindow(next);
+    }
+    onWindowLabelChange?.(next);
+  }
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -85,6 +105,9 @@ export default function SearchBar({
   }
 
   const chips = recentTickers.length > 0 ? recentTickers : QUICK_PICKS;
+  const selectedMeta =
+    INVESTIGATE_WINDOWS.find((w) => w.value === windowLabel) ??
+    INVESTIGATE_WINDOWS[0];
 
   return (
     <div className="w-full">
@@ -98,10 +121,81 @@ export default function SearchBar({
         </p>
       </div>
 
+      <div className="mb-3 space-y-2">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <label
+            htmlFor={`${groupId}-select`}
+            className="text-xs font-medium text-slate-400"
+          >
+            Look back
+          </label>
+          <span className="text-xs text-slate-600">{selectedMeta.hint}</span>
+        </div>
+
+        {/* Native select — always works, including in embedded browsers */}
+        <select
+          id={`${groupId}-select`}
+          value={windowLabel}
+          disabled={isLoading}
+          onChange={(e) =>
+            setWindowLabel(e.target.value as InvestigateWindow)
+          }
+          className="w-full appearance-none rounded-xl border border-violet-500/30 bg-[#0f0f18] px-4 py-3 text-sm font-semibold text-white outline-none ring-violet-500/20 focus:border-violet-400/50 focus:ring-2 disabled:opacity-50"
+        >
+          {INVESTIGATE_WINDOWS.map((w) => (
+            <option key={w.value} value={w.value}>
+              {w.label}
+            </option>
+          ))}
+        </select>
+
+        <div
+          className="grid grid-cols-5 gap-1.5"
+          role="group"
+          aria-label="Quick look-back"
+        >
+          {INVESTIGATE_WINDOWS.map((w) => {
+            const active = windowLabel === w.value;
+            const inputId = `${groupId}-${w.value}`;
+            return (
+              <label
+                key={w.value}
+                htmlFor={inputId}
+                className={`flex min-h-[40px] cursor-pointer items-center justify-center rounded-lg border px-1 text-center text-xs font-semibold transition sm:text-sm ${
+                  active
+                    ? "border-violet-400/60 bg-violet-500/25 text-violet-100"
+                    : "border-white/[0.08] bg-white/[0.03] text-slate-400 hover:border-violet-500/30 hover:text-slate-200"
+                } ${isLoading ? "pointer-events-none opacity-50" : ""}`}
+              >
+                <input
+                  id={inputId}
+                  type="radio"
+                  name={`${groupId}-window`}
+                  value={w.value}
+                  checked={active}
+                  disabled={isLoading}
+                  onChange={() => setWindowLabel(w.value)}
+                  className="sr-only"
+                />
+                {w.value === "1d"
+                  ? "1D"
+                  : w.value === "1w"
+                    ? "1W"
+                    : w.value === "1mo"
+                      ? "1M"
+                      : w.value === "6mo"
+                        ? "6M"
+                        : "1Y"}
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
       <label htmlFor="ticker-search" className="sr-only">
         Stock ticker to investigate
       </label>
-      <form onSubmit={handleSubmit} className="relative flex flex-col gap-3">
+      <form onSubmit={handleSubmit} className="relative">
         <div className="relative">
           <input
             id="ticker-search"
@@ -147,36 +241,16 @@ export default function SearchBar({
             )}
           </button>
         </div>
-
-        <fieldset disabled={locked} className="min-w-0">
-          <legend className="sr-only">Investigation time window</legend>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-slate-600">Look back</span>
-            {WINDOWS.map((w) => {
-              const active = windowLabel === w.value;
-              return (
-                <button
-                  key={w.value}
-                  type="button"
-                  title={w.hint}
-                  onClick={() => setWindowLabel(w.value)}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
-                    active
-                      ? "border-violet-500/50 bg-violet-500/20 text-violet-100"
-                      : "border-white/[0.08] bg-white/[0.03] text-slate-400 hover:border-violet-500/30 hover:text-slate-200"
-                  }`}
-                >
-                  {w.label}
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
       </form>
 
       {onDeepResearch && (
         <p className="mt-2 text-xs text-slate-600">
-          Opens a new Evidence Ledger case for the selected window.{" "}
+          Window:{" "}
+          <span className="font-medium text-slate-300">
+            {selectedMeta.label}
+          </span>
+          {" · "}
+          opens a new Evidence Ledger case.{" "}
           <button
             type="button"
             onClick={submitDeepResearch}

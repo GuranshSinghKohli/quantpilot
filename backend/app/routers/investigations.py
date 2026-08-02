@@ -24,12 +24,18 @@ from app.models.investigation_schemas import (
     InvestigationSummary,
     InvestigationSweepRequest,
     InvestigationSweepResponse,
+    InvestigationChatRequest,
+    SmartSummarizeTextRequest,
+    SmartSummaryResponse,
     TriggerPreviewResponse,
 )
+from app.models.agent_schemas import ChatResponse
 from app.services import (
     evidence_ledger_store,
+    investigation_chat,
     investigation_runner,
     investigation_search,
+    investigation_smart_summary,
     trigger_logic,
 )
 
@@ -285,6 +291,62 @@ async def link_claim_evidence(
             detail="Investigation, claim, or evidence not found",
         )
     return link
+
+
+@router.post(
+    "/investigations/{investigation_id}/smart-summarize",
+    response_model=SmartSummaryResponse,
+)
+async def smart_summarize_investigation(
+    investigation_id: int,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+    x_guest_id: Optional[str] = Header(default=None, alias="X-Guest-Id"),
+) -> SmartSummaryResponse:
+    """Produce a short wrap-up: move, cause, and agent takeaways."""
+    owner_key = _require_owner(user, x_guest_id)
+    detail = evidence_ledger_store.get_investigation(
+        db, owner_key=owner_key, investigation_id=investigation_id
+    )
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    return await investigation_smart_summary.smart_summarize_investigation(detail)
+
+
+@router.post("/smart-summarize", response_model=SmartSummaryResponse)
+async def smart_summarize_text(
+    body: SmartSummarizeTextRequest,
+) -> SmartSummaryResponse:
+    """Smart summarize arbitrary report text (deep research reports)."""
+    return await investigation_smart_summary.smart_summarize_text(
+        title=body.title, body=body.body
+    )
+
+
+@router.post(
+    "/investigations/{investigation_id}/chat",
+    response_model=ChatResponse,
+)
+async def investigation_rag_chat(
+    investigation_id: int,
+    body: InvestigationChatRequest,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+    x_guest_id: Optional[str] = Header(default=None, alias="X-Guest-Id"),
+) -> ChatResponse:
+    """RAG Q&A over the open case (claims, evidence) + related ledger hits."""
+    owner_key = _require_owner(user, x_guest_id)
+    detail = evidence_ledger_store.get_investigation(
+        db, owner_key=owner_key, investigation_id=investigation_id
+    )
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    return await investigation_chat.answer_investigation_question(
+        db,
+        owner_key=owner_key,
+        detail=detail,
+        question=body.question.strip(),
+    )
 
 
 @router.post(

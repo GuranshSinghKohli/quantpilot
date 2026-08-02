@@ -3,7 +3,7 @@ const FEATURES = [
     id: "investigate",
     icon: "⌕",
     title: "Why did it move?",
-    body: "Pick a ticker and a window (day / week / month / year). QuantPilot opens a case with ranked claims and receipts.",
+    body: "Pick a ticker and a window (day / week / month / 6 months / year). QuantPilot opens a case with ranked claims and receipts.",
     gradient: "from-violet-500/20 to-fuchsia-500/5",
     border: "hover:border-violet-500/30",
   },

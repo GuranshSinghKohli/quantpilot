@@ -87,6 +87,8 @@ export default function Home() {
     number | null
   >(null);
   const [isOpeningInvestigation, setIsOpeningInvestigation] = useState(false);
+  const [investigateWindow, setInvestigateWindow] =
+    useState<InvestigateWindow>("1d");
 
   const hasResults = Boolean(stockData || analysisReport || isLoading);
   const hasInvestigation = activeInvestigationId != null;
@@ -207,13 +209,15 @@ export default function Home() {
     windowLabel: InvestigateWindow | string = "1d"
   ) {
     const symbol = ticker.toUpperCase();
-    const window =
+    const resolvedWindow: InvestigateWindow =
       windowLabel === "1w" ||
       windowLabel === "1mo" ||
+      windowLabel === "6mo" ||
       windowLabel === "1y" ||
       windowLabel === "1d"
         ? windowLabel
         : "1d";
+    setInvestigateWindow(resolvedWindow);
     setError(null);
     setCurrentTicker(symbol);
     setRecentTickers((prev) => {
@@ -235,7 +239,7 @@ export default function Home() {
       const detail = await investigateTicker({
         ticker: symbol,
         trigger_reason: "on_demand",
-        window_label: window,
+        window_label: resolvedWindow,
         skip_if_noise: false,
       });
       setActiveInvestigationId(detail.id);
@@ -410,6 +414,8 @@ export default function Home() {
             isLoading={isLoading || isOpeningInvestigation}
             recentTickers={recentTickers}
             disabled={apiReachable === false}
+            windowLabel={investigateWindow}
+            onWindowLabelChange={setInvestigateWindow}
             loadingLabel={
               isLoading
                 ? currentTicker
@@ -615,9 +621,9 @@ export default function Home() {
                   <span className="gradient-text">above</span>
                 </p>
                 <p className="relative mx-auto mt-3 max-w-md text-sm leading-relaxed text-slate-500">
-                  Pick day / week / month / year, hit investigate, then read the
-                  case in the Evidence Ledger. Past-case search is optional and
-                  tucked under “Find a past case.”
+                  Pick a look-back window (including 6 months), hit investigate,
+                  then read the case in the Evidence Ledger. Past-case search is
+                  optional under “Find a past case.”
                 </p>
                 {watchlist.length > 0 && (
                   <div className="relative mt-6 flex flex-wrap justify-center gap-2">
