@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.auth.deps import get_current_user, get_optional_user
@@ -20,12 +20,18 @@ from app.models.investigation_schemas import (
     InvestigationCreateRequest,
     InvestigationDetail,
     InvestigationRunRequest,
+    InvestigationSearchResponse,
     InvestigationSummary,
     InvestigationSweepRequest,
     InvestigationSweepResponse,
     TriggerPreviewResponse,
 )
-from app.services import evidence_ledger_store, investigation_runner, trigger_logic
+from app.services import (
+    evidence_ledger_store,
+    investigation_runner,
+    investigation_search,
+    trigger_logic,
+)
 
 router = APIRouter(tags=["investigations"])
 
@@ -158,6 +164,33 @@ async def list_investigations(
     if not owner_key:
         return []
     return evidence_ledger_store.list_investigations(db, owner_key, limit=limit)
+
+
+@router.get(
+    "/investigations/search",
+    response_model=InvestigationSearchResponse,
+)
+async def search_investigations(
+    q: str = Query(..., min_length=1, max_length=400, description="Natural language query"),
+    limit: int = Query(10, ge=1, le=25),
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+    x_guest_id: Optional[str] = Header(default=None, alias="X-Guest-Id"),
+) -> InvestigationSearchResponse:
+    """PRD v3 FR-10 — search prior investigations, claims, and evidence."""
+    owner_key = evidence_ledger_store.resolve_owner(user, x_guest_id)
+    if not owner_key:
+        return InvestigationSearchResponse(query=q, mode="empty", results=[])
+    try:
+        payload = investigation_search.search_investigations(
+            db, owner_key=owner_key, query=q, limit=limit
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Investigation search failed: {exc}",
+        ) from exc
+    return InvestigationSearchResponse.model_validate(payload)
 
 
 @router.get("/investigations/{investigation_id}", response_model=InvestigationDetail)

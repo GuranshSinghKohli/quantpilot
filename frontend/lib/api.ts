@@ -20,6 +20,7 @@ import type {
   WatchlistEntry,
   InvestigationDetail,
   InvestigationSummary,
+  InvestigationSearchResponse,
   InvestigationSweepResponse,
   TriggerPreviewResponse,
   EvidenceItem,
@@ -516,6 +517,20 @@ export async function fetchInvestigations(
 ): Promise<InvestigationSummary[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   return apiFetch<InvestigationSummary[]>(`/api/investigations?${params}`);
+}
+
+/** PRD v3 FR-10 — natural language search over ledger cases/evidence. */
+export async function searchInvestigations(
+  query: string,
+  limit = 10
+): Promise<InvestigationSearchResponse> {
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(limit),
+  });
+  return apiFetch<InvestigationSearchResponse>(
+    `/api/investigations/search?${params}`
+  );
 }
 
 export async function fetchInvestigation(

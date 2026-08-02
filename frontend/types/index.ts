@@ -439,6 +439,27 @@ export interface InvestigationSweepResponse {
   details: Array<Record<string, unknown>>;
 }
 
+export interface InvestigationSearchHit {
+  investigation_id: number;
+  ticker: string;
+  status: string;
+  trigger_reason: string;
+  summary: string;
+  snippet: string;
+  score: number;
+  match_sources: string[];
+  move_pct?: number | null;
+  created_at: string;
+  claims_count: number;
+  evidence_count: number;
+}
+
+export interface InvestigationSearchResponse {
+  query: string;
+  mode: string;
+  results: InvestigationSearchHit[];
+}
+
 export interface TriggerPreviewResponse {
   ticker: string;
   should_investigate: boolean;

@@ -168,3 +168,24 @@ class TriggerPreviewResponse(BaseModel):
     benchmark_move_pct: Optional[float] = None
     residual_pct: Optional[float] = None
     window_label: str = "1d"
+
+
+class InvestigationSearchHit(BaseModel):
+    investigation_id: int
+    ticker: str
+    status: str
+    trigger_reason: str = ""
+    summary: str = ""
+    snippet: str = ""
+    score: float = 0.0
+    match_sources: List[str] = Field(default_factory=list)
+    move_pct: Optional[float] = None
+    created_at: str = ""
+    claims_count: int = 0
+    evidence_count: int = 0
+
+
+class InvestigationSearchResponse(BaseModel):
+    query: str
+    mode: str = "keyword"
+    results: List[InvestigationSearchHit] = Field(default_factory=list)

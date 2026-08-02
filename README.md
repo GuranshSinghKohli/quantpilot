@@ -79,6 +79,7 @@ Full diagram and technology rationale: **[ARCHITECTURE.md](./ARCHITECTURE.md)**
 | **PRD v3 · 11** | Scheduling & triggers | Idiosyncratic / vol-adjusted gates, equity vs ETF evidence paths, holdings sweep job + Scan my holdings |
 | **PRD v3 · 12** | Proactive monitoring | Materiality-gated investigation notifications, Redis investigation job queue, Alerts → Evidence Ledger |
 | **PRD v3 · 13** | Roster & observability | Earnings/Macro/Memo on investigations; `/health` + `/api/observability/status`; CI frontend build |
+| **PRD v3 · FR-10** | Ledger NL search | Search prior investigations/claims/evidence (`GET /api/investigations/search` + Evidence Ledger search box) |
 
 ---
 

@@ -306,7 +306,18 @@ def mark_status(
     if complete or status in ("complete", "failed", "skipped_market_noise"):
         inv.completed_at = _now()
     db.commit()
-    return get_investigation(db, owner_key=owner_key, investigation_id=investigation_id)
+    detail = get_investigation(db, owner_key=owner_key, investigation_id=investigation_id)
+    # FR-10 — best-effort semantic index when a case settles.
+    if status in ("complete", "skipped_market_noise"):
+        try:
+            from app.services import investigation_search
+
+            investigation_search.index_investigation(
+                db, owner_key=owner_key, investigation_id=investigation_id
+            )
+        except Exception:
+            pass
+    return detail
 
 
 def mark_failed(
