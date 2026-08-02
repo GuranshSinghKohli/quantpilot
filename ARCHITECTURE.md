@@ -51,15 +51,17 @@
 
 ## Layer descriptions
 
-**User browser** — Single-page dashboard for ticker search, live agent progress, research reports, and portfolio sidebar utilities.
+**User browser** — Single-page dashboard for ticker search, Evidence Ledger investigations (Phase 8 reactive why-did-it-move), optional deep research reports, and portfolio sidebar utilities.
 
 **Vercel (Next.js)** — React UI with typed API client, timeout handling, and environment-based backend URL. Static/SSR deployment with zero server management.
 
-**Railway (FastAPI)** — REST API gateway, CORS, JWT auth, exception handling, and background tasks (e.g. persisting reports after analysis). Hosts the LangGraph runtime and spawns the MCP server as a subprocess. Phase 7 adds PostgreSQL for users, portfolios, and watchlist holdings.
+**Railway / Render (FastAPI)** — REST API gateway, CORS, JWT auth, exception handling, and background tasks (e.g. persisting reports after analysis). Hosts the LangGraph runtime and spawns the MCP server as a subprocess. PostgreSQL backs users, portfolios, watchlists, analysis history, and the PRD v3 Evidence Ledger (`investigations`, `claims`, `evidence_items`, `claim_evidence_links`).
 
 **LangGraph workflow** — `StateGraph` orchestrates data fetch, then news → financial → SEC → earnings → macro → risk → bull → bear → verification → report → investment memo (Phase 12). State carries agent outputs, confidence scores, validation warnings, and `facts_and_insights`.
 
-**Memory / data layer** — PostgreSQL (or local SQLite) stores users, portfolios, holdings, daily briefings, alert rules, and alert events. Redis (optional; in-memory fallback) caches quotes and queues alert evaluation jobs. ChromaDB stores embedded report text for semantic search. Session history remains in-process memory. APScheduler runs daily briefings and interval alert checks.
+**Investigation pipeline (PRD v3 Phase 8–13)** — Separate from the full research graph: `detect_move` / `evaluate_trigger` → Investigation Planner (equity vs ETF tool paths) → MCP evidence collect (finance tools + Browser MCP IR when planned or API evidence is thin) → hypothesis ranker → Verification → Devil's Advocate → roster pass (Earnings / Macro / Investigation Brief) → Evidence Ledger persist (`POST /api/investigations/investigate` and `/{id}/run`). Phase 11 adds idiosyncratic residual vs benchmark, realized-vol z-score gates, direction-aware depth, cooldown, and an optional APScheduler holdings sweep (`INVESTIGATIONS_SWEEP_ENABLED`) plus `POST /api/investigations/sweep` / `GET .../trigger/{ticker}`. Phase 12 notifies only above a materiality bar (`investigation_material` AlertEvents linked to `investigation_id`) and queues sweeps on Redis (`quantpilot:queue:investigation_jobs`, memory fallback). Phase 13 surfaces observability flags on `/health` and `/api/observability/status`. IR pages use allowlisted httpx by default; OpenClaw navigate is opt-in via `OPENCLAW_IR_FALLBACK`.
+
+**Memory / data layer** — PostgreSQL (or local SQLite) stores users, portfolios, holdings, daily briefings, alert rules, and alert events. Redis (optional; in-memory fallback) caches quotes and queues alert-evaluation + investigation-sweep jobs. ChromaDB stores embedded report text for semantic search. Session history remains in-process memory. APScheduler runs daily briefings, interval alert checks, and (when enabled) investigation move sweeps.
 
 **AI agents** — Specialized prompts per domain. Each agent returns structured JSON validated by Pydantic; failures degrade to safe fallbacks without crashing the graph. Phase 12 adds an Investment Memo agent that compresses the full report into a shareable decision brief (`decision`, conviction, thesis, catalysts, risks).
 

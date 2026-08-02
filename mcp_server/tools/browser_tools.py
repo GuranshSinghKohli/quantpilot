@@ -14,7 +14,11 @@ from urllib.parse import urljoin, urlparse
 import httpx
 import yfinance as yf
 
-from mcp_server.tools.openclaw_client import snapshot_current_tab
+from mcp_server.tools.openclaw_client import (
+    fetch_page_via_openclaw,
+    openclaw_enabled,
+    snapshot_current_tab,
+)
 from mcp_server.tools.utils import validate_ticker
 
 # Hosts commonly used for IR portals / document CDNs
@@ -185,12 +189,23 @@ def _fetch_http(url: str, allowed_hosts: Set[str], timeout: float = 20.0) -> Dic
     }
 
 
-def fetch_page(url: str, allowed_hosts: Optional[Set[str]] = None) -> Dict[str, Any]:
-    """Fetch a public IR/company page via allowlisted httpx only.
+def _openclaw_ir_fallback_enabled() -> bool:
+    """Opt-in OpenClaw navigate fallback when httpx IR fetch fails.
 
-    Deliberately does **not** drive OpenClaw to open/navigate company URLs —
-    that was spawning Chrome tabs/windows during analysis. OpenClaw is reserved
-    for read-only snapshots of the user's already-open tab (portfolio sync).
+    Default off: OpenClaw navigate/snapshot has been flaky and can open tabs.
+    Set OPENCLAW_IR_FALLBACK=true when Gateway is verified for IR pages.
+    """
+    flag = os.getenv("OPENCLAW_IR_FALLBACK", "false").strip().lower()
+    return flag in {"1", "true", "yes", "on"} and openclaw_enabled()
+
+
+def fetch_page(url: str, allowed_hosts: Optional[Set[str]] = None) -> Dict[str, Any]:
+    """Fetch a public IR/company page.
+
+    Primary: allowlisted httpx.
+    Optional fallback: OpenClaw navigate (OPENCLAW_IR_FALLBACK=true) when httpx
+    fails or returns thin content. OpenClaw existing-session snapshots remain
+    the path for authenticated pages (portfolio sync).
     """
     if not browser_tools_enabled():
         return {
@@ -207,7 +222,38 @@ def fetch_page(url: str, allowed_hosts: Optional[Set[str]] = None) -> Dict[str, 
         hosts = set(hosts)
         hosts.add(host)
 
-    return _fetch_http(url, hosts)
+    http_error = ""
+    try:
+        page = _fetch_http(url, hosts)
+        text = (page.get("text") or "").strip()
+        if len(text) >= 120 or not _openclaw_ir_fallback_enabled():
+            return page
+        http_error = "httpx returned thin content"
+    except Exception as exc:
+        http_error = str(exc)
+        if not _openclaw_ir_fallback_enabled():
+            raise
+
+    claw = fetch_page_via_openclaw(url)
+    if claw and (claw.get("text") or "").strip():
+        return {
+            "url": claw.get("url") or url,
+            "text": claw.get("text") or "",
+            "provider": claw.get("provider") or "openclaw",
+            "title": claw.get("title") or "",
+            "status_code": claw.get("status_code"),
+            "httpx_error": http_error,
+        }
+
+    if http_error and "thin" not in http_error:
+        raise ValueError(f"httpx failed ({http_error}); OpenClaw fallback empty")
+    return {
+        "url": url,
+        "text": "",
+        "provider": "error",
+        "title": "",
+        "error": http_error or "IR fetch failed",
+    }
 
 
 def snapshot_active_browser_tab() -> Dict[str, Any]:

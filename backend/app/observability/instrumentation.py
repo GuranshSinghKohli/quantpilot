@@ -153,12 +153,26 @@ def configure_opentelemetry(app: Optional[Any] = None) -> bool:
     return True
 
 
+_OBSERVABILITY_STATUS: dict = {
+    "langsmith": False,
+    "sentry": False,
+    "otel": False,
+}
+
+
+def get_observability_status() -> dict:
+    """Return last bootstrap flags (PRD v3 Phase 13 status surface)."""
+    return dict(_OBSERVABILITY_STATUS)
+
+
 def init_observability(app: Optional[Any] = None) -> dict:
-    """Configure all Phase 12 observability backends. Safe to call once at startup."""
+    """Configure all observability backends. Safe to call once at startup."""
+    global _OBSERVABILITY_STATUS
     status = {
         "langsmith": configure_langsmith(),
         "sentry": configure_sentry(),
         "otel": configure_opentelemetry(app),
     }
+    _OBSERVABILITY_STATUS = status
     log_event(logger, logging.INFO, "Observability bootstrap complete", **status)
     return status

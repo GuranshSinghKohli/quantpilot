@@ -69,7 +69,7 @@ ALERTS_ENABLED = os.getenv("ALERTS_ENABLED", "true").strip().lower() in {
 ALERT_INTERVAL_MINUTES = int(os.getenv("ALERT_INTERVAL_MINUTES", "15"))
 QUOTE_CACHE_TTL_SECONDS = int(os.getenv("QUOTE_CACHE_TTL_SECONDS", "60"))
 
-# Phase 11 — Browser MCP / OpenClaw IR retrieval
+# Browser MCP / OpenClaw IR retrieval
 BROWSER_MCP_ENABLED = os.getenv("BROWSER_MCP_ENABLED", "true").strip().lower() in {
     "1",
     "true",
@@ -81,7 +81,41 @@ OPENCLAW_GATEWAY_TOKEN = os.getenv("OPENCLAW_GATEWAY_TOKEN", "").strip()
 OPENCLAW_BROWSER_PROFILE = os.getenv("OPENCLAW_BROWSER_PROFILE", "openclaw").strip()
 MCP_BROWSER_TIMEOUT_SECONDS = int(os.getenv("MCP_BROWSER_TIMEOUT_SECONDS", "45"))
 
-# Phase 12 — observability (all optional)
+# PRD v3 Phase 11 — scheduled investigation sweep + trigger thresholds
+INVESTIGATIONS_SWEEP_ENABLED = os.getenv(
+    "INVESTIGATIONS_SWEEP_ENABLED", "false"
+).strip().lower() in {"1", "true", "yes", "on"}
+INVESTIGATION_SWEEP_INTERVAL_MINUTES = int(
+    os.getenv("INVESTIGATION_SWEEP_INTERVAL_MINUTES", "30")
+)
+INVESTIGATION_SWEEP_MAX_PER_RUN = int(os.getenv("INVESTIGATION_SWEEP_MAX_PER_RUN", "5"))
+INVESTIGATION_COOLDOWN_HOURS = float(os.getenv("INVESTIGATION_COOLDOWN_HOURS", "6"))
+INVESTIGATION_VOL_Z_THRESHOLD = float(os.getenv("INVESTIGATION_VOL_Z_THRESHOLD", "1.5"))
+INVESTIGATION_IDIO_PCT = float(os.getenv("INVESTIGATION_IDIO_PCT", "1.0"))
+INVESTIGATION_BENCHMARK = os.getenv("INVESTIGATION_BENCHMARK", "SPY").strip() or "SPY"
+
+# PRD v3 Phase 12 — proactive monitoring notifications (materiality bar)
+INVESTIGATION_NOTIFY_ENABLED = os.getenv(
+    "INVESTIGATION_NOTIFY_ENABLED", "true"
+).strip().lower() in {"1", "true", "yes", "on"}
+INVESTIGATION_NOTIFY_MIN_SCORE = float(
+    os.getenv("INVESTIGATION_NOTIFY_MIN_SCORE", "45")
+)
+INVESTIGATION_NOTIFY_MIN_Z = float(os.getenv("INVESTIGATION_NOTIFY_MIN_Z", "2.0"))
+INVESTIGATION_NOTIFY_MIN_DEPTH = (
+    os.getenv("INVESTIGATION_NOTIFY_MIN_DEPTH", "standard") or "standard"
+).strip().lower()
+INVESTIGATION_NOTIFY_COOLDOWN_HOURS = float(
+    os.getenv("INVESTIGATION_NOTIFY_COOLDOWN_HOURS", "6")
+)
+ALERT_EMAIL_ENABLED = os.getenv("ALERT_EMAIL_ENABLED", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
+# Repo Phase 12 — observability (all optional)
 LANGSMITH_TRACING = os.getenv("LANGSMITH_TRACING", "false").strip().lower() in {
     "1",
     "true",

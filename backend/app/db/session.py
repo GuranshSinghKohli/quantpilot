@@ -166,6 +166,69 @@ def _migrate_holdings_columns() -> None:
                 )
 
 
+def _migrate_investigations_columns() -> None:
+    """Add Phase 9 verification/DA columns on existing DBs."""
+    inspector = inspect(engine)
+    if "investigations" not in inspector.get_table_names():
+        return
+    existing = {col["name"] for col in inspector.get_columns("investigations")}
+    additions = {
+        "verification_notes": "TEXT DEFAULT ''",
+        "da_outcome_json": "TEXT DEFAULT '{}'",
+        "roster_json": "TEXT DEFAULT '{}'",
+    }
+    with engine.begin() as conn:
+        for column, ddl_type in additions.items():
+            if column in existing:
+                continue
+            try:
+                conn.execute(
+                    text(f"ALTER TABLE investigations ADD COLUMN {column} {ddl_type}")
+                )
+                log_event(
+                    logger, logging.INFO, "Migrated investigations table", column=column
+                )
+            except Exception as exc:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "Investigations column migration skipped",
+                    column=column,
+                    error=str(exc),
+                )
+
+
+def _migrate_alert_events_columns() -> None:
+    """PRD v3 Phase 12 — material investigation notification columns."""
+    inspector = inspect(engine)
+    if "alert_events" not in inspector.get_table_names():
+        return
+    existing = {col["name"] for col in inspector.get_columns("alert_events")}
+    additions = {
+        "investigation_id": "INTEGER",
+        "materiality_score": "FLOAT",
+    }
+    with engine.begin() as conn:
+        for column, ddl_type in additions.items():
+            if column in existing:
+                continue
+            try:
+                conn.execute(
+                    text(f"ALTER TABLE alert_events ADD COLUMN {column} {ddl_type}")
+                )
+                log_event(
+                    logger, logging.INFO, "Migrated alert_events table", column=column
+                )
+            except Exception as exc:
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "Alert events column migration skipped",
+                    column=column,
+                    error=str(exc),
+                )
+
+
 def init_db() -> None:
     if is_sqlite():
         path_part = DATABASE_URL.split("sqlite:///", 1)[-1]
@@ -173,6 +236,8 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _migrate_holdings_columns()
+    _migrate_investigations_columns()
+    _migrate_alert_events_columns()
     db = SessionLocal()
     try:
         anon = _ensure_anonymous_user(db)

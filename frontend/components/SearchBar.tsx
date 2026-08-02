@@ -3,7 +3,8 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 
 interface SearchBarProps {
-  onAnalyze: (ticker: string) => void;
+  onInvestigate: (ticker: string) => void;
+  onDeepResearch?: (ticker: string) => void;
   isLoading: boolean;
   recentTickers: string[];
   loadingLabel?: string;
@@ -13,10 +14,11 @@ interface SearchBarProps {
 const QUICK_PICKS = ["AAPL", "MSFT", "NVDA", "TSLA"];
 
 export default function SearchBar({
-  onAnalyze,
+  onInvestigate,
+  onDeepResearch,
   isLoading,
   recentTickers,
-  loadingLabel = "Analyzing…",
+  loadingLabel = "Investigating…",
   disabled = false,
 }: SearchBarProps) {
   const [ticker, setTicker] = useState("");
@@ -43,7 +45,7 @@ export default function SearchBar({
     return null;
   }
 
-  function submit(value: string) {
+  function submitInvestigate(value: string) {
     if (locked) return;
     const validationError = validate(value);
     if (validationError) {
@@ -53,12 +55,23 @@ export default function SearchBar({
     setError(null);
     const symbol = value.trim().toUpperCase();
     setTicker(symbol);
-    onAnalyze(symbol);
+    onInvestigate(symbol);
+  }
+
+  function submitDeepResearch() {
+    if (locked || !onDeepResearch) return;
+    const validationError = validate(ticker);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setError(null);
+    onDeepResearch(ticker.trim().toUpperCase());
   }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    submit(ticker);
+    submitInvestigate(ticker);
   }
 
   const chips = recentTickers.length > 0 ? recentTickers : QUICK_PICKS;
@@ -66,7 +79,7 @@ export default function SearchBar({
   return (
     <div className="w-full">
       <label htmlFor="ticker-search" className="sr-only">
-        Stock ticker symbol
+        Stock ticker to investigate
       </label>
       <form onSubmit={handleSubmit} className="relative flex flex-col gap-3">
         <div className="relative">
@@ -79,15 +92,15 @@ export default function SearchBar({
               setTicker(e.target.value.toUpperCase());
               setError(null);
             }}
-            placeholder="NVDA, AAPL, whatever you're curious about…"
+            placeholder="Why did NVDA move? Drop a ticker…"
             disabled={locked}
             autoComplete="off"
             className={`w-full rounded-2xl border border-violet-500/25 bg-[#0f0f18]/90 px-5 py-4 text-base text-white outline-none ring-violet-500/20 transition placeholder:text-slate-600 focus:border-violet-400/50 focus:ring-2 disabled:opacity-50 sm:text-lg ${
-              isLoading ? "sm:pr-44" : "sm:pr-40"
+              isLoading ? "sm:pr-48" : "sm:pr-44"
             }`}
           />
           {!isLoading && (
-            <span className="pointer-events-none absolute right-[7.25rem] top-1/2 hidden -translate-y-1/2 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-600 sm:inline">
+            <span className="pointer-events-none absolute right-[8.5rem] top-1/2 hidden -translate-y-1/2 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-600 sm:inline">
               ⌘K
             </span>
           )}
@@ -95,7 +108,7 @@ export default function SearchBar({
             type="submit"
             disabled={locked}
             aria-busy={isLoading}
-            className={`absolute right-2 top-1/2 z-10 flex max-w-[11rem] -translate-y-1/2 items-center justify-center gap-2 truncate rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-none outline-none ring-0 transition disabled:cursor-not-allowed disabled:opacity-70 ${
+            className={`absolute right-2 top-1/2 z-10 flex max-w-[12rem] -translate-y-1/2 items-center justify-center gap-2 truncate rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-none outline-none ring-0 transition disabled:cursor-not-allowed disabled:opacity-70 ${
               isLoading
                 ? "bg-violet-600/90"
                 : "btn-vibe hover:brightness-110"
@@ -110,23 +123,37 @@ export default function SearchBar({
                 <span className="truncate">{loadingLabel}</span>
               </>
             ) : (
-              "run it →"
+              "investigate →"
             )}
           </button>
         </div>
       </form>
 
+      {onDeepResearch && (
+        <p className="mt-2 text-xs text-slate-600">
+          Opens the Evidence Ledger.{" "}
+          <button
+            type="button"
+            onClick={submitDeepResearch}
+            disabled={locked}
+            className="text-slate-400 underline decoration-white/15 underline-offset-2 transition hover:text-violet-300 disabled:opacity-50"
+          >
+            Or run a full research report
+          </button>
+        </p>
+      )}
+
       {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <span className="w-full text-xs text-slate-600 sm:w-auto">
-          {recentTickers.length > 0 ? "recent" : "trending"}
+          {recentTickers.length > 0 ? "recent" : "try"}
         </span>
         {chips.map((sym) => (
           <button
             key={sym}
             type="button"
-            onClick={() => submit(sym)}
+            onClick={() => submitInvestigate(sym)}
             disabled={locked}
             className="min-h-[36px] rounded-full border border-white/[0.08] bg-white/[0.03] px-4 py-1.5 text-sm font-medium text-slate-300 transition hover:border-violet-500/40 hover:bg-violet-500/10 hover:text-violet-200 disabled:opacity-50"
           >

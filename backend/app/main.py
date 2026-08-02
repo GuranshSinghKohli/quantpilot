@@ -10,13 +10,17 @@ from app.db.session import init_db
 from app.exceptions import register_exception_handlers
 from app.jobs.scheduler import shutdown_scheduler, start_scheduler
 from app.models.schemas import HealthResponse
-from app.observability.instrumentation import init_observability
+from app.observability.instrumentation import (
+    get_observability_status,
+    init_observability,
+)
 from app.observability.logger import get_logger, log_event
 from app.routers import (
     alerts,
     analysis,
     auth,
     filings,
+    investigations,
     memory,
     observability,
     portfolio,
@@ -39,7 +43,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title="QuantPilot API",
-    description="QuantPilot API, production quant research copilot with multi-agent pipeline",
+    description="QuantPilot API — autonomous investigation engine with multi-agent research pipeline",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -62,6 +66,7 @@ app.include_router(stocks.router, prefix="/api")
 app.include_router(filings.router, prefix="/api")
 app.include_router(analysis.router, prefix="/api")
 app.include_router(memory.router, prefix="/api")
+app.include_router(investigations.router, prefix="/api")
 app.include_router(watchlist.router, prefix="/api")
 app.include_router(portfolio.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
@@ -89,4 +94,11 @@ async def log_requests(request: Request, call_next):
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    return HealthResponse(status="ok")
+    obs = get_observability_status()
+    return HealthResponse(
+        status="ok",
+        langsmith=bool(obs.get("langsmith")),
+        sentry=bool(obs.get("sentry")),
+        otel=bool(obs.get("otel")),
+        version=app.version or "1.0.0",
+    )

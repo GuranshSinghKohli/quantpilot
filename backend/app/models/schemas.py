@@ -5,6 +5,11 @@ from pydantic import BaseModel, Field
 
 class HealthResponse(BaseModel):
     status: str
+    # PRD v3 Phase 13 — optional observability flags (always present, usually false locally)
+    langsmith: bool = False
+    sentry: bool = False
+    otel: bool = False
+    version: str = "1.0.0"
 
 
 class StockResponse(BaseModel):

@@ -52,13 +52,13 @@ export default function HeroSection({ compact = false }: HeroSectionProps) {
                 QuantPilot
               </span>
               <span className="vibe-pill px-2 py-0.5 text-violet-300/90">
-                11 agents deep
+                investigation engine
               </span>
             </div>
             <p className="mt-1.5 text-sm leading-snug text-slate-400 sm:text-base">
-              Drop a ticker. Get the{" "}
-              <span className="font-medium text-slate-200">full breakdown</span>{" "}
-              with live data, SEC tea, and bull vs bear drama.
+              Ask why it moved. Get{" "}
+              <span className="font-medium text-slate-200">ranked claims</span>{" "}
+              with evidence, not a vague vibe check.
             </p>
           </div>
         </div>
@@ -81,24 +81,24 @@ export default function HeroSection({ compact = false }: HeroSectionProps) {
         <QuantPilotMark className="hidden h-14 w-14 sm:flex" />
         <div>
           <p className="vibe-pill inline-block px-3 py-1 text-violet-300">
-            AI research copilot
+            Autonomous investigation engine
           </p>
           <h2 className="font-display mt-4 max-w-2xl text-2xl font-bold leading-tight tracking-tight text-white sm:text-3xl lg:text-4xl">
-            Research that argues with itself,{" "}
-            <span className="gradient-text">so you don&apos;t have to</span>
+            Why did this move?{" "}
+            <span className="gradient-text">We dig until we know.</span>
           </h2>
           <p className="mt-4 max-w-xl text-sm leading-relaxed text-slate-400 sm:text-base">
-            Eleven AI agents pull live prices, news, filings, earnings, and macro
-            context, then debate, verify, and draft a shareable investment memo.
-            No fluff, just receipts.
+            Drop a ticker to open an Evidence Ledger case. Rank claims against
+            filings, news, and IR receipts. Full research reports are optional
+            backup when you want the whole squad.
           </p>
 
           <ul className="mt-6 flex flex-wrap gap-2">
             {[
-              "live streaming",
-              "earnings + macro",
-              "bull × bear debate",
-              "verification",
+              "why did it move",
+              "evidence ledger",
+              "ranked claims",
+              "bull × bear",
               "investment memo",
               "alerts & briefings",
             ].map((tag) => (

@@ -8,6 +8,7 @@ import CitationsPanel from "@/components/CitationsPanel";
 import DebatePanel from "@/components/DebatePanel";
 import FeatureCards from "@/components/FeatureCards";
 import HeroSection from "@/components/HeroSection";
+import InvestigationsPanel from "@/components/InvestigationsPanel";
 import LoadingPipeline from "@/components/LoadingPipeline";
 import InvestmentMemoPanel from "@/components/InvestmentMemoPanel";
 import ReportDisplay from "@/components/ReportDisplay";
@@ -21,6 +22,7 @@ import {
   addToWatchlist,
   ApiError,
   checkApiHealth,
+  investigateTicker,
   fetchAnalysisWithFallback,
   fetchHistory,
   fetchPastReports,
@@ -81,8 +83,13 @@ export default function Home() {
   const [apiReachable, setApiReachable] = useState<boolean | null>(null);
   const [watchlistSuccess, setWatchlistSuccess] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [activeInvestigationId, setActiveInvestigationId] = useState<
+    number | null
+  >(null);
+  const [isOpeningInvestigation, setIsOpeningInvestigation] = useState(false);
 
   const hasResults = Boolean(stockData || analysisReport || isLoading);
+  const hasInvestigation = activeInvestigationId != null;
   const currentAgentStep = agentSteps.find((step) => step.status === "running");
   const completedAgentCount = agentSteps.filter(
     (step) => step.status === "complete"
@@ -181,6 +188,55 @@ export default function Home() {
     );
   }
 
+  const handleInvestigationSelect = useCallback(
+    (id: number | null, ticker?: string) => {
+      setActiveInvestigationId(id);
+      if (ticker) {
+        setCurrentTicker(ticker.toUpperCase());
+        setRecentTickers((prev) => {
+          const symbol = ticker.toUpperCase();
+          return [symbol, ...prev.filter((t) => t !== symbol)].slice(0, 8);
+        });
+      }
+    },
+    []
+  );
+
+  async function runInvestigate(ticker: string) {
+    const symbol = ticker.toUpperCase();
+    setError(null);
+    setCurrentTicker(symbol);
+    setRecentTickers((prev) => {
+      const next = [symbol, ...prev.filter((t) => t !== symbol)];
+      return next.slice(0, 8);
+    });
+
+    const reachable = apiReachable ?? (await checkApiHealth());
+    setApiReachable(reachable);
+    if (!reachable) return;
+
+    setIsOpeningInvestigation(true);
+    try {
+      const detail = await investigateTicker({
+        ticker: symbol,
+        trigger_reason: "on_demand",
+        window_label: "1d",
+        skip_if_noise: false,
+      });
+      setActiveInvestigationId(detail.id);
+      const stock = await fetchStockData(symbol).catch(() => null);
+      if (stock) setStockData(stock);
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not complete investigation. Please try again."
+      );
+    } finally {
+      setIsOpeningInvestigation(false);
+    }
+  }
+
   async function runAnalysis(ticker: string) {
     const symbol = ticker.toUpperCase();
     setCurrentTicker(symbol);
@@ -233,7 +289,7 @@ export default function Home() {
 
   async function handleAddWatchlist() {
     if (!currentTicker) {
-      setError("Run an analysis first, then add the ticker to your watchlist.");
+      setError("Investigate a ticker first, then add it to your watchlist.");
       return;
     }
 
@@ -330,16 +386,23 @@ export default function Home() {
       />
 
       <main className="relative mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        <HeroSection compact={hasResults} />
+        <HeroSection compact={hasResults || hasInvestigation} />
 
-        <section className="mt-6 sm:mt-8" aria-label="Search">
+        <section className="mt-6 sm:mt-8" aria-label="Investigate">
           <SearchBar
-            onAnalyze={runAnalysis}
-            isLoading={isLoading}
+            onInvestigate={runInvestigate}
+            onDeepResearch={runAnalysis}
+            isLoading={isLoading || isOpeningInvestigation}
             recentTickers={recentTickers}
             disabled={apiReachable === false}
             loadingLabel={
-              currentTicker ? `Analyzing ${currentTicker}…` : "Analyzing…"
+              isLoading
+                ? currentTicker
+                  ? `Researching ${currentTicker}…`
+                  : "Researching…"
+                : currentTicker
+                  ? `Opening ${currentTicker}…`
+                  : "Opening case…"
             }
           />
         </section>
@@ -381,6 +444,17 @@ export default function Home() {
           </div>
         )}
 
+        <div className="mt-6 sm:mt-8">
+          <InvestigationsPanel
+            selectedId={activeInvestigationId}
+            onSelectedChange={handleInvestigationSelect}
+            onDeepResearch={runAnalysis}
+            isResearchLoading={isLoading}
+            isPipelineLoading={isOpeningInvestigation}
+            canScanHoldings={Boolean(user)}
+          />
+        </div>
+
         <ToolsDock
           user={user}
           watchlist={watchlist}
@@ -389,7 +463,10 @@ export default function Home() {
           watchlistLoading={watchlistLoading}
           historyLoading={historyLoading}
           isLoadingAnalysis={isLoading}
-          onSelectTicker={runAnalysis}
+          onSelectTicker={runInvestigate}
+          onOpenInvestigation={(id, ticker) =>
+            handleInvestigationSelect(id, ticker)
+          }
           onHistorySelect={handleHistorySelect}
           onAddWatchlist={handleAddWatchlist}
           onRemoveWatchlist={handleRemoveWatchlist}
@@ -397,155 +474,160 @@ export default function Home() {
 
         <div className="mt-6 space-y-6 sm:mt-8 lg:space-y-8">
           {stockData && (
-              <StockHeader
-                stock={stockData}
-                analysis={analysisReport}
-                onAddToWatchlist={handleAddWatchlist}
-                watchlistLoading={watchlistLoading}
-                isOnWatchlist={isOnWatchlist}
-              />
-            )}
+            <StockHeader
+              stock={stockData}
+              analysis={analysisReport}
+              onAddToWatchlist={handleAddWatchlist}
+              watchlistLoading={watchlistLoading}
+              isOnWatchlist={isOnWatchlist}
+            />
+          )}
 
-            {(isLoading || analysisReport) && (
+          {(isLoading || analysisReport) && (
+            <div>
+              <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                Deep research report
+              </h2>
               <AgentWorkflow
                 steps={agentSteps}
                 isLoading={isLoading}
                 collapsed={!isLoading && !!analysisReport}
               />
-            )}
+            </div>
+          )}
 
-            {isLoading && (
-              <LoadingPipeline
-                ticker={currentTicker}
-                currentStep={currentAgentStep}
-                completedCount={completedAgentCount}
-                totalCount={agentSteps.length}
-              />
-            )}
+          {isLoading && (
+            <LoadingPipeline
+              ticker={currentTicker}
+              currentStep={currentAgentStep}
+              completedCount={completedAgentCount}
+              totalCount={agentSteps.length}
+            />
+          )}
 
-            {analysisReport && !isLoading && (
-              <>
-                {analysisReport.investment_memo && (
-                  <InvestmentMemoPanel memo={analysisReport.investment_memo} />
-                )}
+          {analysisReport && !isLoading && (
+            <>
+              {analysisReport.investment_memo && (
+                <InvestmentMemoPanel memo={analysisReport.investment_memo} />
+              )}
 
-                <details
-                  className="group"
-                  open={!analysisReport.investment_memo}
-                >
-                  <summary className="card-surface flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition hover:border-violet-500/25 [&::-webkit-details-marker]:hidden">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-200">
-                        Detailed research sections
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-500">
-                        {analysisReport.investment_memo
-                          ? "Long-form agent write-ups (thesis/decision already in the memo)"
-                          : "Executive summary, analysis sections, and recommendation"}
-                      </p>
-                    </div>
-                    <span className="text-lg text-slate-500 transition group-open:rotate-45">
-                      +
-                    </span>
-                  </summary>
-                  <div className="mt-3">
-                    <ReportDisplay
-                      analysis={analysisReport}
-                      omitOverlappingSummary={Boolean(
-                        analysisReport.investment_memo
-                      )}
-                    />
+              <details
+                className="group"
+                open={!analysisReport.investment_memo}
+              >
+                <summary className="card-surface flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition hover:border-violet-500/25 [&::-webkit-details-marker]:hidden">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-200">
+                      Detailed research sections
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {analysisReport.investment_memo
+                        ? "Long-form agent write-ups (thesis/decision already in the memo)"
+                        : "Executive summary, analysis sections, and recommendation"}
+                    </p>
                   </div>
-                </details>
-
-                <details className="group">
-                  <summary className="card-surface flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition hover:border-cyan-500/25 [&::-webkit-details-marker]:hidden">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-200">
-                        Source agent evidence
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-500">
-                        Earnings, macro, verification, and SEC filings
-                        {!analysisReport.investment_memo
-                          ? " · plus bull vs bear"
-                          : ""}
-                      </p>
-                    </div>
-                    <span className="text-lg text-slate-500 transition group-open:rotate-45">
-                      +
-                    </span>
-                  </summary>
-                  <div className="mt-3 space-y-6">
-                    {!analysisReport.investment_memo &&
-                      analysisReport.debate_output && (
-                        <DebatePanel debate={analysisReport.debate_output} />
-                      )}
-                    <ResearchExtrasPanel analysis={analysisReport} />
-                    {currentTicker && (
-                      <SECFilingsPanel
-                        ticker={currentTicker}
-                        secOutput={analysisReport.sec_output}
-                      />
-                    )}
-                  </div>
-                </details>
-
-                <CitationsPanel
-                  analysis={analysisReport}
-                  analyzedAt={analyzedAt}
-                />
-                {currentTicker && (
-                  <ResearchChatPanel
-                    ticker={currentTicker}
+                  <span className="text-lg text-slate-500 transition group-open:rotate-45">
+                    +
+                  </span>
+                </summary>
+                <div className="mt-3">
+                  <ReportDisplay
                     analysis={analysisReport}
+                    omitOverlappingSummary={Boolean(
+                      analysisReport.investment_memo
+                    )}
                   />
-                )}
-              </>
-            )}
+                </div>
+              </details>
 
-            {!hasResults && !error && (
-              <div className="space-y-6">
-                <div className="gradient-border relative overflow-hidden px-6 py-12 text-center sm:py-16">
-                  <div
-                    className="pointer-events-none absolute left-1/2 top-8 h-24 w-24 -translate-x-1/2 rounded-full bg-violet-500/20 blur-2xl"
-                    aria-hidden
-                  />
-                  <div className="relative mx-auto flex h-16 w-16 animate-float items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/30 to-cyan-500/20 text-3xl shadow-glow">
-                    📊
+              <details className="group">
+                <summary className="card-surface flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition hover:border-cyan-500/25 [&::-webkit-details-marker]:hidden">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-200">
+                      Source agent evidence
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Earnings, macro, verification, and SEC filings
+                      {!analysisReport.investment_memo
+                        ? " · plus bull vs bear"
+                        : ""}
+                    </p>
                   </div>
-                  <p className="font-display relative mt-6 text-xl font-bold text-white sm:text-2xl">
-                    pick a ticker, get the{" "}
-                    <span className="gradient-text">full story</span>
-                  </p>
-                  <p className="relative mx-auto mt-3 max-w-md text-sm leading-relaxed text-slate-500">
-                    Eleven AI agents stream live: news, fundamentals, SEC, earnings,
-                    macro, risk, bull vs bear, verification, report, then a
-                    shareable investment memo — with chat built in.
-                  </p>
-                  {watchlist.length > 0 && (
-                    <div className="relative mt-6 flex flex-wrap justify-center gap-2">
-                      <span className="w-full text-xs text-slate-600">
-                        from your watchlist
-                      </span>
-                      {watchlist.slice(0, 4).map((e) => (
-                        <button
-                          key={e.ticker}
-                          type="button"
-                          onClick={() => runAnalysis(e.ticker)}
-                          className="rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-1.5 text-sm font-medium text-violet-200 transition hover:bg-violet-500/20"
-                        >
-                          analyze ${e.ticker}
-                        </button>
-                      ))}
-                    </div>
+                  <span className="text-lg text-slate-500 transition group-open:rotate-45">
+                    +
+                  </span>
+                </summary>
+                <div className="mt-3 space-y-6">
+                  {!analysisReport.investment_memo &&
+                    analysisReport.debate_output && (
+                      <DebatePanel debate={analysisReport.debate_output} />
+                    )}
+                  <ResearchExtrasPanel analysis={analysisReport} />
+                  {currentTicker && (
+                    <SECFilingsPanel
+                      ticker={currentTicker}
+                      secOutput={analysisReport.sec_output}
+                    />
                   )}
                 </div>
-                <div>
-                  <h2 className="panel-title mb-4">what you get</h2>
-                  <FeatureCards />
+              </details>
+
+              <CitationsPanel
+                analysis={analysisReport}
+                analyzedAt={analyzedAt}
+              />
+              {currentTicker && (
+                <ResearchChatPanel
+                  ticker={currentTicker}
+                  analysis={analysisReport}
+                />
+              )}
+            </>
+          )}
+
+          {!hasResults && !hasInvestigation && !error && (
+            <div className="space-y-6">
+              <div className="gradient-border relative overflow-hidden px-6 py-12 text-center sm:py-16">
+                <div
+                  className="pointer-events-none absolute left-1/2 top-8 h-24 w-24 -translate-x-1/2 rounded-full bg-violet-500/20 blur-2xl"
+                  aria-hidden
+                />
+                <div className="relative mx-auto flex h-16 w-16 animate-float items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/30 to-cyan-500/20 text-3xl shadow-glow">
+                  ⌕
                 </div>
+                <p className="font-display relative mt-6 text-xl font-bold text-white sm:text-2xl">
+                  ask why it moved, get{" "}
+                  <span className="gradient-text">ranked claims</span>
+                </p>
+                <p className="relative mx-auto mt-3 max-w-md text-sm leading-relaxed text-slate-500">
+                  Investigate opens an Evidence Ledger case. Optional deep
+                  research gathers filings, news, and a memo you can attach as
+                  evidence.
+                </p>
+                {watchlist.length > 0 && (
+                  <div className="relative mt-6 flex flex-wrap justify-center gap-2">
+                    <span className="w-full text-xs text-slate-600">
+                      from your watchlist
+                    </span>
+                    {watchlist.slice(0, 4).map((e) => (
+                      <button
+                        key={e.ticker}
+                        type="button"
+                        onClick={() => void runInvestigate(e.ticker)}
+                        className="rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-1.5 text-sm font-medium text-violet-200 transition hover:bg-violet-500/20"
+                      >
+                        investigate ${e.ticker}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+              <div>
+                <h2 className="panel-title mb-4">what you get</h2>
+                <FeatureCards />
+              </div>
+            </div>
+          )}
         </div>
       </main>
 

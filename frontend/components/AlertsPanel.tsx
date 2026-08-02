@@ -16,6 +16,7 @@ import {
 interface AlertsPanelProps {
   user: AuthUser | null;
   onSelectTicker?: (ticker: string) => void;
+  onOpenInvestigation?: (investigationId: number, ticker?: string) => void;
   onUnreadChange?: (count: number) => void;
 }
 
@@ -75,6 +76,7 @@ function formatWhen(iso: string) {
 export default function AlertsPanel({
   user,
   onSelectTicker,
+  onOpenInvestigation,
   onUnreadChange,
 }: AlertsPanelProps) {
   const [rules, setRules] = useState<AlertRule[]>([]);
@@ -205,8 +207,8 @@ export default function AlertsPanel({
       <div className="card-surface p-5">
         <h3 className="panel-title">smart alerts</h3>
         <p className="mt-3 text-sm leading-relaxed text-slate-500">
-          Sign in to set price, volatility, and news-sentiment alerts on your
-          holdings. Fired alerts show up here in-app.
+          Sign in for threshold alerts and material investigation notifications
+          when a holdings scan finds something that matters.
         </p>
       </div>
     );
@@ -218,7 +220,7 @@ export default function AlertsPanel({
         <div>
           <h3 className="panel-title">smart alerts</h3>
           <p className="mt-0.5 text-[11px] text-slate-600">
-            redis-backed cache · checks every few minutes
+            threshold rules + material investigation notifies
           </p>
         </div>
         <div className="flex gap-2">
@@ -379,7 +381,8 @@ export default function AlertsPanel({
         </div>
         {events.length === 0 ? (
           <p className="mt-2 text-sm text-slate-500">
-            No alerts fired yet. Add a rule and hit Check now.
+            No alerts yet. Add a rule, or wait for a material investigation from
+            Scan my holdings.
           </p>
         ) : (
           <ul className="mt-2 space-y-2">
@@ -396,7 +399,19 @@ export default function AlertsPanel({
                   <div>
                     <button
                       type="button"
-                      onClick={() => onSelectTicker?.(event.ticker)}
+                      onClick={() => {
+                        if (
+                          event.investigation_id != null &&
+                          onOpenInvestigation
+                        ) {
+                          onOpenInvestigation(
+                            event.investigation_id,
+                            event.ticker
+                          );
+                        } else {
+                          onSelectTicker?.(event.ticker);
+                        }
+                      }}
                       className="font-display text-sm font-semibold text-white hover:text-violet-200"
                     >
                       {event.title}
@@ -406,7 +421,27 @@ export default function AlertsPanel({
                     </p>
                     <p className="mt-1 text-[10px] text-slate-600">
                       {formatWhen(event.created_at)}
+                      {event.alert_type === "investigation_material"
+                        ? " · investigation"
+                        : ""}
+                      {event.materiality_score != null
+                        ? ` · score ${Math.round(event.materiality_score)}`
+                        : ""}
                     </p>
+                    {event.investigation_id != null && onOpenInvestigation && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onOpenInvestigation(
+                            event.investigation_id!,
+                            event.ticker
+                          )
+                        }
+                        className="mt-1.5 text-[11px] font-medium text-amber-200/90 hover:underline"
+                      >
+                        Open Evidence Ledger case
+                      </button>
+                    )}
                   </div>
                   {!event.is_read && (
                     <button

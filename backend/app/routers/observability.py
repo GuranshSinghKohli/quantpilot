@@ -1,8 +1,15 @@
 from fastapi import APIRouter, HTTPException
 
+from app.observability.instrumentation import get_observability_status
 from app.observability.workflow_tracker import workflow_tracker
 
 router = APIRouter(prefix="/observability", tags=["observability"])
+
+
+@router.get("/status")
+async def observability_status():
+    """PRD v3 Phase 13 — which optional observability backends are active."""
+    return {"status": "ok", **get_observability_status()}
 
 
 @router.get("/runs")

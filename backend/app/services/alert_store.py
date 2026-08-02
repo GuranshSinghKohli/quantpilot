@@ -44,6 +44,8 @@ def event_to_out(event: AlertEvent) -> AlertEventOut:
         message=event.message,
         observed_value=event.observed_value,
         threshold=event.threshold,
+        investigation_id=getattr(event, "investigation_id", None),
+        materiality_score=getattr(event, "materiality_score", None),
         created_at=_iso(event.created_at) or datetime.now(timezone.utc).isoformat(),
         read_at=_iso(event.read_at),
         is_read=event.read_at is not None,

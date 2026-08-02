@@ -39,7 +39,7 @@ jobs:
         run: python -m pytest tests/ -q
 
   frontend:
-    name: Frontend typecheck & lint
+    name: Frontend typecheck, lint & build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -62,3 +62,8 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Production build
+        env:
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
+        run: npm run build

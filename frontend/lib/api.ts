@@ -18,6 +18,13 @@ import type {
   StoredReport,
   SyncedPosition,
   WatchlistEntry,
+  InvestigationDetail,
+  InvestigationSummary,
+  InvestigationSweepResponse,
+  TriggerPreviewResponse,
+  EvidenceItem,
+  Claim,
+  ClaimEvidenceLink,
 } from "@/types";
 
 function normalizeApiUrl(raw: string): string {
@@ -501,5 +508,143 @@ export async function fetchRecommendations(
   return apiFetch<RecommendationsResponse>(
     `/api/recommendations?${params}`,
     { timeoutMs: 60_000 }
+  );
+}
+
+export async function fetchInvestigations(
+  limit = 20
+): Promise<InvestigationSummary[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return apiFetch<InvestigationSummary[]>(`/api/investigations?${params}`);
+}
+
+export async function fetchInvestigation(
+  id: number
+): Promise<InvestigationDetail> {
+  return apiFetch<InvestigationDetail>(`/api/investigations/${id}`);
+}
+
+export async function createInvestigation(body: {
+  ticker: string;
+  trigger_reason?: string;
+  move_pct?: number | null;
+  window_label?: string;
+  summary?: string;
+}): Promise<InvestigationDetail> {
+  return apiFetch<InvestigationDetail>("/api/investigations", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** PRD v3 Phase 8 — create case + detect move + plan + rank hypotheses. */
+export async function investigateTicker(body: {
+  ticker: string;
+  trigger_reason?: string;
+  window_label?: string;
+  skip_if_noise?: boolean;
+  use_trigger_gate?: boolean;
+}): Promise<InvestigationDetail> {
+  return apiFetch<InvestigationDetail>("/api/investigations/investigate", {
+    method: "POST",
+    body: JSON.stringify(body),
+    timeoutMs: ANALYSIS_TIMEOUT_MS,
+  });
+}
+
+/** PRD v3 Phase 11 — scan holdings with idiosyncratic / vol triggers. */
+export async function sweepInvestigations(body?: {
+  dry_run?: boolean;
+  max_launches?: number;
+}): Promise<InvestigationSweepResponse> {
+  return apiFetch<InvestigationSweepResponse>("/api/investigations/sweep", {
+    method: "POST",
+    body: JSON.stringify(body ?? { dry_run: false }),
+    timeoutMs: ANALYSIS_TIMEOUT_MS,
+  });
+}
+
+export async function previewInvestigationTrigger(
+  ticker: string,
+  windowLabel = "1d"
+): Promise<TriggerPreviewResponse> {
+  const params = new URLSearchParams({ window_label: windowLabel });
+  return apiFetch<TriggerPreviewResponse>(
+    `/api/investigations/trigger/${encodeURIComponent(ticker)}?${params}`
+  );
+}
+
+export async function runInvestigation(
+  investigationId: number,
+  body?: { window_label?: string; skip_if_noise?: boolean }
+): Promise<InvestigationDetail> {
+  return apiFetch<InvestigationDetail>(
+    `/api/investigations/${investigationId}/run`,
+    {
+      method: "POST",
+      body: JSON.stringify(body ?? { window_label: "1d" }),
+      timeoutMs: ANALYSIS_TIMEOUT_MS,
+    }
+  );
+}
+
+export async function addInvestigationEvidence(
+  investigationId: number,
+  body: {
+    source_type?: string;
+    retrieval_method?: string;
+    title?: string;
+    excerpt?: string;
+    source_url?: string;
+  }
+): Promise<EvidenceItem> {
+  return apiFetch<EvidenceItem>(
+    `/api/investigations/${investigationId}/evidence`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function addInvestigationClaim(
+  investigationId: number,
+  body: {
+    statement: string;
+    stance?: string;
+    confidence_score?: number;
+    rank?: number;
+    devil_advocate_notes?: string;
+    evidence_ids?: number[];
+  }
+): Promise<Claim> {
+  return apiFetch<Claim>(`/api/investigations/${investigationId}/claims`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function linkClaimEvidence(
+  investigationId: number,
+  body: {
+    claim_id: number;
+    evidence_id: number;
+    relation?: string;
+    note?: string;
+  }
+): Promise<ClaimEvidenceLink> {
+  return apiFetch<ClaimEvidenceLink>(
+    `/api/investigations/${investigationId}/links`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function completeInvestigation(
+  investigationId: number,
+  summary = ""
+): Promise<InvestigationDetail> {
+  const params = new URLSearchParams();
+  if (summary) params.set("summary", summary);
+  const qs = params.toString();
+  return apiFetch<InvestigationDetail>(
+    `/api/investigations/${investigationId}/complete${qs ? `?${qs}` : ""}`,
+    { method: "POST" }
   );
 }

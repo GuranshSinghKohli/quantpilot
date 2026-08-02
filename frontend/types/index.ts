@@ -288,6 +288,8 @@ export interface AlertEvent {
   message: string;
   observed_value: number | null;
   threshold: number | null;
+  investigation_id?: number | null;
+  materiality_score?: number | null;
   created_at: string;
   read_at: string | null;
   is_read: boolean;
@@ -348,4 +350,105 @@ export interface RecommendationsResponse {
   horizon: string;
   picks: RecommendationPick[];
   scanned_tickers: string[];
+}
+
+/** PRD v3 Phase 7 — Evidence Ledger */
+export type InvestigationStatus =
+  | "planning"
+  | "collecting"
+  | "verifying"
+  | "complete"
+  | "failed"
+  | "skipped_market_noise";
+
+export interface EvidenceItem {
+  id: number;
+  source_type: string;
+  retrieval_method: string;
+  title: string;
+  excerpt: string;
+  source_url: string;
+  created_at: string;
+}
+
+export interface ClaimEvidenceLink {
+  id: number;
+  evidence_id: number;
+  relation: string;
+  note: string;
+  evidence?: EvidenceItem | null;
+}
+
+export interface Claim {
+  id: number;
+  statement: string;
+  stance: string;
+  confidence_score: number;
+  rank: number;
+  devil_advocate_notes: string;
+  evidence_links: ClaimEvidenceLink[];
+  created_at: string;
+}
+
+export interface InvestigationSummary {
+  id: number;
+  ticker: string;
+  trigger_reason: string;
+  status: InvestigationStatus | string;
+  move_pct?: number | null;
+  window_label: string;
+  summary: string;
+  created_at: string;
+  completed_at?: string | null;
+  claims_count: number;
+  evidence_count: number;
+}
+
+export interface DevilsAdvocateOutcome {
+  outcome: string;
+  counterargument: string;
+  leading_weakened: boolean;
+  reversal: boolean;
+  notes?: string[];
+  confidence_delta?: number;
+  citation_coverage?: number;
+}
+
+export interface InvestigationRosterContext {
+  earnings?: Record<string, unknown>;
+  macro?: Record<string, unknown>;
+  memo?: Record<string, unknown>;
+}
+
+export interface InvestigationDetail extends InvestigationSummary {
+  error_message: string;
+  verification_notes?: string;
+  da_outcome?: DevilsAdvocateOutcome | null;
+  roster?: InvestigationRosterContext | null;
+  claims: Claim[];
+  evidence_items: EvidenceItem[];
+}
+
+export interface InvestigationSweepResponse {
+  evaluated: number;
+  launched: number;
+  skipped_cooldown: number;
+  skipped_trigger: number;
+  errors: number;
+  dry_run: boolean;
+  details: Array<Record<string, unknown>>;
+}
+
+export interface TriggerPreviewResponse {
+  ticker: string;
+  should_investigate: boolean;
+  reason: string;
+  depth: string;
+  asset_class: string;
+  move_pct?: number | null;
+  realized_vol_pct?: number | null;
+  move_zscore?: number | null;
+  benchmark_move_pct?: number | null;
+  residual_pct?: number | null;
+  window_label: string;
 }

@@ -25,7 +25,7 @@ export default function AppHeader({
             <span className="gradient-text">Pilot</span>
           </h1>
           <p className="hidden truncate text-xs text-slate-500 sm:block">
-            your AI research squad · no cap, just data
+            why did it move · evidence over vibes
           </p>
         </div>
 

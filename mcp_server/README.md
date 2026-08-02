@@ -53,14 +53,14 @@ uvicorn app.main:app --reload --port 8000
 | `get_price_history` | `ticker`, `period` (default `1mo`) | OHLCV rows |
 | `get_recent_filings` | `ticker`, `limit` (default 3) | SEC filings with type, date, URL |
 | `get_company_facts` | `ticker` | CIK, company name, SIC, state |
-| `get_ir_materials` | `ticker`, `max_pages` | Investor-relations pages via OpenClaw or allowlisted HTTP |
+| `get_ir_materials` | `ticker`, `max_pages` | Investor-relations pages via allowlisted httpx (optional OpenClaw IR fallback) |
 | `fetch_browser_page` | `url` | Single allowlisted IR/public page excerpt |
 | `get_shareholder_letter` | `ticker` | Best-effort shareholder / annual letter excerpt |
 | `snapshot_active_browser_tab` | *(none)* | Reads the active tab of the user's own signed-in browser via OpenClaw's existing-session attach — used for authenticated pages (e.g. brokerage positions) we must never fetch ourselves |
 
-## Phase 11 — Browser MCP + OpenClaw
+## Browser MCP + OpenClaw (PRD v3 Phase 10 / repo Phase 11)
 
-IR tools prefer **OpenClaw** when `OPENCLAW_BROWSER_URL` (and token) are set. Otherwise they use allowlisted **httpx** fetches of known IR URLs / company website paths. Set `BROWSER_MCP_ENABLED=false` to disable.
+IR tools use allowlisted **httpx** first. Set `OPENCLAW_IR_FALLBACK=true` (plus `OPENCLAW_BROWSER_URL`) to try OpenClaw navigate when httpx fails or returns thin content. Set `BROWSER_MCP_ENABLED=false` to disable. Investigations escalate to `get_ir_materials` / `get_shareholder_letter` when news/filings are thin.
 
 Agents `news_agent`, `financial_metrics_agent`, `sec_filing_agent`, and `earnings_agent` (IR) use MCP tools.
 

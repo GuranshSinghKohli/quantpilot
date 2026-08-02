@@ -1,4 +1,4 @@
-# QuantPilot AI - AI Quant Research Copilot
+# QuantPilot AI — Autonomous Investigation Engine
 
 [![Python](https://img.shields.io/badge/Python-3.9+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.128-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -9,18 +9,18 @@
 [![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
 [![Railway](https://img.shields.io/badge/Deploy-Railway-0B0D0E?logo=railway&logoColor=white)](https://railway.app/)
 
-**QuantPilot AI** is a production-style research copilot that turns a stock ticker into an institutional- quality equity snapshot. A LangGraph multi-agent pipeline pulls live market data, SEC filings, and news via MCP tools, synthesizes risk, and delivers a structured research report with confidence scoring, fact/insight separation, and vector memory  - all through a polished Next.js dashboard.
+**QuantPilot AI** is an autonomous investigation engine for equities: answer *why did this move?* with ranked claims and an Evidence Ledger, while still shipping full multi-agent research reports. A LangGraph pipeline pulls live market data, SEC filings, and news via MCP tools, then debates, verifies, and memos — with confidence scoring, fact/insight separation, and vector memory through a Next.js dashboard.
 
 ---
 
 ## What it does
 
-- **One-click equity research** - Enter a ticker (e.g. `AAPL`) and receive a full multi-section report with executive summary and BUY/HOLD/SELL-style recommendation
-- **Transparent agent pipeline** - Watch ten specialized agents run in sequence: news, financial, SEC, earnings, macro, risk, bull/bear debate, verification, and report synthesis
-- **Grounded citations** - Facts (prices, filings, headlines) are separated from LLM-generated insights for auditability
-- **Confidence scoring** - Heuristic per-agent and overall confidence based on data completeness — not a black box
-- **Persistent memory** - Past reports stored in ChromaDB with semantic search, session history, and a watchlist
-- **Production observability** - Structured JSON logs, workflow run tracking, and defensive validation that never crashes the pipeline
+- **Why did it move?** — Reactive investigation: detect move → plan evidence → collect via MCP → rank weighted hypotheses into the Evidence Ledger
+- **One-click equity research** — Enter a ticker and receive a full multi-section report plus shareable investment memo
+- **Transparent agent pipeline** — News, financial, SEC, earnings, macro, risk, bull/bear, verification, report, and memo agents
+- **Grounded citations** — Facts (prices, filings, headlines) stay separated from model insight
+- **Persistent memory** — Per-user / per-device history, ChromaDB reports, watchlist, and portfolio OS
+- **Production observability** — Structured logs, workflow runs, optional LangSmith / OTel / Sentry
 
 ![Dashboard](./assets/dashboard.png)
 
@@ -72,6 +72,13 @@ Full diagram and technology rationale: **[ARCHITECTURE.md](./ARCHITECTURE.md)**
 | **11** | Browser MCP | OpenClaw-backed IR / shareholder letter tools + allowlisted HTTP fallback |
 | **11.1** | Portfolio Sync | Broker-agnostic position import (paste or OpenClaw existing-session snapshot) with real share-weighted analysis |
 | **12** | Ship polish | Investment Memo agent, LangSmith/OTel/Sentry hooks, GitHub Actions CI |
+| **PRD v3 · 7** | Evidence Ledger | `investigations` / `claims` / `evidence_items` / links + Investigate UI shell |
+| **PRD v3 · 8** | Reactive investigate | Move detect + Investigation Planner + MCP collect + weighted hypotheses (`/investigate`, `/run`) |
+| **PRD v3 · 9** | Verification layer | Ground claims to evidence (FR-3) + Devil's Advocate pass that can demote the lead (FR-4) |
+| **PRD v3 · 10** | Browser MCP + OpenClaw | IR/shareholder evidence in investigations; thin-API escalation; httpx primary + optional OpenClaw IR fallback |
+| **PRD v3 · 11** | Scheduling & triggers | Idiosyncratic / vol-adjusted gates, equity vs ETF evidence paths, holdings sweep job + Scan my holdings |
+| **PRD v3 · 12** | Proactive monitoring | Materiality-gated investigation notifications, Redis investigation job queue, Alerts → Evidence Ledger |
+| **PRD v3 · 13** | Roster & observability | Earnings/Macro/Memo on investigations; `/health` + `/api/observability/status`; CI frontend build |
 
 ---
 

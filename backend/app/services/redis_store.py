@@ -14,6 +14,7 @@ from app.observability.logger import get_logger, log_event
 logger = get_logger("redis")
 
 _ALERT_QUEUE_KEY = "quantpilot:queue:alert_eval"
+INVESTIGATION_QUEUE_KEY = "quantpilot:queue:investigation_jobs"
 _memory_lock = threading.Lock()
 _memory_cache: Dict[str, Any] = {}
 _memory_expiry: Dict[str, float] = {}

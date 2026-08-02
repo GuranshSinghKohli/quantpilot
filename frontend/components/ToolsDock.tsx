@@ -23,7 +23,7 @@ const TABS: { id: ToolsTab; label: string; icon: string }[] = [
   { id: "briefing", label: "Briefing", icon: "◎" },
   { id: "alerts", label: "Alerts", icon: "⚑" },
   { id: "ideas", label: "Hot picks", icon: "↑" },
-  { id: "history", label: "History", icon: "↺" },
+  { id: "history", label: "Research history", icon: "↺" },
 ];
 
 interface ToolsDockProps {
@@ -35,6 +35,7 @@ interface ToolsDockProps {
   historyLoading: boolean;
   isLoadingAnalysis: boolean;
   onSelectTicker: (ticker: string) => void;
+  onOpenInvestigation?: (investigationId: number, ticker?: string) => void;
   onHistorySelect: (ticker: string) => void;
   onAddWatchlist: () => void;
   onRemoveWatchlist: (ticker: string) => void;
@@ -49,6 +50,7 @@ export default function ToolsDock({
   historyLoading,
   isLoadingAnalysis,
   onSelectTicker,
+  onOpenInvestigation,
   onHistorySelect,
   onAddWatchlist,
   onRemoveWatchlist,
@@ -61,7 +63,15 @@ export default function ToolsDock({
   }
 
   return (
-    <section className="mt-6 sm:mt-8" aria-label="Tools">
+    <section className="mt-6 sm:mt-8" aria-label="Portfolio tools">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+          Portfolio tools
+        </h2>
+        <p className="text-[11px] text-slate-600">
+          Secondary to the Evidence Ledger
+        </p>
+      </div>
       <div className="flex flex-wrap gap-2">
         {TABS.map((tab) => {
           const isActive = active === tab.id;
@@ -124,7 +134,7 @@ export default function ToolsDock({
               onRemove={onRemoveWatchlist}
               loading={watchlistLoading}
               addDisabledReason={
-                !currentTicker ? "Run an analysis first" : null
+                !currentTicker ? "Investigate a ticker first" : null
               }
             />
           )}
@@ -138,6 +148,7 @@ export default function ToolsDock({
             <AlertsPanel
               user={user}
               onSelectTicker={onSelectTicker}
+              onOpenInvestigation={onOpenInvestigation}
               onUnreadChange={setAlertUnread}
             />
           )}
