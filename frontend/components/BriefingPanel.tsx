@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { AuthUser, DailyBriefing } from "@/types";
 import {
@@ -81,7 +82,7 @@ export default function BriefingPanel({
     return (
       <div className="card-surface p-5">
         <h3 className="panel-title">daily briefing</h3>
-        <p className="mt-3 text-sm leading-relaxed text-slate-500">
+        <p className="mt-3 text-sm leading-relaxed text-readout">
           Sign in to get an AI daily briefing across your saved holdings.
           It refreshes on a schedule and is available anytime in this panel.
         </p>
@@ -94,7 +95,7 @@ export default function BriefingPanel({
       <div className="mb-4 flex items-center justify-between gap-2">
         <div>
           <h3 className="panel-title">daily briefing</h3>
-          <p className="mt-0.5 text-[11px] text-slate-600">
+          <p className="mt-0.5 text-[11px] text-readout">
             portfolio agent · overnight monitor
           </p>
         </div>
@@ -103,15 +104,20 @@ export default function BriefingPanel({
             type="button"
             onClick={load}
             disabled={loading || generating}
-            className="rounded-lg border border-white/[0.08] px-2.5 py-1 text-xs text-slate-400 transition hover:border-violet-500/30 hover:text-violet-300 disabled:opacity-50"
+            aria-label="Reload briefing"
+            className="bk bk-quiet bk-snap px-2.5 py-2 text-readout transition-colors hover:text-caution disabled:opacity-50"
           >
-            {loading ? "…" : "↻"}
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+              strokeWidth={1.5}
+              aria-hidden
+            />
           </button>
           <button
             type="button"
             onClick={handleGenerate}
             disabled={generating || loading}
-            className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-50"
+            className="rounded-lg border border-hud bg-caution-50 px-2.5 py-1 text-xs font-medium text-down transition hover:bg-osd hover:text-letterbox disabled:opacity-50"
           >
             {generating ? "writing…" : "Generate now"}
           </button>
@@ -132,10 +138,10 @@ export default function BriefingPanel({
       )}
 
       {!loading && !data && !error && (
-        <p className="py-4 text-center text-sm leading-relaxed text-slate-500">
+        <p className="py-4 text-center text-sm leading-relaxed text-readout">
           no briefing yet
           <br />
-          <span className="text-slate-600">
+          <span className="text-readout">
             add holdings, then hit generate, or wait for the daily job
           </span>
         </p>
@@ -144,30 +150,30 @@ export default function BriefingPanel({
       {data && (
         <div className="space-y-4">
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-slate-600">
+            <p className="text-[10px] uppercase tracking-wider text-readout">
               {formatWhen(data.generated_at)} · {data.status}
               {data.confidence_score != null && (
                 <> · conf {(data.confidence_score * 100).toFixed(0)}%</>
               )}
             </p>
-            <h4 className="font-display mt-1 text-lg font-semibold text-white">
+            <h4 className="font-display mt-1 text-lg font-semibold text-osd">
               {data.headline || "Portfolio briefing"}
             </h4>
-            <p className="mt-2 text-sm leading-relaxed text-slate-300">
+            <p className="mt-2 text-sm leading-relaxed text-readout">
               {data.summary}
             </p>
           </div>
 
           {data.highlights.length > 0 && (
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-slate-600">
+              <p className="text-[10px] uppercase tracking-wider text-readout">
                 highlights
               </p>
               <ul className="mt-2 space-y-1.5">
                 {data.highlights.map((item) => (
                   <li
                     key={item}
-                    className="rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-xs text-slate-300"
+                    className="rounded-lg border border-hud bg-letterbox px-3 py-2 text-xs text-readout"
                   >
                     {item}
                   </li>
@@ -178,7 +184,7 @@ export default function BriefingPanel({
 
           {data.risks.length > 0 && (
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-slate-600">
+              <p className="text-[10px] uppercase tracking-wider text-readout">
                 risks
               </p>
               <ul className="mt-2 space-y-1.5">
@@ -196,7 +202,7 @@ export default function BriefingPanel({
 
           {data.watch_tickers.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              <span className="w-full text-[10px] uppercase tracking-wider text-slate-600">
+              <span className="w-full text-[10px] uppercase tracking-wider text-readout">
                 watch today
               </span>
               {data.watch_tickers.map((ticker) => (
@@ -204,7 +210,7 @@ export default function BriefingPanel({
                   key={ticker}
                   type="button"
                   onClick={() => onSelectTicker?.(ticker)}
-                  className="rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-xs font-medium text-violet-200 hover:bg-violet-500/20"
+                  className="bk bk-quiet bk-snap px-3 py-1 text-xs text-osd/90 transition-colors hover:text-caution"
                 >
                   {ticker}
                 </button>
@@ -212,7 +218,7 @@ export default function BriefingPanel({
             </div>
           )}
 
-          <p className="text-[10px] leading-relaxed text-slate-600">
+          <p className="text-[10px] leading-relaxed text-readout">
             {data.disclaimer}
           </p>
         </div>

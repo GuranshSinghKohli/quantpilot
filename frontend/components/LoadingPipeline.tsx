@@ -1,5 +1,6 @@
 "use client";
 
+import { Bracketed } from "@/components/hud/primitives";
 import type { AgentStep } from "@/types";
 
 const STEP_MESSAGES: Record<string, string> = {
@@ -38,39 +39,55 @@ export default function LoadingPipeline({
     : `Connecting live data for ${ticker ?? "this ticker"}`;
 
   return (
-    <section
-      className="card-surface overflow-hidden p-5 sm:p-6"
+    <Bracketed
+      as="section"
+      large
+      className="p-4 sm:p-5"
       aria-live="polite"
       aria-label="Analysis progress"
     >
       <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-violet-500/25 bg-violet-500/10">
-            <span className="absolute h-2.5 w-2.5 animate-ping rounded-full bg-violet-400/40" />
-            <span className="relative h-2 w-2 rounded-full bg-violet-300" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300/80">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2">
+            <span
+              className="h-1.5 w-1.5 shrink-0 animate-rec-blink bg-caution"
+              aria-hidden
+            />
+            <span className="font-display text-[0.6875rem] font-bold uppercase tracking-osd text-caution">
               {currentStep ? currentStep.name : "Preparing research"}
-            </p>
-            <p className="mt-1 text-sm font-medium text-slate-200">{message}</p>
-          </div>
+            </span>
+          </p>
+          <p className="mt-2 text-[0.8125rem] leading-relaxed text-osd/90">
+            {message}
+          </p>
         </div>
-        <span className="shrink-0 rounded-full border border-white/[0.07] bg-white/[0.03] px-2.5 py-1 text-[10px] tabular-nums text-slate-500">
-          {completedCount}/{totalCount} agents
+        <span data-figures className="osd-readout shrink-0 text-readout">
+          {completedCount}/{totalCount}
         </span>
       </div>
 
-      <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/[0.05]">
-        <div
-          className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-400 to-cyan-400 transition-[width] duration-700 ease-out"
-          style={{ width: `${progress}%` }}
-        />
+      {/* Segmented tape rather than a bar: the pipeline is a sequence of
+          discrete passes, and the readout should say so. */}
+      <div className="mt-5 flex gap-0.5" aria-hidden>
+        {Array.from({ length: Math.max(totalCount, 1) }, (_, i) => (
+          <span
+            key={i}
+            className={`h-2 flex-1 ${
+              i < completedCount
+                ? "bg-caution"
+                : i === completedCount
+                  ? "animate-rec-blink bg-caution/40"
+                  : "bg-hud"
+            }`}
+          />
+        ))}
       </div>
-      <div className="mt-2 flex items-center justify-between text-[10px] text-slate-600">
-        <span>Live pipeline</span>
-        <span>{progress}% complete</span>
+      <div className="mt-2 flex items-center justify-between">
+        <span className="osd-label">Running</span>
+        <span data-figures className="osd-label">
+          {progress}%
+        </span>
       </div>
-    </section>
+    </Bracketed>
   );
 }

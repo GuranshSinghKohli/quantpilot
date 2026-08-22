@@ -102,6 +102,32 @@ def get_investigation(
     return _to_detail(row)
 
 
+def delete_investigation(
+    db: Session,
+    *,
+    owner_key: str,
+    investigation_id: int,
+) -> bool:
+    """Remove a case and cascaded claims/evidence. Returns False if not found."""
+    row = db.scalar(
+        select(Investigation).where(
+            Investigation.id == investigation_id,
+            Investigation.owner_key == owner_key,
+        )
+    )
+    if row is None:
+        return False
+    db.delete(row)
+    db.commit()
+    try:
+        from app.memory import investigation_chroma
+
+        investigation_chroma.delete_investigation(investigation_id)
+    except Exception:
+        pass
+    return True
+
+
 def add_evidence(
     db: Session,
     *,

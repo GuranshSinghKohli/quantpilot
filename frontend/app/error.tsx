@@ -8,38 +8,19 @@ export default function Error({
   reset: () => void;
 }) {
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#0a0a0f",
-        color: "#e2e8f0",
-        padding: "2rem",
-        fontFamily: "system-ui, sans-serif",
-      }}
-    >
-      <h2 style={{ fontSize: "1.25rem", marginBottom: "0.5rem" }}>
-        Something went wrong
+    <div className="flex min-h-screen flex-col items-center justify-center bg-letterbox px-8 py-16 text-osd">
+      <h2 className="cyber-glitch font-display text-4xl font-black uppercase tracking-widest">
+        Signal lost
       </h2>
-      <p style={{ color: "#94a3b8", marginBottom: "1.5rem", textAlign: "center" }}>
+      <p className="mt-3 max-w-md text-center font-mono text-sm tracking-wide text-readout">
         {error.message || "An unexpected error occurred."}
       </p>
       <button
         type="button"
         onClick={() => reset()}
-        style={{
-          padding: "0.5rem 1rem",
-          borderRadius: "0.5rem",
-          border: "1px solid #3b82f6",
-          background: "rgba(59, 130, 246, 0.1)",
-          color: "#60a5fa",
-          cursor: "pointer",
-        }}
+        className="cyber-chamfer-sm mt-6 bg-caution px-4 py-2 font-mono text-sm font-semibold uppercase tracking-osd text-letterbox hover:shadow-neon-lg"
       >
-        Try again
+        Retry uplink
       </button>
     </div>
   );

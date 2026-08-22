@@ -1,16 +1,16 @@
 import logging
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.agents.portfolio_sync_agent import extract_positions
-from app.auth.deps import get_current_user
+from app.auth.deps import get_current_user, get_optional_user
 from app.db.models import User
 from app.db.session import get_db, get_or_create_default_portfolio
 from app.jobs.briefing_job import generate_briefing_for_user
 from app.mcp_client import MCPClientError, call_tool
-from app.models.agent_schemas import DailyBriefingResponse
+from app.models.agent_schemas import AnshChatRequest, ChatResponse, DailyBriefingResponse
 from app.models.auth_schemas import PortfolioSummary, WatchlistEntry
 from app.models.portfolio_sync_schemas import (
     PortfolioSyncConfirmRequest,
@@ -18,7 +18,8 @@ from app.models.portfolio_sync_schemas import (
     PortfolioSyncPreviewRequest,
 )
 from app.observability.logger import get_logger, log_event
-from app.services import briefing_store, watchlist_store
+from app.services import ansh_portfolio_chat, briefing_store, watchlist_store
+from app.services.portfolio_analyzer import analyze_portfolio
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 logger = get_logger("portfolio_router")
@@ -87,6 +88,34 @@ async def generate_briefing_now(
     user: User = Depends(get_current_user),
 ) -> DailyBriefingResponse:
     return await generate_briefing_for_user(db, user)
+
+
+@router.post("/ansh/chat", response_model=ChatResponse)
+async def ansh_portfolio_chat_endpoint(
+    body: AnshChatRequest,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+) -> ChatResponse:
+    """ANSH — OpenClaw portfolio advisor chat over the current basket."""
+    entries = watchlist_store.list_watchlist(db, user)
+    positions = {
+        e.ticker: {"shares": e.shares, "avg_cost": e.avg_cost}
+        for e in entries
+        if e.shares is not None
+    }
+    analysis = await analyze_portfolio(
+        [e.ticker for e in entries],
+        positions=positions,
+    )
+    payload = await ansh_portfolio_chat.ansh_reply(
+        analysis,
+        message=body.message,
+        horizon=body.horizon,
+        risk_tolerance=body.risk_tolerance,
+        goal=body.goal,
+        history=[m.model_dump() for m in body.history],
+    )
+    return ChatResponse.model_validate(payload)
 
 
 @router.post("/sync/preview", response_model=PortfolioSyncOutput)

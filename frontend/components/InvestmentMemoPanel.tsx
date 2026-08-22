@@ -74,16 +74,16 @@ export default function InvestmentMemoPanel({ memo }: InvestmentMemoPanelProps) 
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-readout">
             Investment memo
           </p>
           <h3
             id="investment-memo-title"
-            className="font-display mt-1 text-lg font-semibold text-white sm:text-xl"
+            className="font-display mt-1 text-lg font-semibold text-osd sm:text-xl"
           >
             {memo.memo_title || `${memo.ticker} Investment Memo`}
           </h3>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-readout">
             {memo.one_liner}
           </p>
         </div>
@@ -93,31 +93,31 @@ export default function InvestmentMemoPanel({ memo }: InvestmentMemoPanelProps) 
           >
             {memo.decision}
           </span>
-          <span className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-slate-400">
+          <span className="rounded-lg border border-hud bg-hud-deep px-3 py-1.5 text-xs text-readout">
             {memo.conviction} conviction
           </span>
-          <span className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-slate-500">
+          <span className="rounded-lg border border-hud bg-hud-deep px-3 py-1.5 text-xs text-readout">
             {memo.time_horizon}
           </span>
         </div>
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <div className="rounded-xl border border-hud bg-letterbox p-4">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-readout">
             Thesis
           </h4>
-          <p className="mt-2 text-sm leading-relaxed text-slate-300">
+          <p className="mt-2 text-sm leading-relaxed text-readout">
             {memo.investment_thesis}
           </p>
         </div>
-        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <div className="rounded-xl border border-hud bg-letterbox p-4">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-readout">
             Key numbers
           </h4>
           <ul className="mt-2 space-y-1.5">
             {(memo.key_numbers || []).map((item, i) => (
-              <li key={i} className="text-sm text-slate-300">
+              <li key={i} className="text-sm text-readout">
                 • {item}
               </li>
             ))}
@@ -127,7 +127,7 @@ export default function InvestmentMemoPanel({ memo }: InvestmentMemoPanelProps) 
           <h4 className="text-xs font-semibold uppercase tracking-wider text-emerald-400/80">
             Bull case
           </h4>
-          <p className="mt-2 text-sm leading-relaxed text-slate-300">
+          <p className="mt-2 text-sm leading-relaxed text-readout">
             {memo.bull_case_summary}
           </p>
         </div>
@@ -135,7 +135,7 @@ export default function InvestmentMemoPanel({ memo }: InvestmentMemoPanelProps) 
           <h4 className="text-xs font-semibold uppercase tracking-wider text-red-400/80">
             Bear case
           </h4>
-          <p className="mt-2 text-sm leading-relaxed text-slate-300">
+          <p className="mt-2 text-sm leading-relaxed text-readout">
             {memo.bear_case_summary}
           </p>
         </div>
@@ -143,36 +143,36 @@ export default function InvestmentMemoPanel({ memo }: InvestmentMemoPanelProps) 
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
         <div>
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-readout">
             Catalysts
           </h4>
           <ul className="mt-2 space-y-1">
             {(memo.catalysts || []).map((item, i) => (
-              <li key={i} className="text-xs leading-relaxed text-slate-400">
+              <li key={i} className="text-xs leading-relaxed text-readout">
                 • {item}
               </li>
             ))}
           </ul>
         </div>
         <div>
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-readout">
             Risks
           </h4>
           <ul className="mt-2 space-y-1">
             {(memo.risks || []).map((item, i) => (
-              <li key={i} className="text-xs leading-relaxed text-slate-400">
+              <li key={i} className="text-xs leading-relaxed text-readout">
                 • {item}
               </li>
             ))}
           </ul>
         </div>
         <div>
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-readout">
             What would change my mind
           </h4>
           <ul className="mt-2 space-y-1">
             {(memo.what_would_change_my_mind || []).map((item, i) => (
-              <li key={i} className="text-xs leading-relaxed text-slate-400">
+              <li key={i} className="text-xs leading-relaxed text-readout">
                 • {item}
               </li>
             ))}
@@ -180,14 +180,14 @@ export default function InvestmentMemoPanel({ memo }: InvestmentMemoPanelProps) 
         </div>
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] pt-4">
-        <p className="max-w-xl text-[10px] leading-relaxed text-slate-600">
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-hud pt-4">
+        <p className="max-w-xl text-[10px] leading-relaxed text-readout">
           {memo.disclaimer}
         </p>
         <button
           type="button"
           onClick={handleCopy}
-          className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-slate-400 transition hover:border-cyan-500/30 hover:text-cyan-200"
+          className="rounded-lg border border-hud bg-hud-deep px-3 py-1.5 text-xs text-readout transition hover:border-osd hover:text-osd"
         >
           {copied ? "Copied" : "Copy memo"}
         </button>

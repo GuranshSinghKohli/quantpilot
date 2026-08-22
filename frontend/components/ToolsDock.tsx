@@ -1,12 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import {
+  Bell,
+  Briefcase,
+  Eye,
+  History,
+  Newspaper,
+  TrendingUp,
+  type LucideIcon,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import AlertsPanel from "@/components/AlertsPanel";
 import BriefingPanel from "@/components/BriefingPanel";
 import HistoryPanel from "@/components/HistoryPanel";
 import InvestmentIdeasPanel from "@/components/InvestmentIdeasPanel";
 import PortfolioPanel from "@/components/PortfolioPanel";
 import WatchlistSidebar from "@/components/WatchlistSidebar";
+import { Bracketed } from "@/components/hud/primitives";
+import { useLenis } from "lenis/react";
+import { cn } from "@/lib/utils";
 import type { AuthUser, HistoryEntry, WatchlistEntry } from "@/types";
 
 export type ToolsTab =
@@ -17,13 +29,13 @@ export type ToolsTab =
   | "ideas"
   | "history";
 
-const TABS: { id: ToolsTab; label: string; icon: string }[] = [
-  { id: "watchlist", label: "Watchlist", icon: "★" },
-  { id: "portfolio", label: "Portfolio", icon: "◈" },
-  { id: "briefing", label: "Briefing", icon: "◎" },
-  { id: "alerts", label: "Alerts", icon: "⚑" },
-  { id: "ideas", label: "Hot picks", icon: "↑" },
-  { id: "history", label: "Research history", icon: "↺" },
+const TABS: { id: ToolsTab; label: string; icon: LucideIcon }[] = [
+  { id: "watchlist", label: "Watching", icon: Eye },
+  { id: "portfolio", label: "Holdings", icon: Briefcase },
+  { id: "briefing", label: "Briefing", icon: Newspaper },
+  { id: "alerts", label: "Alerts", icon: Bell },
+  { id: "ideas", label: "Ideas", icon: TrendingUp },
+  { id: "history", label: "Reports", icon: History },
 ];
 
 interface ToolsDockProps {
@@ -39,6 +51,8 @@ interface ToolsDockProps {
   onHistorySelect: (ticker: string) => void;
   onAddWatchlist: () => void;
   onRemoveWatchlist: (ticker: string) => void;
+  /** When this key changes, open the dock on `focusTab` (e.g. header Position). */
+  focusRequest?: { tab: ToolsTab; key: number } | null;
 }
 
 export default function ToolsDock({
@@ -54,27 +68,34 @@ export default function ToolsDock({
   onHistorySelect,
   onAddWatchlist,
   onRemoveWatchlist,
+  focusRequest = null,
 }: ToolsDockProps) {
   const [active, setActive] = useState<ToolsTab | null>(null);
   const [alertUnread, setAlertUnread] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const lenis = useLenis();
 
-  function toggle(tab: ToolsTab) {
-    setActive((prev) => (prev === tab ? null : tab));
-  }
+  useEffect(() => {
+    if (!focusRequest) return;
+    setActive(focusRequest.tab);
+    const id = window.setTimeout(() => {
+      if (lenis) lenis.scrollTo("#tools-dock", { offset: -24 });
+      else
+        rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [focusRequest, lenis]);
 
   return (
-    <section className="mt-6 sm:mt-8" aria-label="Portfolio tools">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-          Portfolio tools
-        </h2>
-        <p className="text-[11px] text-slate-600">
-          Secondary to the Evidence Ledger
-        </p>
-      </div>
-      <div className="flex flex-wrap gap-2">
+    <div ref={rootRef} id="tools-dock" className="scroll-mt-24">
+      <div
+        className="grid grid-cols-3 gap-2 lg:grid-cols-6"
+        role="tablist"
+        aria-label="Tools"
+      >
         {TABS.map((tab) => {
           const isActive = active === tab.id;
+          const Icon = tab.icon;
           const badge =
             tab.id === "watchlist" && watchlist.length > 0
               ? watchlist.length
@@ -88,32 +109,23 @@ export default function ToolsDock({
             <button
               key={tab.id}
               type="button"
-              onClick={() => toggle(tab.id)}
-              aria-expanded={isActive}
-              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setActive(isActive ? null : tab.id)}
+              className={cn(
+                "bk bk-snap relative flex min-h-[4.5rem] flex-col items-center justify-center gap-2 px-2 py-3",
+                "text-xs font-semibold transition-colors",
                 isActive
-                  ? "border-violet-500/50 bg-violet-500/15 text-violet-200 shadow-glow"
-                  : "border-white/[0.08] bg-white/[0.03] text-slate-400 hover:border-violet-500/30 hover:bg-violet-500/5 hover:text-slate-200"
-              }`}
+                  ? "bk-active text-caution"
+                  : "bk-quiet text-readout hover:text-osd"
+              )}
             >
-              <span
-                className={`flex h-6 w-6 items-center justify-center rounded-lg text-xs ${
-                  isActive
-                    ? "bg-violet-500/25 text-violet-300"
-                    : "bg-white/[0.05] text-slate-500"
-                }`}
-                aria-hidden
-              >
-                {tab.icon}
-              </span>
-              <span className="font-display">{tab.label}</span>
+              <Icon className="h-5 w-5" strokeWidth={1.5} aria-hidden />
+              {tab.label}
               {badge != null && (
                 <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                    isActive
-                      ? "bg-violet-500/30 text-violet-200"
-                      : "bg-white/[0.06] text-slate-500"
-                  }`}
+                  data-figures
+                  className="osd-readout absolute right-2 top-2 text-[0.625rem] text-caution"
                 >
                   {badge}
                 </span>
@@ -123,8 +135,13 @@ export default function ToolsDock({
         })}
       </div>
 
-      {active && (
-        <div className="mt-4">
+      {active ? (
+        <Bracketed
+          large
+          className="mt-3 p-3 sm:p-4"
+          id={active === "portfolio" ? "portfolio-analysis" : undefined}
+          role="tabpanel"
+        >
           {active === "watchlist" && (
             <WatchlistSidebar
               watchlist={watchlist}
@@ -134,7 +151,7 @@ export default function ToolsDock({
               onRemove={onRemoveWatchlist}
               loading={watchlistLoading}
               addDisabledReason={
-                !currentTicker ? "Investigate a ticker first" : null
+                !currentTicker ? "Frame a ticker first" : null
               }
             />
           )}
@@ -165,8 +182,8 @@ export default function ToolsDock({
               loading={historyLoading}
             />
           )}
-        </div>
-      )}
-    </section>
+        </Bracketed>
+      ) : null}
+    </div>
   );
 }

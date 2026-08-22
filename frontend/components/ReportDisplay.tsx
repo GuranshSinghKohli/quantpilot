@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import { useState } from "react";
 import type {
   AnalysisResponse,
@@ -125,8 +126,8 @@ export default function ReportDisplay({
     <div className="card-surface p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <h2 className="text-2xl font-bold text-white">{report.report_title}</h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <h2 className="text-2xl font-bold text-osd">{report.report_title}</h2>
+          <p className="mt-1 text-sm text-readout">
             AI-generated research report · {analysis.ticker}
           </p>
           {analysis.overall_confidence_score != null && (
@@ -134,12 +135,12 @@ export default function ReportDisplay({
               className="mt-3 max-w-md"
               title="Based on data completeness and source availability"
             >
-              <div className="flex items-center justify-between text-xs text-slate-400">
+              <div className="flex items-center justify-between text-xs text-readout">
                 <span>Analysis Confidence: {confidencePct}%</span>
               </div>
-              <div className="mt-1 h-2 overflow-hidden rounded-full bg-[#1e1e2e]">
+              <div className="mt-1 h-2 overflow-hidden bg-[#1e1e2e]">
                 <div
-                  className={`h-full rounded-full transition-all ${confidenceColor(confidence)}`}
+                  className={`h-full transition-all ${confidenceColor(confidence)}`}
                   style={{ width: `${confidencePct}%` }}
                 />
               </div>
@@ -171,14 +172,14 @@ export default function ReportDisplay({
           <h3 className="text-xs font-semibold uppercase tracking-wider text-accent">
             Executive Summary
           </h3>
-          <p className="mt-3 leading-relaxed text-slate-300">
+          <p className="mt-3 leading-relaxed text-readout">
             {report.executive_summary}
           </p>
         </div>
       )}
 
       {omitOverlappingSummary && (
-        <p className="mt-4 text-xs leading-relaxed text-slate-500">
+        <p className="mt-4 text-xs leading-relaxed text-readout">
           Decision and thesis are in the investment memo above. This section has
           the detailed agent write-ups only.
         </p>
@@ -188,20 +189,20 @@ export default function ReportDisplay({
         {report.sections.map((section, index) => (
           <div
             key={section.title + index}
-            className="overflow-hidden rounded-lg border border-[#1e1e2e]"
+            className="overflow-hidden rounded-lg border border-hud"
           >
             <button
               type="button"
               onClick={() => toggleSection(index)}
-              className="flex w-full items-center justify-between bg-[#0a0a0f]/50 px-4 py-3 text-left transition hover:bg-[#1e1e2e]/30"
+              className="flex w-full items-center justify-between bg-letterbox px-4 py-3 text-left transition hover:bg-hud-deep"
             >
-              <span className="font-medium text-slate-200">{section.title}</span>
-              <span className="text-slate-500">
+              <span className="font-medium text-osd">{section.title}</span>
+              <span className="text-readout">
                 {openSections.has(index) ? "−" : "+"}
               </span>
             </button>
             {openSections.has(index) && (
-              <div className="border-t border-[#1e1e2e] px-4 py-3 text-sm leading-relaxed text-slate-400">
+              <div className="border-t border-hud px-4 py-3 text-sm leading-relaxed text-readout">
                 {section.content}
               </div>
             )}
@@ -210,9 +211,9 @@ export default function ReportDisplay({
       </div>
 
       {!omitOverlappingSummary && (
-        <div className="mt-6 rounded-lg border border-[#1e1e2e] bg-[#0a0a0f]/50 p-4">
-          <p className="text-xs text-slate-500">Recommendation</p>
-          <p className="mt-1 text-slate-300">{report.recommendation}</p>
+        <div className="mt-6 rounded-lg border border-hud bg-letterbox p-4">
+          <p className="text-xs text-readout">Recommendation</p>
+          <p className="mt-1 text-readout">{report.recommendation}</p>
         </div>
       )}
 
@@ -220,14 +221,14 @@ export default function ReportDisplay({
         <button
           type="button"
           onClick={handleCopy}
-          className="rounded-lg border border-[#1e1e2e] bg-[#12121a] px-4 py-2 text-sm text-slate-300 transition hover:border-accent hover:text-accent"
+          className="rounded-lg border border-hud bg-[#12121a] px-4 py-2 text-sm text-readout transition hover:border-accent hover:text-accent"
         >
           {copied ? "Copied!" : "Copy Report"}
         </button>
         <button
           type="button"
           onClick={handleViewPast}
-          className="rounded-lg border border-[#1e1e2e] bg-[#12121a] px-4 py-2 text-sm text-slate-300 transition hover:border-accent hover:text-accent"
+          className="rounded-lg border border-hud bg-[#12121a] px-4 py-2 text-sm text-readout transition hover:border-accent hover:text-accent"
         >
           View Past Reports
         </button>
@@ -235,7 +236,7 @@ export default function ReportDisplay({
           type="button"
           onClick={() => void handleSmartSummarize()}
           disabled={summarizing}
-          className="rounded-lg border border-violet-500/40 bg-violet-500/15 px-4 py-2 text-sm font-medium text-violet-100 transition hover:bg-violet-500/25 disabled:opacity-50"
+          className="rounded-lg border border-hud bg-caution-50 px-4 py-2 text-sm font-medium text-osd transition hover:bg-osd hover:text-letterbox disabled:opacity-50"
         >
           {summarizing ? "Summarizing…" : "Smart Summarize"}
         </button>
@@ -248,26 +249,26 @@ export default function ReportDisplay({
       )}
 
       {smartSummary && (
-        <div className="mt-4 rounded-xl border border-violet-500/30 bg-violet-500/[0.06] px-4 py-4 space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-300/80">
+        <div className="mt-4 rounded-xl border border-hud bg-caution-50 px-4 py-4 space-y-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-readout">
             Smart summary
           </p>
-          <p className="text-base font-medium text-white">
+          <p className="text-base font-medium text-osd">
             {smartSummary.headline}
           </p>
           <ul className="space-y-1.5">
             {smartSummary.bullets.map((bullet, i) => (
               <li
                 key={`${i}-${bullet.slice(0, 24)}`}
-                className="flex gap-2 text-sm text-slate-300"
+                className="flex gap-2 text-sm text-readout"
               >
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 bg-violet-400" />
                 <span>{bullet}</span>
               </li>
             ))}
           </ul>
-          <p className="text-sm text-slate-200">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <p className="text-sm text-osd">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-readout">
               Takeaway ·{" "}
             </span>
             {smartSummary.takeaway}
@@ -275,42 +276,43 @@ export default function ReportDisplay({
         </div>
       )}
 
-      <p className="mt-6 text-xs text-slate-600">{report.disclaimer}</p>
+      <p className="mt-6 text-xs text-readout">{report.disclaimer}</p>
 
       {showPast && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-osd/70 p-4">
           <div className="card-surface max-h-[80vh] w-full max-w-2xl overflow-hidden">
-            <div className="flex items-center justify-between border-b border-[#1e1e2e] p-4">
-              <h3 className="font-semibold text-white">
+            <div className="flex items-center justify-between border-b border-hud p-4">
+              <h3 className="font-semibold text-osd">
                 Past Reports: {analysis.ticker}
               </h3>
               <button
                 type="button"
                 onClick={() => setShowPast(false)}
-                className="text-slate-400 hover:text-white"
+                aria-label="Close past reports"
+                className="text-readout transition-colors hover:text-caution"
               >
-                ✕
+                <X className="h-4 w-4" strokeWidth={1.5} aria-hidden />
               </button>
             </div>
-            <div className="max-h-[60vh] overflow-y-auto p-4">
+            <div data-lenis-prevent className="max-h-[60vh] overflow-y-auto p-4">
               {pastLoading && (
-                <p className="text-sm text-slate-500">Loading…</p>
+                <p className="text-sm text-readout">Loading…</p>
               )}
               {!pastLoading && pastReports.length === 0 && (
-                <p className="text-sm text-slate-500">No past reports stored.</p>
+                <p className="text-sm text-readout">No past reports stored.</p>
               )}
               {pastReports.map((item) => (
                 <div
                   key={item.id}
-                  className="mb-3 rounded-lg border border-[#1e1e2e] p-4"
+                  className="mb-3 rounded-lg border border-hud p-4"
                 >
                   <p className="text-sm font-medium text-accent">
                     {item.report.report_title}
                   </p>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-readout">
                     {(item.metadata.timestamp as string) ?? "Unknown date"}
                   </p>
-                  <p className="mt-2 line-clamp-3 text-sm text-slate-400">
+                  <p className="mt-2 line-clamp-3 text-sm text-readout">
                     {item.report.executive_summary}
                   </p>
                 </div>

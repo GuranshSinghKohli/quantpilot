@@ -1,11 +1,45 @@
-export default function AppFooter() {
+import { TapeCounter } from "@/components/hud/primitives";
+import { INVESTIGATE_WINDOWS, type InvestigateWindow } from "@/components/SearchBar";
+import { cn } from "@/lib/utils";
+
+export default function AppFooter({
+  caseId,
+  windowLabel = "1d",
+}: {
+  caseId?: number | null;
+  windowLabel?: InvestigateWindow | string;
+}) {
+  const counter = caseId != null ? String(caseId).padStart(6, "0") : "——————";
+  const formatted = `${counter.slice(0, 2)}:${counter.slice(2)}`;
+
   return (
-    <footer className="relative mt-12 border-t border-white/[0.05] py-8">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <p className="text-center text-xs leading-relaxed text-slate-600">
-          for research vibes only, not financial advice · data from Yahoo &amp; SEC EDGAR
-          · always double-check before you yolo
+    <footer className="mt-4 border-t border-hud py-3">
+      <div className="flex flex-col gap-3 px-3 sm:px-4 lg:flex-row lg:items-center lg:justify-between">
+        <TapeCounter value={formatted} />
+
+        <p className="order-last max-w-xl font-mono text-xs leading-relaxed tracking-wide text-readout lg:order-none">
+          Personal bench, not a product launch. LangGraph for the 11-node
+          research graph; investigation_runner for planner → rank → verify →
+          DA. yfinance + EDGAR. Not advice.
         </p>
+
+        <div
+          className="flex shrink-0 items-end gap-1"
+          aria-label={`Active look-back window: ${windowLabel}`}
+        >
+          {INVESTIGATE_WINDOWS.map((w) => (
+            <span
+              key={w.value}
+              className={cn(
+                "w-1",
+                w.value === windowLabel
+                  ? "h-5 bg-caution shadow-neon"
+                  : "h-3 bg-hud"
+              )}
+              aria-hidden
+            />
+          ))}
+        </div>
       </div>
     </footer>
   );

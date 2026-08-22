@@ -1,3 +1,6 @@
+import { AlertTriangle, OctagonAlert, ShieldCheck } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { RiskLevel } from "@/types";
 
 interface RiskBadgeProps {
@@ -7,38 +10,41 @@ interface RiskBadgeProps {
 
 const CONFIG: Record<
   string,
-  { label: string; bg: string; text: string; icon: string }
+  { label: string; icon: LucideIcon; className: string }
 > = {
   LOW: {
-    label: "LOW RISK",
-    bg: "bg-emerald-500/15 border-emerald-500/40",
-    text: "text-emerald-400",
-    icon: "🛡️",
+    label: "Low risk",
+    icon: ShieldCheck,
+    className: "bg-up/15 text-up",
   },
   MEDIUM: {
-    label: "MEDIUM RISK",
-    bg: "bg-amber-500/15 border-amber-500/40",
-    text: "text-amber-400",
-    icon: "⚠️",
+    label: "Medium risk",
+    icon: AlertTriangle,
+    className: "bg-caution/15 text-caution",
   },
   HIGH: {
-    label: "HIGH RISK",
-    bg: "bg-red-500/15 border-red-500/40",
-    text: "text-red-400",
-    icon: "🔴",
+    label: "High risk",
+    icon: OctagonAlert,
+    className: "bg-down/15 text-down",
   },
 };
 
 export default function RiskBadge({ level, size = "md" }: RiskBadgeProps) {
   const key = (level ?? "MEDIUM").toString().toUpperCase();
   const config = CONFIG[key] ?? CONFIG.MEDIUM;
-  const sizeClass = size === "sm" ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-sm";
+  const Icon = config.icon;
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border font-semibold ${config.bg} ${config.text} ${sizeClass}`}
+      className={cn(
+        "inline-flex items-center gap-1.5 border border-hud font-semibold",
+        size === "sm"
+          ? "px-2 py-0.5 text-[0.625rem]"
+          : "px-2.5 py-1 text-xs",
+        config.className
+      )}
     >
-      <span>{config.icon}</span>
+      <Icon className="h-3 w-3 shrink-0" strokeWidth={1.5} aria-hidden />
       {config.label}
     </span>
   );

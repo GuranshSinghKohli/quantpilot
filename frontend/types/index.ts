@@ -11,10 +11,21 @@ export interface AgentStep {
 export interface StockData {
   ticker: string;
   current_price: number | null;
+  previous_close?: number | null;
   market_cap: number | null;
   pe_ratio: number | null;
+  forward_pe?: number | null;
+  eps?: number | null;
+  dividend_yield?: number | null;
+  beta?: number | null;
+  volume?: number | null;
+  avg_volume?: number | null;
+  day_high?: number | null;
+  day_low?: number | null;
   fifty_two_week_high: number | null;
   fifty_two_week_low: number | null;
+  sector?: string | null;
+  industry?: string | null;
 }
 
 export interface Filing {
@@ -340,6 +351,7 @@ export interface RecommendationPick {
   score: number;
   outlook: "bullish" | "neutral" | "bearish";
   near_term_view: string;
+  catalyst_hint?: string;
   reasons: string[];
   current_price: number | null;
 }

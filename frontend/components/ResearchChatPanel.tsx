@@ -40,10 +40,10 @@ export default function ResearchChatPanel({
 
   return (
     <section className="card-surface p-6">
-      <h3 className="mb-1 text-sm font-semibold uppercase tracking-wider text-slate-400">
+      <h3 className="mb-1 text-sm font-semibold uppercase tracking-wider text-readout">
         Research Chat
       </h3>
-      <p className="mb-4 text-xs text-slate-500">
+      <p className="mb-4 text-xs text-readout">
         Ask follow-up questions grounded in this report and past analyses (RAG).
       </p>
 
@@ -53,13 +53,13 @@ export default function ResearchChatPanel({
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder={`Ask about ${ticker}…`}
-          className="flex-1 rounded-lg border border-[#1e1e2e] bg-[#0a0a0f] px-4 py-2.5 text-sm text-slate-200 placeholder:text-slate-600 focus:border-accent focus:outline-none"
+          className="flex-1 rounded-lg border border-hud bg-letterbox px-4 py-2.5 text-sm text-osd placeholder:text-readout focus:border-accent focus:outline-none"
           disabled={loading}
         />
         <button
           type="submit"
           disabled={loading || !question.trim()}
-          className="rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white transition hover:bg-accent/90 disabled:opacity-50"
+          className="rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-osd transition hover:bg-accent/90 disabled:opacity-50"
         >
           {loading ? "Thinking…" : "Ask"}
         </button>
@@ -72,12 +72,12 @@ export default function ResearchChatPanel({
       )}
 
       {answer && (
-        <div className="mt-5 rounded-lg border border-[#1e1e2e] bg-[#0a0a0f] p-4">
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-300">
+        <div className="mt-5 rounded-lg border border-hud bg-letterbox p-4">
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-readout">
             {answer}
           </p>
           {sources.length > 0 && (
-            <p className="mt-3 text-xs text-slate-500">
+            <p className="mt-3 text-xs text-readout">
               Sources: {sources.join(", ")}
             </p>
           )}

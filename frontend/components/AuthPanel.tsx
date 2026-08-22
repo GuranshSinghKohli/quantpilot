@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { Bracketed, HudButton } from "@/components/hud/primitives";
 import {
   ApiError,
   fetchMe,
@@ -65,84 +66,74 @@ export default function AuthPanel({ user, onUserChange }: AuthPanelProps) {
     return (
       <div className="flex items-center gap-2">
         <span
-          className="hidden max-w-[140px] truncate text-xs text-slate-400 sm:inline"
+          className="osd-label hidden max-w-[140px] truncate sm:inline"
           title={user.email}
         >
           {user.email}
         </span>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300 transition hover:border-white/20 hover:bg-white/10"
-        >
+        <HudButton variant="ghost" onClick={handleLogout}>
           Sign out
-        </button>
+        </HudButton>
       </div>
     );
   }
 
   return (
     <div className="relative">
-      <button
-        type="button"
+      <HudButton
+        variant="secondary"
         onClick={() => setOpen((v) => !v)}
-        className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-200 transition hover:bg-violet-500/20"
+        aria-expanded={open}
       >
         Sign in
-      </button>
+      </HudButton>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-white/10 bg-[#0c0c14] p-4 shadow-xl">
-          <div className="mb-3 flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setMode("login");
-                setError(null);
-              }}
-              className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium ${
-                mode === "login"
-                  ? "bg-violet-500/20 text-violet-200"
-                  : "text-slate-500 hover:text-slate-300"
-              }`}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMode("register");
-                setError(null);
-              }}
-              className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium ${
-                mode === "register"
-                  ? "bg-violet-500/20 text-violet-200"
-                  : "text-slate-500 hover:text-slate-300"
-              }`}
-            >
-              Create account
-            </button>
+        <Bracketed
+          large
+          className="absolute right-0 top-full z-50 mt-2 w-[19rem] bg-letterbox p-4"
+        >
+          <div className="mb-4 flex gap-1.5">
+            {(["login", "register"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => {
+                  setMode(option);
+                  setError(null);
+                }}
+                className={`bk bk-snap flex-1 px-2 py-2 font-display text-[0.6875rem] font-bold uppercase tracking-osd transition-colors ${
+                  mode === option
+                    ? "bk-active text-caution"
+                    : "bk-quiet text-readout hover:text-osd"
+                }`}
+              >
+                {option === "login" ? "Sign in" : "Create account"}
+              </button>
+            ))}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label className="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+              <label htmlFor="auth-email" className="osd-label mb-1.5 block">
                 Email
               </label>
               <input
+                id="auth-email"
                 type="email"
                 required
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500/40"
+                className="bk w-full bg-letterbox px-3 py-2 text-sm text-osd caret-caution outline-none"
               />
             </div>
             <div>
-              <label className="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
+              <label htmlFor="auth-password" className="osd-label mb-1.5 block">
                 Password
               </label>
               <input
+                id="auth-password"
                 type="password"
                 required
                 minLength={8}
@@ -151,31 +142,29 @@ export default function AuthPanel({ user, onUserChange }: AuthPanelProps) {
                 }
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500/40"
+                className="bk w-full bg-letterbox px-3 py-2 text-sm text-osd caret-caution outline-none"
               />
+              <p className="osd-label mt-1.5">At least 8 characters</p>
             </div>
             {error && (
-              <p className="text-xs text-red-300" role="alert">
+              <p className="text-xs text-caution" role="alert">
                 {error}
               </p>
             )}
-            <button
+            <HudButton
               type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-gradient-to-r from-violet-600 to-cyan-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+              variant="primary"
+              loading={loading}
+              className="w-full"
             >
-              {loading
-                ? "…"
-                : mode === "login"
-                  ? "Sign in"
-                  : "Create account"}
-            </button>
+              {mode === "login" ? "Sign in" : "Create account"}
+            </HudButton>
           </form>
-          <p className="mt-3 text-[10px] leading-relaxed text-slate-600">
-            Signed-in accounts keep private history and portfolios. Guests get
-            a device-local history id (not shared with other browsers).
+          <p className="mt-3 text-[0.6875rem] leading-relaxed text-readout">
+            An account keeps your holdings and case history. Without one,
+            history stays on this device only.
           </p>
-        </div>
+        </Bracketed>
       )}
     </div>
   );

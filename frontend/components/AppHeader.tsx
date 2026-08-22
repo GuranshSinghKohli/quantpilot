@@ -1,4 +1,8 @@
+"use client";
+
+import type { ReactNode } from "react";
 import AuthPanel from "@/components/AuthPanel";
+import { HudButton, Readout } from "@/components/hud/primitives";
 import type { AuthUser } from "@/types";
 
 interface AppHeaderProps {
@@ -7,6 +11,9 @@ interface AppHeaderProps {
   onUserChange: (user: AuthUser | null) => void;
   sourcesAvailable?: boolean;
   onSourcesClick?: () => void;
+  onPortfolioClick?: () => void;
+  search?: ReactNode;
+  caseId?: number | null;
 }
 
 export default function AppHeader({
@@ -15,65 +22,70 @@ export default function AppHeader({
   onUserChange,
   sourcesAvailable = false,
   onSourcesClick,
+  onPortfolioClick,
+  search,
+  caseId,
 }: AppHeaderProps) {
-  return (
-    <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#07070d]/80 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-6 lg:px-8">
-        <div className="min-w-0 flex-1">
-          <h1 className="font-display truncate text-lg font-bold tracking-tight sm:text-xl">
-            <span className="text-white">Quant</span>
-            <span className="gradient-text">Pilot</span>
-          </h1>
-          <p className="hidden truncate text-xs text-slate-500 sm:block">
-            why did it move · evidence over vibes
-          </p>
-        </div>
+  const folio = caseId != null ? String(caseId).padStart(6, "0") : "000000";
+  const link = apiReachable === false ? "DOWN" : apiReachable ? "UP" : "…";
 
-        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <button
-            type="button"
+  return (
+    <header className="relative z-40 border-b border-hud bg-letterbox">
+      <div className="flex items-center justify-between gap-3 border-b border-hud px-3 py-1.5 font-mono text-[0.6875rem] uppercase tracking-osd text-readout sm:px-4">
+        <p>
+          <span className="text-caution">&gt;</span> graph // case {folio}
+        </p>
+        <p className="hidden text-cyan sm:block">
+          {new Date().toISOString().slice(0, 10)}
+        </p>
+        <p>
+          link{" "}
+          <span className={apiReachable === false ? "text-down" : "text-caution"}>
+            {link}
+          </span>
+          <span className="cyber-cursor">_</span>
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:px-4">
+        <h1 className="cyber-glitch shrink-0 font-display text-xl font-black uppercase tracking-wide text-osd sm:text-2xl">
+          QuantPilot
+        </h1>
+
+        {search && (
+          <div className="min-w-0 flex-1 basis-full sm:basis-0">{search}</div>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+          {apiReachable === false && (
+            <Readout label="Uplink down" className="border-down text-down" />
+          )}
+
+          {onPortfolioClick && (
+            <HudButton
+              variant="ghost"
+              onClick={onPortfolioClick}
+              title="Jump to your position"
+              className="min-h-9 px-2 py-1.5"
+            >
+              Position
+            </HudButton>
+          )}
+
+          <HudButton
+            variant="ghost"
             onClick={onSourcesClick}
             disabled={!sourcesAvailable}
-            className="group hidden items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.025] px-3 py-1.5 text-xs font-medium text-slate-400 transition hover:border-cyan-500/30 hover:bg-cyan-500/[0.06] hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-35 sm:flex"
             title={
               sourcesAvailable
                 ? "Jump to data sources and provenance"
-                : "Run an analysis to view sources"
+                : "Run a research report to view sources"
             }
+            className="hidden min-h-9 px-2 py-1.5 sm:inline-flex"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              className="h-3.5 w-3.5 text-cyan-400/80"
-              aria-hidden="true"
-            >
-              <ellipse cx="12" cy="5" rx="7" ry="3" />
-              <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" />
-              <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
-            </svg>
             Sources
-          </button>
-          {apiReachable !== null && (
-            <span
-              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
-                apiReachable
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                  : "border-amber-500/30 bg-amber-500/10 text-amber-400"
-              }`}
-              title={apiReachable ? "API connected" : "API offline"}
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  apiReachable ? "animate-pulse bg-emerald-400" : "bg-amber-400"
-                }`}
-              />
-              <span className="hidden sm:inline">
-                {apiReachable ? "live" : "offline"}
-              </span>
-            </span>
-          )}
+          </HudButton>
+
           <AuthPanel user={user} onUserChange={onUserChange} />
         </div>
       </div>

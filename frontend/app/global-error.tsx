@@ -18,26 +18,38 @@ export default function GlobalError({
           alignItems: "center",
           justifyContent: "center",
           background: "#0a0a0f",
-          color: "#e2e8f0",
-          fontFamily: "system-ui, sans-serif",
+          color: "#e0e0e0",
+          fontFamily: "JetBrains Mono, ui-monospace, monospace",
         }}
       >
-        <h2>Something went wrong</h2>
-        <p style={{ color: "#94a3b8" }}>{error.message}</p>
+        <h2
+          style={{
+            fontSize: "2rem",
+            fontWeight: 900,
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            textShadow: "-2px 0 #ff00ff, 2px 0 #00d4ff",
+          }}
+        >
+          Signal lost
+        </h2>
+        <p style={{ color: "#6b7280", marginTop: "0.75rem" }}>{error.message}</p>
         <button
           type="button"
           onClick={() => reset()}
           style={{
-            marginTop: "1rem",
-            padding: "0.5rem 1rem",
-            borderRadius: "0.5rem",
-            border: "1px solid #3b82f6",
-            background: "transparent",
-            color: "#60a5fa",
+            marginTop: "1.5rem",
+            padding: "0.6rem 1.1rem",
+            border: 0,
+            background: "#00ff88",
+            color: "#0a0a0f",
+            fontWeight: 700,
+            letterSpacing: "0.16em",
+            textTransform: "uppercase",
             cursor: "pointer",
           }}
         >
-          Try again
+          Retry uplink
         </button>
       </body>
     </html>

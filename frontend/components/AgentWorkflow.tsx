@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "@/lib/utils";
 import type { AgentStep } from "@/types";
 
 interface AgentWorkflowProps {
@@ -8,105 +9,89 @@ interface AgentWorkflowProps {
   collapsed?: boolean;
 }
 
-const ICONS: Record<string, string> = {
-  news: "📰",
-  financial: "📊",
-  sec: "📄",
-  earnings: "💹",
-  macro: "🌐",
-  risk: "⚖️",
-  bull: "🐂",
-  bear: "🐻",
-  verification: "✅",
-  report: "📝",
-  memo: "📋",
-};
-
-function StatusIndicator({ status }: { status: AgentStep["status"] }) {
-  if (status === "complete") {
-    return (
-      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30">
-        ✓
-      </span>
-    );
-  }
-  if (status === "running") {
-    return (
-      <span className="pulse-agent flex h-8 w-8 items-center justify-center rounded-full border-2 border-violet-400 bg-violet-500/20 text-violet-300">
-        ●
-      </span>
-    );
-  }
-  return (
-    <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.02] text-slate-600">
-      ○
-    </span>
-  );
-}
-
+/** The pipeline reads as recorded tape: filled segments are laid down. */
 export default function AgentWorkflow({
   steps,
   isLoading,
   collapsed = false,
 }: AgentWorkflowProps) {
-  if (collapsed && !isLoading) {
-    const allComplete = steps.every((s) => s.status === "complete");
-    if (allComplete) {
-      return (
-        <div className="card-surface flex items-center gap-3 px-4 py-3">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15 text-sm text-emerald-400">
-            ✓
-          </span>
-          <span className="text-sm text-slate-400">
-            all <span className="font-medium text-emerald-400/90">{steps.length} agents</span> finished. Report ready
-          </span>
-        </div>
-      );
-    }
+  const complete = steps.filter((s) => s.status === "complete").length;
+  const running = steps.find((s) => s.status === "running");
+
+  if (collapsed && !isLoading && complete === steps.length) {
+    return (
+      <p className="osd-readout text-readout">
+        All {steps.length} stages recorded.{" "}
+        <span className="text-caution">Report ready.</span>
+      </p>
+    );
   }
 
   return (
-    <div className="card-surface p-6">
-      <h3 className="panel-title mb-4">agent pipeline</h3>
-      <div className="flex flex-col gap-0 md:flex-row md:items-center md:justify-between">
-        {steps.map((step, index) => (
-          <div key={step.id} className="flex flex-1 items-center">
-            <div className="flex flex-col items-center text-center md:min-w-[72px]">
-              <StatusIndicator status={step.status} />
-              <span className="mt-2 text-base">{ICONS[step.id] ?? "🤖"}</span>
-              <span
-                className={`mt-1 text-[10px] font-medium leading-tight ${
-                  step.status === "running"
-                    ? "text-violet-300"
-                    : step.status === "complete"
-                      ? "text-emerald-400/90"
-                      : "text-slate-600"
-                }`}
-              >
-                {step.name.replace(" Agent", "")}
-              </span>
-            </div>
-            {index < steps.length - 1 && (
-              <div
-                className={`mx-1 hidden h-0.5 flex-1 md:block ${
-                  step.status === "complete"
-                    ? "bg-gradient-to-r from-emerald-500/40 to-violet-500/20"
-                    : "bg-white/[0.06]"
-                }`}
-              />
+    <div>
+      <div
+        className="flex items-stretch gap-px"
+        role="img"
+        aria-label={`Pipeline stage ${complete} of ${steps.length}${
+          running ? `, running ${running.name}` : ""
+        }`}
+      >
+        {steps.map((step) => (
+          <span
+            key={step.id}
+            className={cn(
+              "h-8 flex-1",
+              step.status === "complete" && "bg-caution",
+              step.status === "running" &&
+                "bg-caution/40 animate-rec-blink",
+              step.status === "waiting" && "bg-hud"
             )}
-            {index < steps.length - 1 && (
-              <div
-                className={`my-2 h-6 w-0.5 md:hidden ${
-                  step.status === "complete"
-                    ? "bg-emerald-500/40"
-                    : "bg-white/[0.06]"
-                }`}
-              />
-            )}
-          </div>
+          />
         ))}
       </div>
+
+      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2">
+        <p className="osd-readout">
+          {running ? (
+            <>
+              <span className="text-caution">Recording </span>
+              {running.name.replace(" Agent", "")}
+            </>
+          ) : complete === steps.length ? (
+            <span className="text-caution">All stages recorded</span>
+          ) : (
+            <span className="text-readout">Standing by</span>
+          )}
+        </p>
+        <p data-figures className="osd-label">
+          {String(complete).padStart(2, "0")} / {steps.length}
+        </p>
+      </div>
+
+      <ol className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-4">
+        {steps.map((step) => (
+          <li
+            key={step.id}
+            className={cn(
+              "flex items-center gap-2 text-[0.6875rem] uppercase tracking-osd",
+              step.status === "complete" && "text-osd/70",
+              step.status === "running" && "text-caution",
+              step.status === "waiting" && "text-readout"
+            )}
+          >
+            <span
+              className={cn(
+                "h-1.5 w-1.5 shrink-0",
+                step.status === "complete" && "bg-caution",
+                step.status === "running" && "bg-caution animate-rec-blink",
+                step.status === "waiting" && "bg-hud-line"
+              )}
+              aria-hidden
+            />
+            {step.name.replace(" Agent", "")}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

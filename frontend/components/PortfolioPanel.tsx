@@ -1,6 +1,8 @@
 "use client";
 
+import { AlertTriangle, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import AnshChatPanel from "@/components/AnshChatPanel";
 import type { AuthUser, PortfolioAnalysis, SyncedPosition } from "@/types";
 import {
   ApiError,
@@ -31,7 +33,7 @@ function RiskBar({ riskMix, total }: { riskMix: Record<string, number>; total: n
   ];
   return (
     <div className="mt-3">
-      <div className="flex h-2 overflow-hidden rounded-full bg-white/5">
+      <div className="flex h-2 overflow-hidden bg-white/5">
         {segments.map(({ key, color }) => {
           const count = riskMix[key] ?? 0;
           if (count === 0) return null;
@@ -51,7 +53,7 @@ function RiskBar({ riskMix, total }: { riskMix: Record<string, number>; total: n
           return (
             <span
               key={level}
-              className={`rounded-full border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium uppercase ${s.text}`}
+              className={`border border-hud bg-hud-deep px-2 py-0.5 text-[10px] font-medium uppercase ${s.text}`}
             >
               {s.label} ×{count}
             </span>
@@ -75,6 +77,7 @@ export default function PortfolioPanel({ onSelectTicker, user }: PortfolioPanelP
   const [previewPositions, setPreviewPositions] = useState<SyncedPosition[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showAnsh, setShowAnsh] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -164,11 +167,23 @@ export default function PortfolioPanel({ onSelectTicker, user }: PortfolioPanelP
       <div className="mb-4 flex items-center justify-between gap-2">
         <div>
           <h3 className="panel-title">portfolio basket</h3>
-          <p className="mt-0.5 text-[11px] text-slate-600">
+          <p className="mt-0.5 text-[11px] text-readout">
             watchlist basket · sync real broker positions when signed in
           </p>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={() => setShowAnsh((v) => !v)}
+            className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
+              showAnsh
+                ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-100"
+                : "border-hud bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20"
+            }`}
+            title="Open ANSH — OpenClaw portfolio advisor"
+          >
+            {showAnsh ? "ANSH open" : "Analyze portfolio"}
+          </button>
           {user && (
             <button
               type="button"
@@ -179,8 +194,8 @@ export default function PortfolioPanel({ onSelectTicker, user }: PortfolioPanelP
               }}
               className={`rounded-lg border px-2.5 py-1 text-xs transition ${
                 showSync
-                  ? "border-violet-500/50 bg-violet-500/15 text-violet-200"
-                  : "border-white/[0.08] text-slate-400 hover:border-violet-500/30 hover:text-violet-300"
+                  ? "border-osd bg-caution-50 text-down"
+                  : "border-hud text-readout hover:border-osd hover:text-osd"
               }`}
             >
               sync from broker
@@ -190,16 +205,30 @@ export default function PortfolioPanel({ onSelectTicker, user }: PortfolioPanelP
             type="button"
             onClick={load}
             disabled={loading}
-            className="rounded-lg border border-white/[0.08] px-2.5 py-1 text-xs text-slate-400 transition hover:border-violet-500/30 hover:text-violet-300 disabled:opacity-50"
+            aria-label="Reload holdings"
+            className="bk bk-quiet bk-snap px-2.5 py-2 text-readout transition-colors hover:text-caution disabled:opacity-50"
           >
-            {loading ? "…" : "↻"}
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+              strokeWidth={1.5}
+              aria-hidden
+            />
           </button>
         </div>
       </div>
 
+      {showAnsh && (
+        <div className="mb-4">
+          <AnshChatPanel
+            holdingsCount={totalHoldings}
+            onClose={() => setShowAnsh(false)}
+          />
+        </div>
+      )}
+
       {showSync && user && (
-        <div className="mb-4 rounded-xl border border-violet-500/20 bg-violet-500/[0.04] p-4">
-          <p className="text-xs leading-relaxed text-slate-400">
+        <div className="mb-4 rounded-xl border border-hud bg-caution-50 p-4">
+          <p className="text-xs leading-relaxed text-readout">
             Paste the text of your broker&apos;s positions page (select all,
             copy, paste below) to import real shares and cost basis. We never
             see your login — this only reads text you paste yourself.
@@ -212,14 +241,14 @@ export default function PortfolioPanel({ onSelectTicker, user }: PortfolioPanelP
                 onChange={(e) => setPasteText(e.target.value)}
                 placeholder="Paste your positions table here (ticker, shares, price, etc.)"
                 rows={4}
-                className="mt-3 w-full resize-none rounded-lg border border-white/[0.08] bg-[#0a0a0f]/60 px-3 py-2 text-xs text-slate-300 placeholder:text-slate-600 focus:border-violet-500/40 focus:outline-none"
+                className="mt-3 w-full resize-none rounded-lg border border-hud bg-letterbox px-3 py-2 text-xs text-readout placeholder:text-readout focus:border-hud focus:outline-none"
               />
               <div className="mt-2 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => handlePreview(false)}
                   disabled={syncLoading || !pasteText.trim()}
-                  className="rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-40"
+                  className="rounded-lg border border-hud bg-caution-50 px-3 py-1.5 text-xs font-medium text-down transition hover:bg-osd hover:text-letterbox disabled:opacity-40"
                 >
                   {syncLoading ? "extracting…" : "extract positions"}
                 </button>
@@ -228,7 +257,7 @@ export default function PortfolioPanel({ onSelectTicker, user }: PortfolioPanelP
                   onClick={() => handlePreview(true)}
                   disabled={syncLoading}
                   title="Requires OpenClaw configured with an existing-session browser attach"
-                  className="rounded-lg border border-white/[0.08] px-3 py-1.5 text-xs text-slate-400 transition hover:border-cyan-500/30 hover:text-cyan-300 disabled:opacity-40"
+                  className="rounded-lg border border-hud px-3 py-1.5 text-xs text-readout transition hover:border-osd hover:text-osd disabled:opacity-40"
                 >
                   try openclaw auto-snapshot
                 </button>
@@ -244,8 +273,16 @@ export default function PortfolioPanel({ onSelectTicker, user }: PortfolioPanelP
           {syncWarnings.length > 0 && (
             <ul className="mt-2 space-y-0.5">
               {syncWarnings.map((w, i) => (
-                <li key={i} className="text-[11px] text-amber-400/80">
-                  ⚠ {w}
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-[11px] text-caution"
+                >
+                  <AlertTriangle
+                    className="mt-0.5 h-3 w-3 shrink-0"
+                    strokeWidth={1.5}
+                    aria-hidden
+                  />
+                  {w}
                 </li>
               ))}
             </ul>
@@ -258,16 +295,16 @@ export default function PortfolioPanel({ onSelectTicker, user }: PortfolioPanelP
 
           {previewPositions && previewPositions.length > 0 && (
             <>
-              <p className="mt-3 text-[11px] uppercase tracking-wider text-slate-500">
+              <p className="mt-3 text-[11px] uppercase tracking-wider text-readout">
                 review before saving
               </p>
               <div className="mt-2 space-y-1.5">
                 {previewPositions.map((p, i) => (
                   <div
                     key={`${p.ticker}-${i}`}
-                    className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-1.5 text-xs"
+                    className="flex items-center gap-2 rounded-lg border border-hud bg-letterbox px-2.5 py-1.5 text-xs"
                   >
-                    <span className="w-14 font-display font-semibold text-white">
+                    <span className="w-14 font-display font-semibold text-osd">
                       {p.ticker}
                     </span>
                     <input
@@ -275,22 +312,22 @@ export default function PortfolioPanel({ onSelectTicker, user }: PortfolioPanelP
                       value={p.shares ?? ""}
                       onChange={(e) => updatePreviewField(i, "shares", e.target.value)}
                       placeholder="shares"
-                      className="w-20 rounded border border-white/[0.08] bg-[#0a0a0f]/60 px-1.5 py-1 text-slate-300 focus:border-violet-500/40 focus:outline-none"
+                      className="w-20 rounded border border-hud bg-letterbox px-1.5 py-1 text-readout focus:border-hud focus:outline-none"
                     />
                     <input
                       type="number"
                       value={p.avg_cost ?? ""}
                       onChange={(e) => updatePreviewField(i, "avg_cost", e.target.value)}
                       placeholder="avg cost"
-                      className="w-20 rounded border border-white/[0.08] bg-[#0a0a0f]/60 px-1.5 py-1 text-slate-300 focus:border-violet-500/40 focus:outline-none"
+                      className="w-20 rounded border border-hud bg-letterbox px-1.5 py-1 text-readout focus:border-hud focus:outline-none"
                     />
                     <button
                       type="button"
                       onClick={() => removePreviewRow(i)}
-                      className="ml-auto text-slate-600 hover:text-red-400"
+                      className="ml-auto text-readout transition-colors hover:text-caution"
                       aria-label={`Remove ${p.ticker}`}
                     >
-                      ✕
+                      <X className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden />
                     </button>
                   </div>
                 ))}
@@ -307,7 +344,7 @@ export default function PortfolioPanel({ onSelectTicker, user }: PortfolioPanelP
                 <button
                   type="button"
                   onClick={() => setPreviewPositions(null)}
-                  className="rounded-lg border border-white/[0.08] px-3 py-1.5 text-xs text-slate-400 transition hover:text-slate-200"
+                  className="rounded-lg border border-hud px-3 py-1.5 text-xs text-readout transition hover:text-osd"
                 >
                   discard
                 </button>
@@ -335,19 +372,19 @@ export default function PortfolioPanel({ onSelectTicker, user }: PortfolioPanelP
           {totalHoldings > 0 ? (
             <>
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-slate-600">
+                <div className="rounded-xl border border-hud bg-letterbox p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-readout">
                     holdings
                   </p>
-                  <p className="font-display mt-1 text-2xl font-bold text-white">
+                  <p className="font-display mt-1 text-2xl font-bold text-osd">
                     {totalHoldings}
                   </p>
                 </div>
-                <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-slate-600">
+                <div className="rounded-xl border border-hud bg-letterbox p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-readout">
                     {data.weighted_by_real_positions ? "total value" : "avg P/E"}
                   </p>
-                  <p className="font-display mt-1 text-2xl font-bold text-white">
+                  <p className="font-display mt-1 text-2xl font-bold text-osd">
                     {data.weighted_by_real_positions
                       ? `$${data.total_market_value?.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
                       : data.avg_pe ?? "-"}
@@ -384,14 +421,14 @@ export default function PortfolioPanel({ onSelectTicker, user }: PortfolioPanelP
                       <button
                         type="button"
                         onClick={() => onSelectTicker?.(h.ticker)}
-                        className="group flex w-full items-center justify-between rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2.5 text-left transition hover:border-violet-500/30 hover:bg-violet-500/5"
+                        className="group flex w-full items-center justify-between rounded-xl border border-hud bg-letterbox px-3 py-2.5 text-left transition hover:border-osd hover:bg-caution-50"
                       >
-                        <span className="font-display font-semibold text-white group-hover:text-violet-200">
+                        <span className="font-display font-semibold text-osd group-hover:text-down">
                           {h.ticker}
                         </span>
                         <span className="flex items-center gap-2 text-xs">
                           {h.shares != null && (
-                            <span className="text-slate-500">
+                            <span className="text-readout">
                               {h.shares.toLocaleString()} sh
                               {h.unrealized_gain_pct != null && (
                                 <span
@@ -408,12 +445,12 @@ export default function PortfolioPanel({ onSelectTicker, user }: PortfolioPanelP
                             </span>
                           )}
                           {h.pe_ratio != null && (
-                            <span className="text-slate-500">
+                            <span className="text-readout">
                               P/E {h.pe_ratio.toFixed(0)}
                             </span>
                           )}
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase ${s.text} bg-white/[0.03]`}
+                            className={`px-2 py-0.5 text-[10px] font-medium uppercase ${s.text} bg-hud-deep`}
                           >
                             {s.label}
                           </span>
@@ -425,14 +462,14 @@ export default function PortfolioPanel({ onSelectTicker, user }: PortfolioPanelP
               </ul>
             </>
           ) : (
-            <p className="py-4 text-center text-sm leading-relaxed text-slate-500">
+            <p className="py-4 text-center text-sm leading-relaxed text-readout">
               add tickers to your watchlist
               <br />
-              <span className="text-slate-600">then peep your basket here</span>
+              <span className="text-readout">then peep your basket here</span>
             </p>
           )}
 
-          <p className="mt-4 text-[10px] leading-relaxed text-slate-600">
+          <p className="mt-4 text-[10px] leading-relaxed text-readout">
             {data.disclaimer}
           </p>
         </>

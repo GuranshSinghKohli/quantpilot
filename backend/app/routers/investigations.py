@@ -215,6 +215,23 @@ async def get_investigation(
     return detail
 
 
+@router.delete("/investigations/{investigation_id}")
+async def delete_investigation(
+    investigation_id: int,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+    x_guest_id: Optional[str] = Header(default=None, alias="X-Guest-Id"),
+) -> dict:
+    """Remove a case from the Evidence Ledger history."""
+    owner_key = _require_owner(user, x_guest_id)
+    deleted = evidence_ledger_store.delete_investigation(
+        db, owner_key=owner_key, investigation_id=investigation_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    return {"ok": True, "id": investigation_id}
+
+
 @router.post(
     "/investigations/{investigation_id}/evidence",
     response_model=EvidenceItemOut,

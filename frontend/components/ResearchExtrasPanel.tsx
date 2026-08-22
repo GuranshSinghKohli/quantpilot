@@ -1,5 +1,6 @@
 "use client";
 
+import { Check } from "lucide-react";
 import type { AnalysisResponse } from "@/types";
 
 interface ResearchExtrasPanelProps {
@@ -19,13 +20,13 @@ export default function ResearchExtrasPanel({
     <div className="grid gap-4 md:grid-cols-3">
       {earnings && (
         <section className="card-surface p-5">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-readout">
             Earnings
           </h3>
-          <p className="mt-2 text-sm leading-relaxed text-slate-300">
+          <p className="mt-2 text-sm leading-relaxed text-readout">
             {earnings.earnings_summary}
           </p>
-          <p className="mt-3 text-xs text-slate-500">
+          <p className="mt-3 text-xs text-readout">
             Tone: {earnings.tone}
             {earnings.next_catalyst
               ? ` · Next: ${earnings.next_catalyst}`
@@ -34,7 +35,7 @@ export default function ResearchExtrasPanel({
           {earnings.key_points?.length > 0 && (
             <ul className="mt-3 space-y-1">
               {earnings.key_points.slice(0, 4).map((p, i) => (
-                <li key={i} className="text-xs text-slate-500">
+                <li key={i} className="text-xs text-readout">
                   • {p}
                 </li>
               ))}
@@ -53,13 +54,13 @@ export default function ResearchExtrasPanel({
 
       {macro && (
         <section className="card-surface p-5">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-readout">
             Macro
           </h3>
-          <p className="mt-2 text-sm leading-relaxed text-slate-300">
+          <p className="mt-2 text-sm leading-relaxed text-readout">
             {macro.macro_summary}
           </p>
-          <p className="mt-3 text-xs text-slate-500">
+          <p className="mt-3 text-xs text-readout">
             Relevance: {macro.relevance}
           </p>
           {macro.themes?.length > 0 && (
@@ -67,7 +68,7 @@ export default function ResearchExtrasPanel({
               {macro.themes.slice(0, 6).map((t) => (
                 <li
                   key={t}
-                  className="rounded border border-[#1e1e2e] bg-[#0a0a0f]/50 px-2 py-0.5 text-xs text-slate-400"
+                  className="rounded border border-hud bg-letterbox px-2 py-0.5 text-xs text-readout"
                 >
                   {t}
                 </li>
@@ -79,20 +80,28 @@ export default function ResearchExtrasPanel({
 
       {verification && (
         <section className="card-surface p-5">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-readout">
             Verification
           </h3>
-          <p className="mt-2 text-sm text-slate-300">
+          <p className="mt-2 text-sm text-readout">
             Groundedness{" "}
-            <span className="font-medium text-slate-200">
+            <span className="font-medium text-osd">
               {Math.round(verification.groundedness_score * 100)}%
             </span>
           </p>
           {verification.verified_claims?.length > 0 && (
             <ul className="mt-3 space-y-1">
               {verification.verified_claims.slice(0, 3).map((c, i) => (
-                <li key={i} className="text-xs text-emerald-500/80">
-                  ✓ {c}
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-xs leading-relaxed text-osd/80"
+                >
+                  <Check
+                    className="mt-0.5 h-3 w-3 shrink-0 text-caution"
+                    strokeWidth={1.5}
+                    aria-hidden
+                  />
+                  {c}
                 </li>
               ))}
             </ul>

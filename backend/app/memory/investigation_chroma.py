@@ -41,6 +41,21 @@ def _get_embedding_collection():
     return _collection
 
 
+def delete_investigation(investigation_id: int) -> None:
+    """Best-effort remove of a ledger doc from the search index."""
+    try:
+        collection = _get_embedding_collection()
+        collection.delete(ids=[f"inv_{investigation_id}"])
+    except Exception as exc:
+        log_event(
+            logger,
+            logging.WARNING,
+            "Investigation chroma delete skipped",
+            investigation_id=investigation_id,
+            error=str(exc),
+        )
+
+
 def upsert_investigation(
     *,
     owner_key: str,

@@ -39,31 +39,31 @@ export default function HistoryPanel({
   return (
     <div className="card-surface card-surface-hover p-4">
       <h3 className="panel-title">recent runs</h3>
-      <p className="mt-0.5 text-[11px] text-slate-600">tap to reload a report</p>
+      <p className="mt-0.5 text-[11px] text-readout">tap to reload a report</p>
 
       <div className="mt-3 space-y-2">
         {items.length === 0 && !loading && (
-          <p className="py-6 text-center text-sm text-slate-600">
+          <p className="py-6 text-center text-sm text-readout">
             no runs yet. Go analyze something
           </p>
         )}
         {loading && (
-          <p className="text-sm text-slate-600">loading…</p>
+          <p className="text-sm text-readout">loading…</p>
         )}
         {items.map((entry, index) => (
           <button
             key={`${entry.ticker}-${entry.timestamp}-${index}`}
             type="button"
             onClick={() => onSelect(entry.ticker)}
-            className="group w-full rounded-xl border border-white/[0.05] bg-white/[0.02] p-3 text-left transition hover:border-violet-500/25 hover:bg-violet-500/5"
+            className="group w-full rounded-xl border border-hud bg-letterbox p-3 text-left transition hover:border-osd hover:bg-caution-50"
           >
             <div className="flex items-center justify-between">
-              <span className="font-display font-semibold text-white group-hover:text-violet-200">
+              <span className="font-display font-semibold text-osd group-hover:text-down">
                 ${entry.ticker}
               </span>
               <RiskBadge level={entry.risk_level} size="sm" />
             </div>
-            <p className="mt-1 text-[11px] text-slate-600">
+            <p className="mt-1 text-[11px] text-readout">
               {formatTime(entry.timestamp)}
             </p>
             <p

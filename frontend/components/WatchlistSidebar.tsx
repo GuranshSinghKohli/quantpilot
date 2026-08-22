@@ -1,5 +1,8 @@
 "use client";
 
+import { Plus, X } from "lucide-react";
+import CompanyMark from "@/components/hud/CompanyMark";
+import { ColumnHeader, NoSignal } from "@/components/hud/primitives";
 import type { WatchlistEntry } from "@/types";
 
 interface WatchlistSidebarProps {
@@ -23,75 +26,76 @@ export default function WatchlistSidebar({
 }: WatchlistSidebarProps) {
   const isOnList =
     currentTicker &&
-    watchlist.some((e) => e.ticker.toUpperCase() === currentTicker.toUpperCase());
+    watchlist.some(
+      (e) => e.ticker.toUpperCase() === currentTicker.toUpperCase()
+    );
 
   return (
-    <div className="card-surface card-surface-hover p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="panel-title">watchlist</h3>
-          <p className="mt-0.5 text-[11px] text-slate-600">stocks you&apos;re tracking</p>
-        </div>
+    <div>
+      <ColumnHeader
+        aside={watchlist.length > 0 ? `${watchlist.length} tracked` : undefined}
+      >
+        Watching
+      </ColumnHeader>
+
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-xs text-readout">
+          Tickers QuantPilot keeps an eye on for you.
+        </p>
         <button
           type="button"
           onClick={onAdd}
-          disabled={!currentTicker || loading}
+          disabled={!currentTicker || loading || Boolean(isOnList)}
           title={
             isOnList
-              ? `${currentTicker} is already saved`
-              : addDisabledReason ?? "Save current ticker"
+              ? `${currentTicker} is already tracked`
+              : (addDisabledReason ?? `Track ${currentTicker ?? "this ticker"}`)
           }
-          className="flex h-8 w-8 items-center justify-center rounded-xl border border-violet-500/30 bg-violet-500/10 text-lg text-violet-300 transition hover:bg-violet-500/20 disabled:opacity-40"
+          aria-label={`Track ${currentTicker ?? "the current ticker"}`}
+          className="bk bk-snap flex h-9 w-9 shrink-0 items-center justify-center text-osd transition-colors hover:text-caution disabled:opacity-40"
         >
-          +
+          <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden />
         </button>
       </div>
 
-      {!currentTicker && (
-        <p className="mt-3 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-xs text-slate-600">
-          run an analysis first, then hit + to save it
-        </p>
+      {watchlist.length === 0 ? (
+        <NoSignal
+          title="Nothing tracked yet"
+          detail="Open a case, then add the ticker to keep it in view."
+        />
+      ) : (
+        <ul className="space-y-1.5">
+          {watchlist.map((entry) => {
+            const active =
+              currentTicker?.toUpperCase() === entry.ticker.toUpperCase();
+            return (
+              <li
+                key={entry.ticker}
+                className={`bk ${active ? "bk-active" : "bk-quiet"} flex items-center justify-between px-3 py-2`}
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelect(entry.ticker)}
+                  className={`font-display flex flex-1 items-center gap-2.5 text-left text-xs font-bold uppercase tracking-osd transition-colors hover:text-caution ${
+                    active ? "text-caution" : "text-osd"
+                  }`}
+                >
+                  <CompanyMark ticker={entry.ticker} size="sm" />
+                  {entry.ticker}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onRemove(entry.ticker)}
+                  className="ml-2 p-1 text-readout transition-colors hover:text-caution"
+                  aria-label={`Stop tracking ${entry.ticker}`}
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
-
-      <div className="mt-3 space-y-1">
-        {watchlist.length === 0 && (
-          <p className="py-8 text-center text-sm leading-relaxed text-slate-600">
-            nothing saved yet
-            <br />
-            <span className="text-slate-700">your picks show up here</span>
-          </p>
-        )}
-        {watchlist.map((entry) => {
-          const active =
-            currentTicker?.toUpperCase() === entry.ticker.toUpperCase();
-          return (
-            <div
-              key={entry.ticker}
-              className={`flex items-center justify-between rounded-xl px-3 py-2 transition ${
-                active
-                  ? "border border-violet-500/30 bg-violet-500/10"
-                  : "border border-transparent hover:bg-white/[0.03]"
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => onSelect(entry.ticker)}
-                className="font-display flex-1 text-left text-sm font-semibold text-slate-200 hover:text-violet-200"
-              >
-                ${entry.ticker}
-              </button>
-              <button
-                type="button"
-                onClick={() => onRemove(entry.ticker)}
-                className="ml-2 rounded-md px-1.5 text-slate-600 transition hover:bg-red-500/10 hover:text-red-400"
-                aria-label={`Remove ${entry.ticker}`}
-              >
-                ×
-              </button>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

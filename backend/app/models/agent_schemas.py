@@ -210,6 +210,23 @@ class ChatResponse(BaseModel):
     sources_used: List[str] = Field(default_factory=list)
 
 
+class AnshChatMessage(BaseModel):
+    role: Literal["user", "assistant"] = "user"
+    content: str
+
+
+class AnshChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4000)
+    horizon: Optional[str] = Field(
+        default=None, description="short | long"
+    )
+    risk_tolerance: Optional[str] = Field(
+        default=None, description="conservative | moderate | aggressive"
+    )
+    goal: Optional[str] = Field(default=None, max_length=500)
+    history: List[AnshChatMessage] = Field(default_factory=list)
+
+
 class PortfolioHolding(BaseModel):
     ticker: str
     current_price: Optional[float] = None

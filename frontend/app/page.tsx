@@ -4,20 +4,37 @@ import { useCallback, useEffect, useState } from "react";
 import AgentWorkflow from "@/components/AgentWorkflow";
 import AppFooter from "@/components/AppFooter";
 import AppHeader from "@/components/AppHeader";
+import AppRail from "@/components/AppRail";
+import EditionMarquee from "@/components/motion/EditionMarquee";
+import PageEnter from "@/components/motion/PageEnter";
 import CitationsPanel from "@/components/CitationsPanel";
 import DebatePanel from "@/components/DebatePanel";
-import FeatureCards from "@/components/FeatureCards";
-import HeroSection from "@/components/HeroSection";
-import InvestigationsPanel from "@/components/InvestigationsPanel";
+import MoveHeadline from "@/components/MoveHeadline";
+import CaseHistory from "@/components/case/CaseHistory";
+import CausesColumn from "@/components/case/CausesColumn";
+import HowItWorks from "@/components/case/HowItWorks";
+import ReceiptsColumn from "@/components/case/ReceiptsColumn";
+import { useCase } from "@/components/case/useCase";
+import InvestigationChatPanel from "@/components/InvestigationChatPanel";
+import {
+  Bracketed,
+  Caution,
+  ColumnHeader,
+  WindowBar,
+} from "@/components/hud/primitives";
+import { useLenis } from "lenis/react";
 import LoadingPipeline from "@/components/LoadingPipeline";
 import InvestmentMemoPanel from "@/components/InvestmentMemoPanel";
 import ReportDisplay from "@/components/ReportDisplay";
 import ResearchExtrasPanel from "@/components/ResearchExtrasPanel";
 import ResearchChatPanel from "@/components/ResearchChatPanel";
-import SearchBar, { type InvestigateWindow } from "@/components/SearchBar";
+import SearchBar, {
+  INVESTIGATE_WINDOWS,
+  QUICK_PICKS,
+  type InvestigateWindow,
+} from "@/components/SearchBar";
 import SECFilingsPanel from "@/components/SECFilingsPanel";
-import StockHeader from "@/components/StockHeader";
-import ToolsDock from "@/components/ToolsDock";
+import ToolsDock, { type ToolsTab } from "@/components/ToolsDock";
 import {
   addToWatchlist,
   ApiError,
@@ -25,11 +42,13 @@ import {
   investigateTicker,
   fetchAnalysisWithFallback,
   fetchHistory,
+  fetchInvestigations,
   fetchPastReports,
   fetchStockData,
   fetchWatchlist,
   removeFromWatchlist,
 } from "@/lib/api";
+import { EXAMPLE_CASE, EXAMPLE_CASE_ID } from "@/lib/exampleCase";
 import type {
   AgentStep,
   AnalysisResponse,
@@ -70,7 +89,9 @@ const AGENT_INDEX: Record<string, number> = {
 export default function Home() {
   const [currentTicker, setCurrentTicker] = useState<string | null>(null);
   const [stockData, setStockData] = useState<StockData | null>(null);
-  const [analysisReport, setAnalysisReport] = useState<AnalysisResponse | null>(null);
+  const [analysisReport, setAnalysisReport] = useState<AnalysisResponse | null>(
+    null
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>(INITIAL_STEPS);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +102,7 @@ export default function Home() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [analyzedAt, setAnalyzedAt] = useState<string | undefined>();
   const [apiReachable, setApiReachable] = useState<boolean | null>(null);
-  const [watchlistSuccess, setWatchlistSuccess] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [activeInvestigationId, setActiveInvestigationId] = useState<
     number | null
@@ -89,9 +110,19 @@ export default function Home() {
   const [isOpeningInvestigation, setIsOpeningInvestigation] = useState(false);
   const [investigateWindow, setInvestigateWindow] =
     useState<InvestigateWindow>("1d");
+  const [ledgerKey, setLedgerKey] = useState(0);
+  const [toolsFocusRequest, setToolsFocusRequest] = useState<{
+    tab: ToolsTab;
+    key: number;
+  } | null>(null);
 
-  const hasResults = Boolean(stockData || analysisReport || isLoading);
-  const hasInvestigation = activeInvestigationId != null;
+  const { detail: caseDetail, error: caseError } = useCase(
+    activeInvestigationId
+  );
+  const lenis = useLenis();
+
+  const hasCase = activeInvestigationId != null;
+  const isExampleCase = activeInvestigationId === EXAMPLE_CASE_ID;
   const currentAgentStep = agentSteps.find((step) => step.status === "running");
   const completedAgentCount = agentSteps.filter(
     (step) => step.status === "complete"
@@ -102,6 +133,69 @@ export default function Home() {
         (e) => e.ticker.toUpperCase() === currentTicker.toUpperCase()
       )
   );
+  const caseBusy =
+    isOpeningInvestigation ||
+    (caseDetail != null &&
+      !["complete", "failed", "skipped_market_noise"].includes(
+        String(caseDetail.status)
+      ));
+
+  /* Zebra means one thing only: something here is unverified. A case that was
+     merely challenged still rests on evidence, so it gets the amber note. */
+  const unverifiedClaims = (caseDetail?.claims ?? []).filter(
+    (claim) => claim.evidence_links.length === 0
+  ).length;
+  const caseFlag = caseBusy
+    ? null
+    : caseDetail?.status === "failed"
+      ? "This case could not be settled — treat nothing below as verified."
+      : unverifiedClaims > 0
+        ? `${unverifiedClaims} of ${caseDetail?.claims?.length ?? 0} explanations below carry no evidence yet.`
+        : null;
+  const caseNote = caseFlag
+    ? null
+    : caseDetail?.da_outcome?.reversal
+      ? "The Devil's Advocate pass demoted the leading explanation."
+      : caseDetail?.da_outcome?.leading_weakened
+        ? "The Devil's Advocate pass weakened the leading explanation."
+        : null;
+
+  /* Nobody should meet three empty columns. On arrival the newest real case
+     opens; with no history at all, a saved example stands in so the page
+     teaches itself before the visitor types anything. */
+  useEffect(() => {
+    let cancelled = false;
+
+    async function openSomething() {
+      let opened: { id: number; ticker: string } | null = null;
+      try {
+        const [recent] = await fetchInvestigations(1);
+        if (recent) {
+          opened = { id: recent.id, ticker: recent.ticker };
+          setInvestigateWindow(
+            (recent.window_label || "1d") as InvestigateWindow
+          );
+        }
+      } catch {
+        /* no history reachable; the example still has us covered */
+      }
+      if (cancelled) return;
+      const target = opened ?? {
+        id: EXAMPLE_CASE_ID,
+        ticker: EXAMPLE_CASE.ticker,
+      };
+      setActiveInvestigationId(target.id);
+      setCurrentTicker(target.ticker);
+      if (!opened) {
+        setInvestigateWindow(EXAMPLE_CASE.window_label as InvestigateWindow);
+      }
+    }
+
+    void openSomething();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,8 +215,7 @@ export default function Home() {
 
   const refreshWatchlist = useCallback(async () => {
     try {
-      const wl = await fetchWatchlist();
-      setWatchlist(wl);
+      setWatchlist(await fetchWatchlist());
     } catch {
       // watchlist fetch failed; keep local state
     }
@@ -131,8 +224,7 @@ export default function Home() {
   const refreshSidebar = useCallback(async () => {
     await refreshWatchlist();
     try {
-      const hist = await fetchHistory();
-      setHistory(hist);
+      setHistory(await fetchHistory());
     } catch {
       // history optional (may fail without Chroma/OpenAI)
     }
@@ -142,19 +234,42 @@ export default function Home() {
     refreshSidebar();
   }, [refreshSidebar, user]);
 
+  useEffect(() => {
+    if (!currentTicker) return;
+    let cancelled = false;
+    void fetchStockData(currentTicker)
+      .then((quote) => {
+        if (!cancelled) setStockData(quote);
+      })
+      .catch(() => {
+        /* quote tape is optional */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTicker]);
+
   const handleUserChange = useCallback((next: AuthUser | null) => {
     setUser(next);
   }, []);
 
   const handleSourcesClick = useCallback(() => {
-    document.getElementById("data-sources")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+    if (lenis) lenis.scrollTo("#data-sources", { offset: -32 });
+    else
+      document.getElementById("data-sources")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+  }, [lenis]);
+
+  const handlePositionClick = useCallback(() => {
+    setToolsFocusRequest({ tab: "portfolio", key: Date.now() });
   }, []);
 
   function resetAgentSteps() {
-    setAgentSteps(INITIAL_STEPS.map((s) => ({ ...s, status: "waiting" as const })));
+    setAgentSteps(
+      INITIAL_STEPS.map((s) => ({ ...s, status: "waiting" as const }))
+    );
   }
 
   function markStepRunning(index: number) {
@@ -190,51 +305,63 @@ export default function Home() {
     );
   }
 
-  const handleInvestigationSelect = useCallback(
-    (id: number | null, ticker?: string) => {
-      setActiveInvestigationId(id);
-      if (ticker) {
-        setCurrentTicker(ticker.toUpperCase());
-        setRecentTickers((prev) => {
-          const symbol = ticker.toUpperCase();
-          return [symbol, ...prev.filter((t) => t !== symbol)].slice(0, 8);
-        });
-      }
-    },
-    []
-  );
+  const handleCaseSelect = useCallback((id: number, ticker?: string) => {
+    setActiveInvestigationId(id);
+    if (!ticker) return;
+    const symbol = ticker.toUpperCase();
+    setCurrentTicker(symbol);
+    setRecentTickers((prev) =>
+      [symbol, ...prev.filter((t) => t !== symbol)].slice(0, 8)
+    );
+    void fetchStockData(symbol)
+      .then(setStockData)
+      .catch(() => {
+        /* quote is optional */
+      });
+  }, []);
+
+  /* Changing the look-back has to re-open the case. Relabelling the headline
+     while the old figures stay put would make the readout lie. */
+  function handleWindowChange(next: InvestigateWindow) {
+    setInvestigateWindow(next);
+    if (next === investigateWindow) return;
+    if (currentTicker && apiReachable !== false) {
+      void runInvestigate(currentTicker, next);
+    }
+  }
 
   async function runInvestigate(
     ticker: string,
     windowLabel: InvestigateWindow | string = "1d"
   ) {
     const symbol = ticker.toUpperCase();
-    const resolvedWindow: InvestigateWindow =
-      windowLabel === "1w" ||
-      windowLabel === "1mo" ||
-      windowLabel === "6mo" ||
-      windowLabel === "1y" ||
-      windowLabel === "1d"
-        ? windowLabel
-        : "1d";
+    const resolvedWindow: InvestigateWindow = (
+      ["1d", "1w", "1mo", "6mo", "1y"] as const
+    ).includes(windowLabel as InvestigateWindow)
+      ? (windowLabel as InvestigateWindow)
+      : "1d";
+
     setInvestigateWindow(resolvedWindow);
     setError(null);
     setCurrentTicker(symbol);
-    setRecentTickers((prev) => {
-      const next = [symbol, ...prev.filter((t) => t !== symbol)];
-      return next.slice(0, 8);
-    });
+    setStockData((prev) =>
+      prev?.ticker?.toUpperCase() === symbol ? prev : null
+    );
+    setRecentTickers((prev) =>
+      [symbol, ...prev.filter((t) => t !== symbol)].slice(0, 8)
+    );
 
     const reachable = apiReachable ?? (await checkApiHealth());
     setApiReachable(reachable);
-    if (!reachable) {
-      setError(
-        "Backend API is offline — Investigate is disabled until the API is reachable."
-      );
-      return;
-    }
+    if (!reachable) return;
 
     setIsOpeningInvestigation(true);
+    void fetchStockData(symbol)
+      .then(setStockData)
+      .catch(() => {
+        /* quote is optional while the case opens */
+      });
+
     try {
       const detail = await investigateTicker({
         ticker: symbol,
@@ -243,13 +370,12 @@ export default function Home() {
         skip_if_noise: false,
       });
       setActiveInvestigationId(detail.id);
-      const stock = await fetchStockData(symbol).catch(() => null);
-      if (stock) setStockData(stock);
+      setLedgerKey((k) => k + 1);
     } catch (err) {
       setError(
         err instanceof ApiError
           ? err.message
-          : "Could not complete investigation. Please try again."
+          : "Could not open a case for this ticker. Try again in a moment."
       );
     } finally {
       setIsOpeningInvestigation(false);
@@ -263,12 +389,9 @@ export default function Home() {
     setStockData(null);
     setAnalysisReport(null);
 
-    // Don't spin forever when the API is already known offline (common on
-    // Vercel when NEXT_PUBLIC_API_URL points at a dead Railway service).
     const reachable = apiReachable ?? (await checkApiHealth());
     setApiReachable(reachable);
     if (!reachable) {
-      // Amber offline banner already explains this — don't also set a red error.
       setIsLoading(false);
       resetAgentSteps();
       return;
@@ -276,16 +399,12 @@ export default function Home() {
 
     setIsLoading(true);
     resetAgentSteps();
-
-    setRecentTickers((prev) => {
-      const next = [symbol, ...prev.filter((t) => t !== symbol)];
-      return next.slice(0, 8);
-    });
+    setRecentTickers((prev) =>
+      [symbol, ...prev.filter((t) => t !== symbol)].slice(0, 8)
+    );
 
     try {
-      const stock = await fetchStockData(symbol);
-      setStockData(stock);
-
+      setStockData(await fetchStockData(symbol));
       const analysis = await fetchAnalysisWithFallback(symbol, {
         onAgentStarted: markAgentStarted,
         onAgentCompleted: markAgentCompleted,
@@ -295,11 +414,12 @@ export default function Home() {
       setAnalyzedAt(new Date().toISOString());
       await refreshSidebar();
     } catch (err) {
-      const message =
-        err instanceof ApiError ? err.message : "Analysis failed. Please try again.";
-      setError(message);
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "The research report failed. Try again in a moment."
+      );
       resetAgentSteps();
-      // Re-check connectivity after a failed run.
       checkApiHealth().then(setApiReachable);
     } finally {
       setIsLoading(false);
@@ -308,39 +428,32 @@ export default function Home() {
 
   async function handleAddWatchlist() {
     if (!currentTicker) {
-      setError("Investigate a ticker first, then add it to your watchlist.");
+      setError("Frame a ticker first, then track it.");
       return;
     }
-
     if (isOnWatchlist) {
-      setWatchlistSuccess(`${currentTicker} is already on your watchlist.`);
-      setTimeout(() => setWatchlistSuccess(null), 3000);
+      setNotice(`${currentTicker} is already tracked.`);
+      setTimeout(() => setNotice(null), 3000);
       return;
     }
 
     setWatchlistLoading(true);
-    setWatchlistSuccess(null);
+    setNotice(null);
     setError(null);
     try {
       const entry = await addToWatchlist(currentTicker);
-      setWatchlist((prev) => {
-        const exists = prev.some(
-          (e) => e.ticker.toUpperCase() === entry.ticker.toUpperCase()
-        );
-        if (exists) return prev;
-        return [entry, ...prev];
-      });
-      setWatchlistSuccess(`${entry.ticker} added to your watchlist.`);
-      setTimeout(() => setWatchlistSuccess(null), 4000);
+      setWatchlist((prev) =>
+        prev.some((e) => e.ticker.toUpperCase() === entry.ticker.toUpperCase())
+          ? prev
+          : [entry, ...prev]
+      );
+      setNotice(`${entry.ticker} is now tracked.`);
+      setTimeout(() => setNotice(null), 4000);
       await refreshWatchlist();
-      try {
-        const hist = await fetchHistory();
-        setHistory(hist);
-      } catch {
-        // non-blocking
-      }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to add to watchlist");
+      setError(
+        err instanceof ApiError ? err.message : "Could not track that ticker."
+      );
     } finally {
       setWatchlistLoading(false);
     }
@@ -351,7 +464,9 @@ export default function Home() {
       await removeFromWatchlist(ticker);
       await refreshSidebar();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to remove from watchlist");
+      setError(
+        err instanceof ApiError ? err.message : "Could not untrack that ticker."
+      );
     }
   }
 
@@ -367,7 +482,10 @@ export default function Home() {
           final_report: reports[0].report,
           risk_output: reports[0].metadata?.risk_level
             ? {
-                risk_level: reports[0].metadata.risk_level as "LOW" | "MEDIUM" | "HIGH",
+                risk_level: reports[0].metadata.risk_level as
+                  | "LOW"
+                  | "MEDIUM"
+                  | "HIGH",
                 risk_factors: [],
                 confidence_score: 0.5,
               }
@@ -380,279 +498,232 @@ export default function Home() {
         await runAnalysis(ticker);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load past report");
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not load that past report."
+      );
     } finally {
       setHistoryLoading(false);
     }
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col">
-      <div
-        className="pointer-events-none fixed inset-0 overflow-hidden"
-        aria-hidden
-      >
-        <div className="absolute -left-32 top-1/4 h-96 w-96 rounded-full bg-violet-600/8 blur-3xl" />
-        <div className="absolute -right-32 top-1/3 h-80 w-80 rounded-full bg-cyan-500/6 blur-3xl" />
-      </div>
-
+    <PageEnter>
+      <div className="relative flex min-h-screen flex-col pb-28 sm:pb-32">
       <AppHeader
         apiReachable={apiReachable}
         user={user}
         onUserChange={handleUserChange}
         sourcesAvailable={Boolean(analysisReport && !isLoading)}
         onSourcesClick={handleSourcesClick}
-      />
-
-      <main className="relative mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        <HeroSection compact={hasResults || hasInvestigation} />
-
-        <section className="mt-6 sm:mt-8" aria-label="Investigate">
+        onPortfolioClick={handlePositionClick}
+        caseId={activeInvestigationId}
+        search={
           <SearchBar
             onInvestigate={runInvestigate}
             onDeepResearch={runAnalysis}
             isLoading={isLoading || isOpeningInvestigation}
-            recentTickers={recentTickers}
             disabled={apiReachable === false}
             windowLabel={investigateWindow}
-            onWindowLabelChange={setInvestigateWindow}
-            loadingLabel={
-              isLoading
-                ? currentTicker
-                  ? `Researching ${currentTicker}…`
-                  : "Researching…"
-                : currentTicker
-                  ? `Opening ${currentTicker}…`
-                  : "Opening case…"
-            }
+            loadingLabel={isLoading ? "Researching…" : "Framing…"}
           />
-        </section>
+        }
+      />
 
-        {apiReachable === false && (
-          <div
-            className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 sm:mt-6"
-            role="alert"
-          >
-            <p className="font-medium text-amber-100">Backend API is offline</p>
-            <p className="mt-1 text-amber-200/90">
-              This Vercel site talks to your deployed API (not your laptop). Wake
-              the Render/Railway backend, confirm{" "}
-              <code className="rounded bg-black/30 px-1">NEXT_PUBLIC_API_URL</code>{" "}
-              on Vercel, and include this site in backend{" "}
-              <code className="rounded bg-black/30 px-1">ALLOWED_ORIGINS</code>.
-              For local work use{" "}
-              <code className="rounded bg-black/30 px-1">http://localhost:3000</code>{" "}
-              with the API on port 8000.
-            </p>
+      <AppRail
+        onTool={(tab) =>
+          setToolsFocusRequest({ tab, key: Date.now() })
+        }
+      />
+
+      <EditionMarquee
+        tickers={recentTickers.length > 0 ? recentTickers : QUICK_PICKS}
+        onPick={(t) => void runInvestigate(t, investigateWindow)}
+      />
+
+      <MoveHeadline
+        ticker={currentTicker}
+        quote={stockData}
+        movePct={caseDetail?.move_pct ?? null}
+        /* The window the open case actually measured, not the one being picked. */
+        windowLabel={caseDetail?.window_label || investigateWindow}
+        triggerReason={caseDetail?.trigger_reason}
+        status={caseDetail?.status}
+        busy={caseBusy}
+        flagged={caseFlag != null}
+        flagNote={caseFlag}
+        note={caseNote}
+        isExample={isExampleCase}
+        windowControl={
+          <WindowBar
+            name="lookback"
+            options={INVESTIGATE_WINDOWS}
+            value={investigateWindow}
+            onChange={handleWindowChange}
+            disabled={isLoading || isOpeningInvestigation}
+          />
+        }
+      />
+
+      <main className="w-full flex-1 px-3 py-3 sm:px-4">
+        {(apiReachable === false || error || caseError || notice) && (
+          <div className="mb-5 space-y-2.5">
+            {apiReachable === false && (
+              <Caution title="QuantPilot cannot reach its research service">
+                New cases are paused until it answers. Nothing you saved is
+                lost. Reload in a minute and it usually comes back.
+                <span className="mt-1.5 block text-readout">
+                  Running this yourself? Start the backend, then check{" "}
+                  <code className="text-caution">NEXT_PUBLIC_API_URL</code> and{" "}
+                  <code className="text-caution">ALLOWED_ORIGINS</code>.
+                </span>
+              </Caution>
+            )}
+            {error && apiReachable !== false && (
+              <Caution title="Something failed">{error}</Caution>
+            )}
+            {caseError && <Caution title="Case unavailable">{caseError}</Caution>}
+            {notice && (
+              <p role="status" className="text-sm text-osd/85">
+                {notice}
+              </p>
+            )}
           </div>
         )}
 
-        {watchlistSuccess && (
-          <div
-            className="mt-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300 sm:mt-6"
-            role="status"
-          >
-            {watchlistSuccess}
-          </div>
-        )}
-
-        {error && apiReachable !== false && (
-          <div
-            className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300 sm:mt-6"
-            role="alert"
-          >
-            {error}
-          </div>
-        )}
-
-        <div className="mt-6 sm:mt-8">
-          <InvestigationsPanel
-            selectedId={activeInvestigationId}
-            onSelectedChange={handleInvestigationSelect}
-            onDeepResearch={runAnalysis}
-            isResearchLoading={isLoading}
-            isPipelineLoading={isOpeningInvestigation}
-            canScanHoldings={Boolean(user)}
+        <div className="grid items-stretch gap-3 md:grid-cols-2">
+          <CausesColumn
+            claims={caseDetail?.claims ?? []}
+            summary={caseDetail?.summary}
+            ticker={caseDetail?.ticker ?? currentTicker ?? undefined}
+            daOutcome={caseDetail?.da_outcome}
+            busy={caseBusy}
+            hasCase={hasCase}
+            quickPicks={
+              recentTickers.length > 0 ? recentTickers : QUICK_PICKS
+            }
+            onQuickPick={(t) => void runInvestigate(t, investigateWindow)}
+          />
+          <ReceiptsColumn
+            evidence={caseDetail?.evidence_items ?? []}
+            claims={caseDetail?.claims ?? []}
+            busy={caseBusy}
+            hasCase={hasCase}
           />
         </div>
 
-        <ToolsDock
-          user={user}
-          watchlist={watchlist}
-          history={history}
-          currentTicker={currentTicker}
-          watchlistLoading={watchlistLoading}
-          historyLoading={historyLoading}
-          isLoadingAnalysis={isLoading}
-          onSelectTicker={runInvestigate}
-          onOpenInvestigation={(id, ticker) =>
-            handleInvestigationSelect(id, ticker)
-          }
-          onHistorySelect={handleHistorySelect}
-          onAddWatchlist={handleAddWatchlist}
-          onRemoveWatchlist={handleRemoveWatchlist}
-        />
-
-        <div className="mt-6 space-y-6 sm:mt-8 lg:space-y-8">
-          {stockData && (
-            <StockHeader
-              stock={stockData}
-              analysis={analysisReport}
-              onAddToWatchlist={handleAddWatchlist}
-              watchlistLoading={watchlistLoading}
-              isOnWatchlist={isOnWatchlist}
+        {hasCase && currentTicker && activeInvestigationId != null && (
+          <div className="mt-3">
+            <InvestigationChatPanel
+              investigationId={activeInvestigationId}
+              ticker={currentTicker}
             />
-          )}
+          </div>
+        )}
 
-          {(isLoading || analysisReport) && (
-            <div>
-              <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-                Deep research report
-              </h2>
+        <div className="mt-3">
+          <HowItWorks />
+        </div>
+
+        <div className="mt-3">
+          <CaseHistory
+            selectedId={activeInvestigationId}
+            onSelect={handleCaseSelect}
+            refreshKey={ledgerKey}
+          />
+        </div>
+
+        <div className="mt-4">
+          <ToolsDock
+            user={user}
+            watchlist={watchlist}
+            history={history}
+            currentTicker={currentTicker}
+            watchlistLoading={watchlistLoading}
+            historyLoading={historyLoading}
+            isLoadingAnalysis={isLoading}
+            onSelectTicker={runInvestigate}
+            onOpenInvestigation={(id, ticker) => handleCaseSelect(id, ticker)}
+            onHistorySelect={handleHistorySelect}
+            onAddWatchlist={handleAddWatchlist}
+            onRemoveWatchlist={handleRemoveWatchlist}
+            focusRequest={toolsFocusRequest}
+          />
+        </div>
+
+        {(isLoading || analysisReport) && (
+          <div className="mt-4 space-y-4">
+            <Bracketed as="section" large className="p-4 sm:p-5">
+              <ColumnHeader
+                aside={`${completedAgentCount}/${agentSteps.length}`}
+              >
+                Deep research
+              </ColumnHeader>
               <AgentWorkflow
                 steps={agentSteps}
                 isLoading={isLoading}
                 collapsed={!isLoading && !!analysisReport}
               />
-            </div>
-          )}
+            </Bracketed>
 
-          {isLoading && (
-            <LoadingPipeline
-              ticker={currentTicker}
-              currentStep={currentAgentStep}
-              completedCount={completedAgentCount}
-              totalCount={agentSteps.length}
-            />
-          )}
-
-          {analysisReport && !isLoading && (
-            <>
-              {analysisReport.investment_memo && (
-                <InvestmentMemoPanel memo={analysisReport.investment_memo} />
-              )}
-
-              <details
-                className="group"
-                open={!analysisReport.investment_memo}
-              >
-                <summary className="card-surface flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition hover:border-violet-500/25 [&::-webkit-details-marker]:hidden">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-200">
-                      Detailed research sections
-                    </p>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      {analysisReport.investment_memo
-                        ? "Long-form agent write-ups (thesis/decision already in the memo)"
-                        : "Executive summary, analysis sections, and recommendation"}
-                    </p>
-                  </div>
-                  <span className="text-lg text-slate-500 transition group-open:rotate-45">
-                    +
-                  </span>
-                </summary>
-                <div className="mt-3">
-                  <ReportDisplay
-                    analysis={analysisReport}
-                    omitOverlappingSummary={Boolean(
-                      analysisReport.investment_memo
-                    )}
-                  />
-                </div>
-              </details>
-
-              <details className="group">
-                <summary className="card-surface flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition hover:border-cyan-500/25 [&::-webkit-details-marker]:hidden">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-200">
-                      Source agent evidence
-                    </p>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      Earnings, macro, verification, and SEC filings
-                      {!analysisReport.investment_memo
-                        ? " · plus bull vs bear"
-                        : ""}
-                    </p>
-                  </div>
-                  <span className="text-lg text-slate-500 transition group-open:rotate-45">
-                    +
-                  </span>
-                </summary>
-                <div className="mt-3 space-y-6">
-                  {!analysisReport.investment_memo &&
-                    analysisReport.debate_output && (
-                      <DebatePanel debate={analysisReport.debate_output} />
-                    )}
-                  <ResearchExtrasPanel analysis={analysisReport} />
-                  {currentTicker && (
-                    <SECFilingsPanel
-                      ticker={currentTicker}
-                      secOutput={analysisReport.sec_output}
-                    />
-                  )}
-                </div>
-              </details>
-
-              <CitationsPanel
-                analysis={analysisReport}
-                analyzedAt={analyzedAt}
+            {isLoading && (
+              <LoadingPipeline
+                ticker={currentTicker}
+                currentStep={currentAgentStep}
+                completedCount={completedAgentCount}
+                totalCount={agentSteps.length}
               />
-              {currentTicker && (
-                <ResearchChatPanel
-                  ticker={currentTicker}
-                  analysis={analysisReport}
-                />
-              )}
-            </>
-          )}
+            )}
 
-          {!hasResults && !hasInvestigation && !error && (
-            <div className="space-y-6">
-              <div className="gradient-border relative overflow-hidden px-6 py-12 text-center sm:py-16">
-                <div
-                  className="pointer-events-none absolute left-1/2 top-8 h-24 w-24 -translate-x-1/2 rounded-full bg-violet-500/20 blur-2xl"
-                  aria-hidden
-                />
-                <div className="relative mx-auto flex h-16 w-16 animate-float items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/30 to-cyan-500/20 text-3xl shadow-glow">
-                  ⌕
-                </div>
-                <p className="font-display relative mt-6 text-xl font-bold text-white sm:text-2xl">
-                  start with a ticker{" "}
-                  <span className="gradient-text">above</span>
-                </p>
-                <p className="relative mx-auto mt-3 max-w-md text-sm leading-relaxed text-slate-500">
-                  Pick a look-back window (including 6 months), hit investigate,
-                  then read the case in the Evidence Ledger. Past-case search is
-                  optional under “Find a past case.”
-                </p>
-                {watchlist.length > 0 && (
-                  <div className="relative mt-6 flex flex-wrap justify-center gap-2">
-                    <span className="w-full text-xs text-slate-600">
-                      from your watchlist
-                    </span>
-                    {watchlist.slice(0, 4).map((e) => (
-                      <button
-                        key={e.ticker}
-                        type="button"
-                        onClick={() => void runInvestigate(e.ticker)}
-                        className="rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-1.5 text-sm font-medium text-violet-200 transition hover:bg-violet-500/20"
-                      >
-                        investigate ${e.ticker}
-                      </button>
-                    ))}
-                  </div>
+            {analysisReport && !isLoading && (
+              <>
+                {analysisReport.investment_memo && (
+                  <InvestmentMemoPanel memo={analysisReport.investment_memo} />
                 )}
-              </div>
-              <div>
-                <h2 className="panel-title mb-4">what you get</h2>
-                <FeatureCards />
-              </div>
-            </div>
-          )}
-        </div>
+
+                <ReportDisplay
+                  analysis={analysisReport}
+                  omitOverlappingSummary={Boolean(
+                    analysisReport.investment_memo
+                  )}
+                />
+
+                {analysisReport.debate_output && (
+                  <DebatePanel debate={analysisReport.debate_output} />
+                )}
+
+                <ResearchExtrasPanel analysis={analysisReport} />
+
+                {currentTicker && (
+                  <SECFilingsPanel
+                    ticker={currentTicker}
+                    secOutput={analysisReport.sec_output}
+                  />
+                )}
+
+                <CitationsPanel
+                  analysis={analysisReport}
+                  analyzedAt={analyzedAt}
+                />
+
+                {currentTicker && (
+                  <ResearchChatPanel
+                    ticker={currentTicker}
+                    analysis={analysisReport}
+                  />
+                )}
+              </>
+            )}
+          </div>
+        )}
       </main>
 
-      <AppFooter />
+      <AppFooter
+        caseId={activeInvestigationId}
+        windowLabel={investigateWindow}
+      />
     </div>
+    </PageEnter>
   );
 }

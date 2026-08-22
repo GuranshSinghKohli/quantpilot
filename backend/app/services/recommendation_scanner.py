@@ -59,6 +59,40 @@ BEARISH_WORDS = {
 }
 
 
+CATALYST_PATTERNS = (
+    ("iphone", "Product-cycle headlines mention a new iPhone — if that launch lands, it can support the tape; not a confirmed move."),
+    ("apple event", "An Apple event is in the news — a product reveal can move the name either way."),
+    ("robotaxi", "Robotaxi / Cybercab chatter is in the tape — a demo or timeline update is a hint, not a guarantee."),
+    ("cybercab", "Robotaxi / Cybercab chatter is in the tape — a demo or timeline update is a hint, not a guarantee."),
+    ("fsd", "FSD / autonomy headlines are active — a software or regulatory update could matter near-term."),
+    ("unsupervised", "Autonomy / unsupervised-driving headlines are active — treat as a possible catalyst, not a call."),
+    ("earnings", "Earnings are in the recent flow — the print and guide can reprice the name quickly."),
+    ("guidance", "Guidance talk is in the headlines — a raise or cut can matter more than the print."),
+    ("keynote", "A keynote / launch event is being discussed — watch the product, not a promised rally."),
+    ("unveil", "A product unveil is in the news — possible near-term driver if it actually ships."),
+    ("launch", "Launch / ship headlines are in the mix — a clean event can help; a slip can hurt."),
+)
+
+
+def _headline_titles(headlines: List[Dict[str, Any]], limit: int = 8) -> List[str]:
+    titles: List[str] = []
+    for item in headlines[:limit]:
+        title = (item.get("title") or "").strip()
+        if title:
+            titles.append(title)
+    return titles
+
+
+def _catalyst_from_headlines(headlines: List[Dict[str, Any]]) -> Optional[str]:
+    blob = " ".join(_headline_titles(headlines)).lower()
+    if not blob:
+        return None
+    for needle, hint in CATALYST_PATTERNS:
+        if needle in blob:
+            return hint
+    return None
+
+
 def _news_sentiment(headlines: List[Dict[str, Any]]) -> Tuple[float, str]:
     if not headlines:
         return 0.0, "Limited recent news coverage"
@@ -116,6 +150,11 @@ def _score_ticker(
     score += news_delta
     reasons.append(news_reason)
 
+    catalyst = _catalyst_from_headlines(headlines)
+    if catalyst:
+        score += 0.04
+        reasons.append(catalyst)
+
     if not headlines:
         score -= 0.05
         reasons.append("Thin news flow lowers conviction")
@@ -129,45 +168,62 @@ def _score_ticker(
     else:
         outlook = "neutral"
 
-    return score, outlook, reasons[:4]
+    return score, outlook, reasons[:5]
 
 
-async def _scan_one(ticker: str) -> Optional[RecommendationPick]:
+async def _scan_one(
+    ticker: str,
+) -> Optional[Tuple[RecommendationPick, List[str]]]:
     try:
         stock, headlines = await asyncio.gather(
             get_stock_data(ticker),
             get_ticker_news(ticker),
         )
         score, outlook, reasons = _score_ticker(stock, headlines)
+        titles = _headline_titles(headlines, 6)
+        catalyst = _catalyst_from_headlines(headlines) or ""
 
         near_term = {
-            "bullish": "Near-term outlook: constructive, signals favor potential upside",
-            "neutral": "Near-term outlook: mixed, wait for clearer trend",
-            "bearish": "Near-term outlook: cautious, headwinds in current data",
+            "bullish": "Constructive tape — a named catalyst below is a hint, not a call that it will go up.",
+            "neutral": "Mixed tape — watch the named event; it can cut either way.",
+            "bearish": "Cautious tape — even a product event is only a possible offset, not a rescue.",
         }[outlook]
 
-        return RecommendationPick(
-            ticker=stock.ticker,
-            score=score,
-            outlook=outlook,
-            near_term_view=near_term,
-            reasons=reasons,
-            current_price=stock.current_price,
+        return (
+            RecommendationPick(
+                ticker=stock.ticker,
+                score=score,
+                outlook=outlook,
+                near_term_view=near_term,
+                catalyst_hint=catalyst,
+                reasons=reasons,
+                current_price=stock.current_price,
+            ),
+            titles,
         )
     except Exception:
         return None
 
 
-async def _enrich_with_llm(picks: List[RecommendationPick]) -> List[RecommendationPick]:
+async def _enrich_with_llm(
+    picks: List[RecommendationPick],
+    headlines_by_ticker: Dict[str, List[str]],
+) -> List[RecommendationPick]:
     if not picks:
         return picks
 
-    payload = [p.model_dump() for p in picks[:5]]
+    payload = []
+    for pick in picks[:5]:
+        row = pick.model_dump()
+        row["recent_headlines"] = headlines_by_ticker.get(pick.ticker, [])[:6]
+        payload.append(row)
+
     fallback = {
         "picks": [
             {
                 "ticker": p.ticker,
                 "investment_note": p.near_term_view,
+                "catalyst_hint": p.catalyst_hint,
             }
             for p in picks[:5]
         ]
@@ -175,23 +231,40 @@ async def _enrich_with_llm(picks: List[RecommendationPick]) -> List[Recommendati
 
     result = await call_openai_json(
         system_prompt=(
-            "You are a quantitative screening assistant. Given scored stock picks, "
-            "write one concise sentence per ticker on near-term (weeks to 3 months) "
-            "investment appeal. Be balanced; mention risks. Respond JSON only: "
-            '{"picks": [{"ticker": string, "investment_note": string}, ...]}'
+            "You enrich equity screen picks with catalyst HINTS, not price calls. "
+            "Use the recent_headlines. Name a specific upcoming or just-reported "
+            "event when the headlines support it (new iPhone cycle, robotaxi/Cybercab "
+            "or FSD update, earnings/guide, product keynote). "
+            "If headlines are silent, you may cite a well-known near-term product "
+            "calendar only as an unverified hint. "
+            "Phrase as possibility: 'if X happens, that can support / pressure the tape'. "
+            "Never say the stock will go up or is a buy. One counter-risk in the note. "
+            "Respond JSON only: "
+            '{"picks": [{"ticker": string, "investment_note": string, '
+            '"catalyst_hint": string}, ...]}'
         ),
-        user_prompt=f"Enrich these top picks:\n{payload}",
+        user_prompt=f"Enrich these top picks with named event hints:\n{payload}",
         fallback=fallback,
     )
 
-    notes = {item["ticker"]: item.get("investment_note", "") for item in result.get("picks", [])}
+    notes = {
+        item["ticker"]: item
+        for item in result.get("picks", [])
+        if item.get("ticker")
+    }
     enriched = []
     for pick in picks:
-        note = notes.get(pick.ticker)
+        item = notes.get(pick.ticker) or {}
+        note = (item.get("investment_note") or "").strip()
+        hint = (item.get("catalyst_hint") or "").strip() or pick.catalyst_hint
+        updates: Dict[str, Any] = {}
         if note:
-            enriched.append(pick.model_copy(update={"near_term_view": note}))
-        else:
-            enriched.append(pick)
+            updates["near_term_view"] = note
+        if hint:
+            updates["catalyst_hint"] = hint
+            if hint not in pick.reasons:
+                updates["reasons"] = [hint, *pick.reasons][:5]
+        enriched.append(pick.model_copy(update=updates) if updates else pick)
     return enriched
 
 
@@ -207,11 +280,13 @@ async def scan_recommendations(
     symbols = symbols[:12]
 
     results = await asyncio.gather(*[_scan_one(s) for s in symbols])
-    valid = [r for r in results if r is not None]
+    scanned = [r for r in results if r is not None]
+    valid = [row[0] for row in scanned]
+    headlines_by_ticker = {row[0].ticker: row[1] for row in scanned}
     valid.sort(key=lambda p: p.score, reverse=True)
 
     top = valid[:limit]
-    top = await _enrich_with_llm(top)
+    top = await _enrich_with_llm(top, headlines_by_ticker)
 
     return RecommendationsResponse(
         disclaimer=DISCLAIMER,

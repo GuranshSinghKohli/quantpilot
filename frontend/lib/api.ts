@@ -382,6 +382,37 @@ export async function fetchPortfolioAnalysis(): Promise<PortfolioAnalysis> {
   });
 }
 
+/** ANSH — OpenClaw portfolio advisor chat. */
+export async function sendAnshChat(body: {
+  message: string;
+  horizon?: string | null;
+  risk_tolerance?: string | null;
+  goal?: string | null;
+  history?: { role: "user" | "assistant"; content: string }[];
+}): Promise<ChatResponse> {
+  return apiFetch<ChatResponse>("/api/portfolio/ansh/chat", {
+    method: "POST",
+    body: JSON.stringify({
+      message: body.message,
+      horizon: body.horizon ?? null,
+      risk_tolerance: body.risk_tolerance ?? null,
+      goal: body.goal ?? null,
+      history: body.history ?? [],
+    }),
+    timeoutMs: 90_000,
+  });
+}
+
+export async function addPortfolioHolding(
+  ticker: string
+): Promise<WatchlistEntry> {
+  const symbol = ticker.toUpperCase().trim();
+  return apiFetch<WatchlistEntry>(
+    `/api/portfolio/holdings/${encodeURIComponent(symbol)}`,
+    { method: "POST" }
+  );
+}
+
 export async function previewPortfolioSync(
   options: { rawText?: string; useOpenclaw?: boolean }
 ): Promise<PortfolioSyncOutput> {
@@ -550,6 +581,14 @@ export async function fetchInvestigation(
   id: number
 ): Promise<InvestigationDetail> {
   return apiFetch<InvestigationDetail>(`/api/investigations/${id}`);
+}
+
+export async function deleteInvestigation(
+  id: number
+): Promise<{ ok: boolean; id: number }> {
+  return apiFetch<{ ok: boolean; id: number }>(`/api/investigations/${id}`, {
+    method: "DELETE",
+  });
 }
 
 export async function createInvestigation(body: {

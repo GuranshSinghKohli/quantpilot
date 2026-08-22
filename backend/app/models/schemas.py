@@ -15,10 +15,21 @@ class HealthResponse(BaseModel):
 class StockResponse(BaseModel):
     ticker: str
     current_price: Optional[float] = None
+    previous_close: Optional[float] = None
     market_cap: Optional[int] = None
     pe_ratio: Optional[float] = Field(None, description="Trailing P/E ratio")
+    forward_pe: Optional[float] = None
+    eps: Optional[float] = None
+    dividend_yield: Optional[float] = None
+    beta: Optional[float] = None
+    volume: Optional[int] = None
+    avg_volume: Optional[int] = None
+    day_high: Optional[float] = None
+    day_low: Optional[float] = None
     fifty_two_week_high: Optional[float] = None
     fifty_two_week_low: Optional[float] = None
+    sector: Optional[str] = None
+    industry: Optional[str] = None
 
 
 class FilingResponse(BaseModel):
@@ -41,6 +52,7 @@ class RecommendationPick(BaseModel):
     score: float = Field(ge=0.0, le=1.0, description="Higher = more constructive near-term setup")
     outlook: Literal["bullish", "neutral", "bearish"] = "neutral"
     near_term_view: str = ""
+    catalyst_hint: str = ""
     reasons: List[str] = Field(default_factory=list)
     current_price: Optional[float] = None
 

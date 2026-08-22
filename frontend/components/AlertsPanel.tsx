@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { AlertEvent, AlertRule, AuthUser } from "@/types";
 import {
@@ -206,7 +207,7 @@ export default function AlertsPanel({
     return (
       <div className="card-surface p-5">
         <h3 className="panel-title">smart alerts</h3>
-        <p className="mt-3 text-sm leading-relaxed text-slate-500">
+        <p className="mt-3 text-sm leading-relaxed text-readout">
           Sign in for threshold alerts and material investigation notifications
           when a holdings scan finds something that matters.
         </p>
@@ -219,7 +220,7 @@ export default function AlertsPanel({
       <div className="flex items-center justify-between gap-2">
         <div>
           <h3 className="panel-title">smart alerts</h3>
-          <p className="mt-0.5 text-[11px] text-slate-600">
+          <p className="mt-0.5 text-[11px] text-readout">
             threshold rules + material investigation notifies
           </p>
         </div>
@@ -228,15 +229,20 @@ export default function AlertsPanel({
             type="button"
             onClick={load}
             disabled={loading || evaluating}
-            className="rounded-lg border border-white/[0.08] px-2.5 py-1 text-xs text-slate-400 hover:text-violet-300 disabled:opacity-50"
+            aria-label="Reload alerts"
+            className="bk bk-quiet bk-snap px-2.5 py-2 text-readout transition-colors hover:text-caution disabled:opacity-50"
           >
-            {loading ? "…" : "↻"}
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+              strokeWidth={1.5}
+              aria-hidden
+            />
           </button>
           <button
             type="button"
             onClick={handleEvaluate}
             disabled={evaluating || loading}
-            className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-200 hover:bg-violet-500/20 disabled:opacity-50"
+            className="rounded-lg border border-hud bg-caution-50 px-2.5 py-1 text-xs font-medium text-down hover:bg-osd hover:text-letterbox disabled:opacity-50"
           >
             {evaluating ? "checking…" : "Check now"}
           </button>
@@ -256,14 +262,14 @@ export default function AlertsPanel({
             value={ticker}
             onChange={(e) => setTicker(e.target.value.toUpperCase())}
             placeholder="TICKER"
-            className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500/40"
+            className="rounded-lg border border-hud bg-letterbox px-3 py-2 text-sm text-osd outline-none focus:border-hud"
           />
           <select
             value={alertType}
             onChange={(e) =>
               handleAlertTypeChange(e.target.value as FormAlertType)
             }
-            className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500/40"
+            className="rounded-lg border border-hud bg-letterbox px-3 py-2 text-sm text-osd outline-none focus:border-hud"
           >
             {ALERT_TYPES.map((t) => (
               <option key={t.value} value={t.value}>
@@ -279,7 +285,7 @@ export default function AlertsPanel({
                 onChange={(e) =>
                   setSentimentDirection(e.target.value as "bullish" | "bearish")
                 }
-                className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500/40"
+                className="rounded-lg border border-hud bg-letterbox px-3 py-2 text-sm text-osd outline-none focus:border-hud"
               >
                 <option value="bullish">Bullish headlines</option>
                 <option value="bearish">Bearish headlines</option>
@@ -287,7 +293,7 @@ export default function AlertsPanel({
               <select
                 value={threshold}
                 onChange={(e) => setThreshold(e.target.value)}
-                className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500/40"
+                className="rounded-lg border border-hud bg-letterbox px-3 py-2 text-sm text-osd outline-none focus:border-hud"
               >
                 {SENTIMENT_STRENGTHS.map((s) => (
                   <option key={s.value} value={s.value}>
@@ -307,18 +313,18 @@ export default function AlertsPanel({
               placeholder={
                 alertType === "volatility_pct" ? "e.g. 3" : "e.g. 150"
               }
-              className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500/40 sm:col-span-1 lg:col-span-1"
+              className="rounded-lg border border-hud bg-letterbox px-3 py-2 text-sm text-osd outline-none focus:border-hud sm:col-span-1 lg:col-span-1"
             />
           )}
 
           <button
             type="submit"
-            className="rounded-lg bg-gradient-to-r from-violet-600 to-cyan-600 px-3 py-2 text-sm font-medium text-white sm:col-span-2 lg:col-span-4"
+            className="bg-caution px-3 py-2.5 font-display text-xs font-bold uppercase tracking-osd text-letterbox transition-colors hover:bg-osd sm:col-span-2 lg:col-span-4"
           >
             Add rule
           </button>
         </div>
-        <p className="text-[10px] leading-relaxed text-slate-600">
+        <p className="text-[10px] leading-relaxed text-readout">
           {thresholdHint(alertType)}
           {isSentiment
             ? ` Example: ${sentimentDirection} + medium alerts when the headline score hits ${
@@ -329,32 +335,32 @@ export default function AlertsPanel({
       </form>
 
       <div>
-        <p className="text-[10px] uppercase tracking-wider text-slate-600">
+        <p className="text-[10px] uppercase tracking-wider text-readout">
           rules ({rules.length})
         </p>
         {rules.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">No rules yet.</p>
+          <p className="mt-2 text-sm text-readout">No rules yet.</p>
         ) : (
           <ul className="mt-2 space-y-1.5">
             {rules.map((rule) => (
               <li
                 key={rule.id}
-                className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-xs"
+                className="flex items-center justify-between gap-2 rounded-xl border border-hud bg-letterbox px-3 py-2 text-xs"
               >
                 <button
                   type="button"
                   onClick={() => onSelectTicker?.(rule.ticker)}
-                  className="text-left text-slate-200 hover:text-violet-200"
+                  className="text-left text-osd hover:text-down"
                 >
                   <span className="font-display font-semibold">{rule.ticker}</span>{" "}
-                  <span className="text-slate-500">
+                  <span className="text-readout">
                     {formatRuleThreshold(rule)}
                   </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleDelete(rule.id)}
-                  className="text-slate-500 hover:text-red-300"
+                  className="text-readout hover:text-red-300"
                 >
                   remove
                 </button>
@@ -366,21 +372,21 @@ export default function AlertsPanel({
 
       <div>
         <div className="flex items-center justify-between">
-          <p className="text-[10px] uppercase tracking-wider text-slate-600">
+          <p className="text-[10px] uppercase tracking-wider text-readout">
             notifications
           </p>
           {events.some((e) => !e.is_read) && (
             <button
               type="button"
               onClick={handleMarkAll}
-              className="text-[10px] text-violet-300 hover:underline"
+              className="text-[10px] text-readout hover:underline"
             >
               mark all read
             </button>
           )}
         </div>
         {events.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-500">
+          <p className="mt-2 text-sm text-readout">
             No alerts yet. Add a rule, or wait for a material investigation from
             Scan my holdings.
           </p>
@@ -391,8 +397,8 @@ export default function AlertsPanel({
                 key={event.id}
                 className={`rounded-xl border px-3 py-2.5 ${
                   event.is_read
-                    ? "border-white/[0.04] bg-white/[0.01]"
-                    : "border-violet-500/25 bg-violet-500/5"
+                    ? "border-hud bg-letterbox"
+                    : "border-hud bg-caution-50"
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -412,14 +418,14 @@ export default function AlertsPanel({
                           onSelectTicker?.(event.ticker);
                         }
                       }}
-                      className="font-display text-sm font-semibold text-white hover:text-violet-200"
+                      className="font-display text-sm font-semibold text-osd hover:text-down"
                     >
                       {event.title}
                     </button>
-                    <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                    <p className="mt-1 text-xs leading-relaxed text-readout">
                       {event.message}
                     </p>
-                    <p className="mt-1 text-[10px] text-slate-600">
+                    <p className="mt-1 text-[10px] text-readout">
                       {formatWhen(event.created_at)}
                       {event.alert_type === "investigation_material"
                         ? " · investigation"
@@ -447,7 +453,7 @@ export default function AlertsPanel({
                     <button
                       type="button"
                       onClick={() => handleMarkRead(event.id)}
-                      className="shrink-0 text-[10px] text-violet-300 hover:underline"
+                      className="shrink-0 text-[10px] text-readout hover:underline"
                     >
                       mark read
                     </button>
