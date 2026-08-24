@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
 import traceback
 from typing import Any, Dict, List, Optional
 
@@ -26,6 +28,9 @@ from app.services import (
     investigation_roster,
     trigger_logic,
 )
+from app.config import INVESTIGATION_GRAPH_ENABLED
+from app.security.llm_budget import bind_investigation_budget
+from app.security.request_context import set_investigation_id
 from app.services.move_detector import MoveSnapshot, detect_move
 
 logger = get_logger("investigation_runner")
@@ -86,6 +91,17 @@ async def run_investigation(
 
     symbol = detail.ticker
     window = window_label or detail.window_label or "1d"
+    set_investigation_id(investigation_id)
+    bind_investigation_budget(investigation_id)
+    log_event(
+        logger,
+        logging.INFO,
+        "INVESTIGATION_STARTED",
+        event="INVESTIGATION_STARTED",
+        ticker=symbol,
+        investigation_id=investigation_id,
+        owner_key=owner_key,
+    )
 
     try:
         evidence_ledger_store.set_status(
@@ -131,24 +147,146 @@ async def run_investigation(
             summary=move.detail,
         )
 
-        plan = await investigation_planner_agent.plan_investigation(
-            move, asset_hint=move.asset_class or "equity"
-        )
         move_prefix = (move.detail or "").strip()
-        collect_note = f"Collecting evidence: {plan.get('focus', '')[:200]}"
-        evidence_ledger_store.set_status(
-            db,
-            owner_key=owner_key,
-            investigation_id=investigation_id,
-            status="collecting",
-            summary=(
-                f"{move_prefix} {collect_note}".strip()
-                if move_prefix
-                else collect_note
-            )[:2000],
-        )
+        graph_result = None
+        memory_payload: Dict[str, Any] = {}
+        try:
+            from app.services import company_memory as company_memory_service
 
-        evidence_rows = await _collect_evidence(move, plan)
+            memory_payload = company_memory_service.retrieve_for_investigation(
+                db,
+                owner_key=owner_key,
+                ticker=symbol,
+                event={"event_type": "PRICE_MOVE", "ticker": symbol},
+                move_pct=move.move_pct,
+                investigation_id=investigation_id,
+            ).model_dump()
+        except Exception as mem_exc:
+            log_event(
+                logger,
+                logging.WARNING,
+                "Company memory retrieval skipped",
+                investigation_id=investigation_id,
+                error=str(mem_exc),
+            )
+            memory_payload = {}
+        if INVESTIGATION_GRAPH_ENABLED:
+            from app.workflows.investigation_graph import run_investigation_graph
+
+            evidence_ledger_store.set_status(
+                db,
+                owner_key=owner_key,
+                investigation_id=investigation_id,
+                status="collecting",
+                summary=(
+                    f"{move_prefix} Planning and collecting evidence…".strip()
+                    if move_prefix
+                    else "Planning and collecting evidence…"
+                )[:2000],
+            )
+            graph_result = await run_investigation_graph(
+                move,
+                ticker=symbol,
+                investigation_id=investigation_id,
+                asset_class=move.asset_class or "equity",
+                event={
+                    "event_type": "PRICE_MOVE",
+                    "ticker": symbol,
+                    "magnitude": move.move_pct,
+                    "residual_pct": getattr(move, "residual_pct", None),
+                    "z_score": getattr(move, "move_zscore", None),
+                },
+                owner_key=owner_key,
+                company_memory=memory_payload,
+            )
+            plan = graph_result.plan
+            evidence_rows = graph_result.evidence_rows
+            ranked = graph_result.ranked
+            verified = graph_result.verified
+            da = graph_result.da
+            final_hypotheses = list(graph_result.hypotheses)
+        else:
+            plan = await investigation_planner_agent.plan_investigation(
+                move,
+                asset_hint=move.asset_class or "equity",
+                company_memory=memory_payload,
+            )
+            collect_note = f"Collecting evidence: {plan.get('focus', '')[:200]}"
+            evidence_ledger_store.set_status(
+                db,
+                owner_key=owner_key,
+                investigation_id=investigation_id,
+                status="collecting",
+                summary=(
+                    f"{move_prefix} {collect_note}".strip()
+                    if move_prefix
+                    else collect_note
+                )[:2000],
+            )
+            evidence_rows = await _collect_evidence(move, plan)
+            from app.services import evidence_graph as evidence_graph_service
+
+            event = plan.get("event") if isinstance(plan.get("event"), dict) else {}
+            raw_ts = (event or {}).get("occurred_at") or (event or {}).get(
+                "detected_at"
+            )
+            event_time = None
+            if raw_ts:
+                from app.services import hypothesis_engine as _hyp_engine
+
+                event_time = _hyp_engine._parse_time(raw_ts)
+            evidence_rows, _ = evidence_graph_service.dedupe_items(
+                evidence_rows,
+                investigation_id=investigation_id,
+                event_time=event_time,
+            )
+            ranked = await hypothesis_ranker_agent.rank_hypotheses(
+                move, plan, evidence_rows
+            )
+            evidence_ledger_store.set_status(
+                db,
+                owner_key=owner_key,
+                investigation_id=investigation_id,
+                status="verifying",
+                summary="Verification: grounding claims to evidence…",
+            )
+            linear_snap = evidence_graph_service.build_snapshot(
+                ranked.get("hypotheses") or [],
+                evidence_rows,
+                investigation_id=investigation_id,
+            )
+            linear_ctx = evidence_graph_service.advocate_context(linear_snap)
+            linear_ctx["claim_assessments"] = linear_snap.assessments
+            linear_ctx["event"] = event
+            linear_ctx["company_memory"] = memory_payload
+            if memory_payload:
+                from app.services.company_memory import historical_vs_current_note
+
+                linear_ctx["historical_memory_note"] = historical_vs_current_note()
+            verified = await investigation_verification_agent.verify_hypotheses(
+                symbol,
+                ranked.get("hypotheses") or [],
+                evidence_rows,
+                hypothesis_context=linear_ctx,
+                investigation_id=investigation_id,
+                event_time=event_time,
+            )
+            evidence_ledger_store.set_status(
+                db,
+                owner_key=owner_key,
+                investigation_id=investigation_id,
+                status="verifying",
+                summary="Devil's Advocate: stress-testing the leading hypothesis…",
+            )
+            linear_ctx["verification_report"] = verified.get("verification_report") or {}
+            da = await devils_advocate_agent.stress_test_leading(
+                move,
+                verified.get("hypotheses") or [],
+                evidence_rows,
+                hypothesis_context=linear_ctx,
+            )
+            final_hypotheses = da.get("hypotheses") or verified.get("hypotheses") or []
+
         evidence_ids = evidence_ledger_store.replace_system_evidence(
             db,
             owner_key=owner_key,
@@ -156,39 +294,6 @@ async def run_investigation(
             items=evidence_rows,
         )
 
-        evidence_ledger_store.set_status(
-            db,
-            owner_key=owner_key,
-            investigation_id=investigation_id,
-            status="verifying",
-            summary="Ranking competing hypotheses…",
-        )
-
-        ranked = await hypothesis_ranker_agent.rank_hypotheses(move, plan, evidence_rows)
-
-        evidence_ledger_store.set_status(
-            db,
-            owner_key=owner_key,
-            investigation_id=investigation_id,
-            status="verifying",
-            summary="Verification: grounding claims to evidence…",
-        )
-        verified = await investigation_verification_agent.verify_hypotheses(
-            symbol, ranked.get("hypotheses") or [], evidence_rows
-        )
-
-        evidence_ledger_store.set_status(
-            db,
-            owner_key=owner_key,
-            investigation_id=investigation_id,
-            status="verifying",
-            summary="Devil's Advocate: stress-testing the leading hypothesis…",
-        )
-        da = await devils_advocate_agent.stress_test_leading(
-            move, verified.get("hypotheses") or [], evidence_rows
-        )
-
-        final_hypotheses = da.get("hypotheses") or verified.get("hypotheses") or []
         # Hard enforce FR-3 again after DA reorder.
         final_hypotheses = [
             h for h in final_hypotheses if h.get("evidence_indices")
@@ -218,6 +323,20 @@ async def run_investigation(
             "notes": da.get("notes") or [],
             "confidence_delta": float(da.get("confidence_delta") or 0),
             "citation_coverage": float(verified.get("citation_coverage") or 0),
+            "challenge_severity": da.get("challenge_severity") or "",
+            "recommendation": da.get("recommendation") or "",
+            "alternative_hypothesis_id": da.get("alternative_hypothesis_id") or "",
+            "additional_evidence_needed": da.get("additional_evidence_needed") or [],
+            "questionable_assumptions": da.get("questionable_assumptions") or [],
+            "conclusion_strength": (
+                (graph_result.conclusion_strength if graph_result is not None else "")
+                or (verified.get("verification_report") or {}).get("conclusion_strength")
+                or ""
+            ),
+            "confidence": (
+                ((graph_result.final_report or {}).get("confidence") if graph_result is not None else "")
+                or ""
+            ),
         }
         evidence_ledger_store.set_verification_audit(
             db,
@@ -243,13 +362,8 @@ async def run_investigation(
                 verification_notes=ver_notes,
                 da_outcome=da_payload,
             )
-            evidence_ledger_store.set_roster_context(
-                db,
-                owner_key=owner_key,
-                investigation_id=investigation_id,
-                roster=roster,
-            )
         except Exception as roster_exc:
+            roster = {}
             log_event(
                 logger,
                 logging.WARNING,
@@ -257,13 +371,105 @@ async def run_investigation(
                 investigation_id=investigation_id,
                 error=str(roster_exc),
             )
+        if graph_result is not None:
+            roster["investigation_graph"] = {
+                "iteration_count": graph_result.iteration_count,
+                "challenge_loops": graph_result.challenge_loops,
+                "incomplete_evidence": graph_result.incomplete_evidence,
+                "research_plan": graph_result.research_plan,
+                "assessment": graph_result.assessment,
+                "metrics": graph_result.metrics,
+                "errors": graph_result.errors[:8],
+                "engine": graph_result.engine,
+                "verification_report": graph_result.verification_report,
+                "final_report": graph_result.final_report,
+                "conclusion_strength": graph_result.conclusion_strength,
+                "evidence_gaps": graph_result.evidence_gaps,
+            }
+            roster["final_report"] = graph_result.final_report
+            roster["verification_summary"] = (
+                (graph_result.final_report or {}).get("verification") or {}
+            )
+            roster["evidence_gaps"] = graph_result.evidence_gaps
+        else:
+            from app.models.verification_schemas import VerificationReport
+            from app.services import verification_engine as _v7
+
+            try:
+                vrep = VerificationReport.model_validate(
+                    verified.get("verification_report") or {}
+                )
+            except Exception:
+                vrep = None
+            linear_report = _v7.build_final_report(
+                move_line=f"{symbol} investigation",
+                hypotheses=final_hypotheses,
+                evidence=evidence_rows,
+                verification=vrep,
+                da=da_payload,
+            )
+            roster["final_report"] = linear_report.model_dump()
+            roster["verification_summary"] = linear_report.verification.model_dump()
+            roster["evidence_gaps"] = list(linear_report.evidence_gaps)
+        from app.services import evidence_graph as evidence_graph_service
+
+        snapshot = evidence_graph_service.build_snapshot(
+            final_hypotheses,
+            evidence_rows,
+            investigation_id=investigation_id,
+        )
+        roster["evidence_graph"] = snapshot.model_dump()
+        try:
+            from app.services import company_memory as company_memory_service
+
+            company_memory_service.extract_and_store(
+                db,
+                owner_key=owner_key,
+                ticker=symbol,
+                investigation_id=investigation_id,
+                hypotheses=final_hypotheses,
+                evidence=evidence_rows,
+                evidence_ids=evidence_ids,
+                move_pct=move.move_pct,
+            )
+            roster["company_memory"] = company_memory_service.build_summary(
+                db, owner_key=owner_key, ticker=symbol
+            ).model_dump()
+            if memory_payload:
+                roster.setdefault("investigation_graph", {})
+                if isinstance(roster.get("investigation_graph"), dict):
+                    roster["investigation_graph"]["company_memory"] = memory_payload
+        except Exception as mem_store_exc:
+            log_event(
+                logger,
+                logging.WARNING,
+                "Company memory extraction skipped",
+                investigation_id=investigation_id,
+                error=str(mem_store_exc),
+            )
+        if roster:
+            evidence_ledger_store.set_roster_context(
+                db,
+                owner_key=owner_key,
+                investigation_id=investigation_id,
+                roster=roster,
+            )
 
         summary = _finalize_summary(
             move,
             ranked.get("summary") or "",
             da_payload,
             final_hypotheses,
+            final_report=(graph_result.final_report if graph_result is not None else None),
         )
+        if graph_result is not None and graph_result.incomplete_evidence:
+            summary = (
+                f"{summary} Evidence remains incomplete after the research loop."
+            )[:2000]
+        if graph_result is not None and graph_result.evidence_gaps:
+            summary = (
+                f"{summary} Evidence gaps: {'; '.join(graph_result.evidence_gaps[:3])}"
+            )[:2000]
         completed = evidence_ledger_store.mark_complete(
             db,
             owner_key=owner_key,
@@ -275,7 +481,8 @@ async def run_investigation(
         log_event(
             logger,
             logging.INFO,
-            "Investigation complete",
+            "INVESTIGATION_COMPLETED",
+            event="INVESTIGATION_COMPLETED",
             ticker=symbol,
             investigation_id=investigation_id,
             claims=completed.claims_count,
@@ -303,11 +510,11 @@ async def run_investigation(
         log_event(
             logger,
             logging.ERROR,
-            "Investigation failed",
+            "INVESTIGATION_FAILED",
+            event="INVESTIGATION_FAILED",
             ticker=symbol,
             investigation_id=investigation_id,
             error=str(exc),
-            traceback=traceback.format_exc(),
         )
         failed = evidence_ledger_store.mark_failed(
             db,
@@ -396,7 +603,10 @@ def _persist_noise_skip(
 
 
 async def _collect_evidence(
-    move: MoveSnapshot, plan: Dict[str, Any]
+    move: MoveSnapshot,
+    plan: Dict[str, Any],
+    *,
+    escalate_thin: bool = True,
 ) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
 
@@ -417,10 +627,12 @@ async def _collect_evidence(
     )
 
     tools = list(plan.get("tools") or ["get_stock_news", "get_recent_filings"])
-    for tool in tools:
-        if tool in ("get_stock_price", "get_price_history"):
-            continue  # already captured as price evidence
-        chunk = await _evidence_from_tool(move.ticker, tool)
+    from app.services.tool_router import filter_browser_budget
+
+    collect_tools = [t for t in tools if t not in ("get_stock_price", "get_price_history")]
+    collect_tools = filter_browser_budget(collect_tools)["tools"]
+    chunks = await _collect_tools_parallel(move.ticker, collect_tools)
+    for chunk in chunks:
         items.extend(chunk)
 
     # Ensure at least one non-price attempt via news if tools failed empty.
@@ -428,7 +640,12 @@ async def _collect_evidence(
         items.extend(await _evidence_from_tool(move.ticker, "get_stock_news"))
 
     # PRD Phase 10 / FR-5: when API evidence is thin, escalate to Browser MCP IR.
-    if _api_evidence_thin(items) and investigation_planner_agent.browser_mcp_enabled():
+    # The LangGraph loop owns IR escalation when escalate_thin=False.
+    if (
+        escalate_thin
+        and _api_evidence_thin(items)
+        and investigation_planner_agent.browser_mcp_enabled()
+    ):
         for tool in ("get_ir_materials", "get_shareholder_letter"):
             if tool in tools:
                 continue
@@ -442,6 +659,58 @@ async def _collect_evidence(
             items.extend(await _evidence_from_tool(move.ticker, tool))
 
     return items[:24]
+
+
+def _research_concurrency() -> int:
+    return max(1, min(8, int(os.getenv("INVESTIGATION_RESEARCH_CONCURRENCY", "4"))))
+
+
+def _tool_retries() -> int:
+    return max(0, min(3, int(os.getenv("INVESTIGATION_TOOL_RETRIES", "1"))))
+
+
+async def _collect_tools_parallel(
+    ticker: str, tools: List[str]
+) -> List[List[Dict[str, Any]]]:
+    """Run independent MCP tool fetches concurrently with a small cap."""
+    if not tools:
+        return []
+    sem = asyncio.Semaphore(_research_concurrency())
+
+    async def _one(tool: str) -> List[Dict[str, Any]]:
+        async with sem:
+            return await _evidence_from_tool_with_retry(ticker, tool)
+
+    return list(await asyncio.gather(*[_one(t) for t in tools]))
+
+
+async def _evidence_from_tool_with_retry(ticker: str, tool: str) -> List[Dict[str, Any]]:
+    last: List[Dict[str, Any]] = []
+    attempts = 1 + _tool_retries()
+    for attempt in range(attempts):
+        last = await _evidence_from_tool(ticker, tool)
+        if not last:
+            return last
+        if not all(
+            (row.get("raw_payload") or {}).get("error")
+            or "unavailable" in (row.get("title") or "").lower()
+            or "failed" in (row.get("title") or "").lower()
+            for row in last
+        ):
+            return last
+        if attempt + 1 < attempts:
+            log_event(
+                logger,
+                logging.INFO,
+                "RESEARCH_TASK_FAILED",
+                event="RESEARCH_TASK_FAILED",
+                tool=tool,
+                ticker=ticker,
+                attempt=attempt + 1,
+                retrying=True,
+            )
+            await asyncio.sleep(0.05)
+    return last
 
 
 def _api_evidence_thin(items: List[Dict[str, Any]]) -> bool:
@@ -551,7 +820,16 @@ async def _evidence_from_tool(ticker: str, tool: str) -> List[Dict[str, Any]]:
             )
         return out
 
-    if tool in ("get_ir_materials", "get_shareholder_letter", "fetch_browser_page"):
+    if tool in (
+        "get_ir_materials",
+        "get_shareholder_letter",
+        "fetch_browser_page",
+        "browser_find_document",
+        "browser_search",
+        "browser_open",
+        "browser_download",
+        "browser_extract",
+    ):
         return _map_browser_evidence(ticker, tool, result)
 
     if tool == "get_stock_fundamentals":
@@ -623,6 +901,15 @@ def _map_browser_evidence(
         ]
 
     out: List[Dict[str, Any]] = []
+
+    if tool in {
+        "browser_find_document",
+        "browser_search",
+        "browser_open",
+        "browser_download",
+        "browser_extract",
+    }:
+        return _map_browser_contract_evidence(ticker, tool, result)
 
     if tool == "get_shareholder_letter":
         if result.get("found") and (result.get("text_excerpt") or result.get("url")):
@@ -734,8 +1021,85 @@ def _map_browser_evidence(
     return out
 
 
+def _map_browser_contract_evidence(
+    ticker: str, tool: str, result: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    """Map Phase 6 Browser MCP tools into the existing ledger shape."""
+    payload = dict(result or {})
+    payload["tool"] = tool
+    error = str(result.get("error") or "")
+    if result.get("ok") is False or (error and not (result.get("text") or result.get("url"))):
+        return [
+            {
+                "source_type": "ir_page",
+                "retrieval_method": "system",
+                "title": f"{ticker} primary-source {tool} failed",
+                "excerpt": error[:500] or "Browser MCP returned no official document.",
+                "source_url": str(result.get("url") or "")[:1024],
+                "raw_payload": payload,
+            }
+        ]
+
+    provider = str(result.get("provider") or "httpx")
+    method = "browser_mcp"
+    if "httpx" in provider and not result.get("used_openclaw"):
+        method = "httpx"
+    elif "openclaw" in provider or result.get("used_openclaw"):
+        method = "browser_mcp"
+
+    selected = result.get("selected") if isinstance(result.get("selected"), dict) else {}
+    url = str(
+        result.get("url")
+        or selected.get("url")
+        or ((result.get("candidates") or [{}])[0].get("url") if result.get("candidates") else "")
+        or ""
+    )[:1024]
+    title = str(
+        result.get("title")
+        or selected.get("title")
+        or f"{ticker} official document"
+    )[:280]
+    excerpt = str(result.get("text") or result.get("text_excerpt") or "")[:4000]
+    if result.get("extraction_failed") and not excerpt:
+        excerpt = "Official document located but text extraction failed."
+        payload["error"] = payload.get("error") or "extraction_failed"
+        return [
+            {
+                "source_type": "ir_page",
+                "retrieval_method": method,
+                "title": f"{title} (extraction failed)",
+                "excerpt": excerpt,
+                "source_url": url,
+                "raw_payload": payload,
+            }
+        ]
+    if not excerpt and not url:
+        return [
+            {
+                "source_type": "ir_page",
+                "retrieval_method": "system",
+                "title": f"{ticker} primary-source empty",
+                "excerpt": error[:500] or "No official content returned.",
+                "source_url": "",
+                "raw_payload": payload,
+            }
+        ]
+    return [
+        {
+            "source_type": "ir_page",
+            "retrieval_method": method,
+            "title": title,
+            "excerpt": excerpt or "(official document; no extractable text)",
+            "source_url": url,
+            "raw_payload": payload,
+        }
+    ]
+
+
 def _provider_to_method(provider: str) -> str:
     value = (provider or "").lower()
+    if "browser_mcp" in value:
+        return "browser_mcp"
     if "openclaw" in value:
         return "openclaw"
     if "httpx" in value:
@@ -766,6 +1130,7 @@ def _finalize_summary(
     base: str,
     da_payload: Dict[str, Any],
     hypotheses: List[Dict[str, Any]],
+    final_report: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Lead with move size, then cause, then DA check — matches Evidence Ledger UX."""
     window = _human_window(move.window_label or "1d")
@@ -786,17 +1151,68 @@ def _finalize_summary(
             )
 
     lead = hypotheses[0]["statement"] if hypotheses else "n/a"
+    lead_row = hypotheses[0] if hypotheses else {}
+    from app.services import evidence_graph as _eg
+
+    claim_kind = _eg.infer_claim_type(str(lead)) if hypotheses else ""
     outcome = da_payload.get("outcome") or "held"
     da_line = {
         "held": "Devil's Advocate did not overturn the leading hypothesis.",
         "confidence_cut": "Devil's Advocate weakened the leading hypothesis (confidence cut).",
         "demoted": "Devil's Advocate demoted the leading hypothesis; a competitor was promoted.",
     }.get(str(outcome), f"Devil's Advocate outcome: {outcome}.")
+    severity = str(da_payload.get("challenge_severity") or "").strip()
+    if severity:
+        da_line = f"{da_line} Challenge severity: {severity}."
+    rec = str(da_payload.get("recommendation") or "").strip()
+    if rec:
+        da_line = f"{da_line} Recommendation: {rec}."
+    counter = str(da_payload.get("counterargument") or "").strip()
+    if counter and counter not in da_line:
+        da_line = f"{da_line} Opposing case: {counter[:280]}"
+    support_line = ""
+    level = lead_row.get("confidence_level")
+    strength = str(
+        (final_report or {}).get("conclusion_strength")
+        or da_payload.get("conclusion_strength")
+        or ""
+    )
+    confidence = str((final_report or {}).get("confidence") or da_payload.get("confidence") or level or "")
+    if strength:
+        support_line = f"Conclusion strength: {strength}."
+        if confidence:
+            support_line = f"{support_line} Confidence: {confidence} (not a calibrated probability)."
+    elif level:
+        support_line = f"Primary explanation support: {level} (not a calibrated probability)."
+    contra = lead_row.get("contradicting_indices") or []
+    if contra:
+        support_line = (
+            f"{support_line} Counterevidence is recorded against the lead."
+        ).strip()
+    alt = ""
+    if len(hypotheses) > 1:
+        alt = f"Strongest alternative: {hypotheses[1].get('statement')}."
+    type_line = (
+        f"Claim type: {claim_kind}. Causal claims are supported, not proven."
+        if claim_kind == "CAUSAL_EXPLANATION"
+        else (f"Claim type: {claim_kind}." if claim_kind else "")
+    )
+    lead_line = (
+        f"Leading cause: {lead}"
+        if strength != "INSUFFICIENT_EVIDENCE"
+        else "Insufficient evidence to determine the primary cause."
+    )
+    gaps = list((final_report or {}).get("evidence_gaps") or [])
+    gap_line = f"Evidence gaps: {'; '.join(gaps[:3])}" if gaps else ""
     parts = [
         move_line,
-        f"Leading cause: {lead}",
+        lead_line,
+        type_line,
+        support_line,
+        alt,
         (base or "").strip(),
         da_line,
+        gap_line,
     ]
     # Drop empty / duplicate fragments
     cleaned: List[str] = []
@@ -821,4 +1237,16 @@ def _tool_args(ticker: str, tool: str) -> Dict[str, Any]:
         return {"ticker": ticker, "max_pages": 2}
     if tool == "get_shareholder_letter":
         return {"ticker": ticker}
+    if tool == "browser_find_document":
+        return {
+            "ticker": ticker,
+            "document_type": "investor_presentation",
+            "query": "latest official investor presentation",
+        }
+    if tool == "browser_search":
+        return {"domain": "", "query": ticker, "ticker": ticker}
+    if tool in ("browser_open", "browser_download"):
+        return {"url": "", "ticker": ticker}
+    if tool == "browser_extract":
+        return {"text": "", "objective": "guidance", "source_url": ""}
     return {"ticker": ticker}

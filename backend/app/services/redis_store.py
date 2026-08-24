@@ -125,3 +125,62 @@ def queue_pop(queue_key: str = _ALERT_QUEUE_KEY) -> Optional[Dict[str, Any]]:
 
 def quote_cache_key(ticker: str) -> str:
     return f"quantpilot:quote:{ticker.upper().strip()}"
+
+
+def ping() -> bool:
+    """Cheap liveness probe. Memory fallback is always ready."""
+    client = _connect()
+    if client is None:
+        return True
+    try:
+        return bool(client.ping())
+    except Exception:
+        return False
+
+
+def acquire_lock(name: str, ttl_seconds: int = 180) -> bool:
+    """Best-effort lock with TTL so a crashed holder cannot block forever."""
+    key = f"quantpilot:lock:{name}"
+    ttl = max(1, int(ttl_seconds))
+    client = _connect()
+    if client is not None:
+        try:
+            return bool(client.set(key, "1", nx=True, ex=ttl))
+        except Exception:
+            return True
+    with _memory_lock:
+        exp = _memory_expiry.get(key)
+        if exp is not None and exp < time.time():
+            _memory_cache.pop(key, None)
+            _memory_expiry.pop(key, None)
+        if key in _memory_cache:
+            return False
+        _memory_cache[key] = "1"
+        _memory_expiry[key] = time.time() + ttl
+        return True
+
+
+def release_lock(name: str) -> None:
+    key = f"quantpilot:lock:{name}"
+    client = _connect()
+    if client is not None:
+        try:
+            client.delete(key)
+        except Exception:
+            pass
+        return
+    with _memory_lock:
+        _memory_cache.pop(key, None)
+        _memory_expiry.pop(key, None)
+
+
+def close_redis() -> None:
+    global _redis_client, _redis_mode
+    client = _redis_client
+    _redis_client = None
+    _redis_mode = None
+    if client is not None:
+        try:
+            client.close()
+        except Exception:
+            pass

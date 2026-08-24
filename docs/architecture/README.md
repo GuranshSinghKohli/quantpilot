@@ -1,4 +1,6 @@
-# Architecture — Phase 1
+# Architecture
+
+Current map: [FINAL_ARCHITECTURE.md](../FINAL_ARCHITECTURE.md). Historical Phase 1 sketch below.
 
 ## System overview
 

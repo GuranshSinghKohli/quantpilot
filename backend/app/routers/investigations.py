@@ -9,6 +9,7 @@ from app.auth.deps import get_current_user, get_optional_user
 from app.db.models import User
 from app.db.session import get_db
 from app.jobs.investigation_sweep_job import run_investigation_sweep
+from app.models.company_memory_schemas import CompanyMemorySummary
 from app.models.investigation_schemas import (
     ClaimCreateRequest,
     ClaimEvidenceLinkOut,
@@ -30,13 +31,14 @@ from app.models.investigation_schemas import (
     TriggerPreviewResponse,
 )
 from app.models.agent_schemas import ChatResponse
+from app.security.rate_limit import expensive_limit
 from app.services import (
     evidence_ledger_store,
     investigation_chat,
+    investigation_gate,
     investigation_runner,
     investigation_search,
     investigation_smart_summary,
-    trigger_logic,
 )
 
 router = APIRouter(tags=["investigations"])
@@ -81,6 +83,7 @@ async def investigate_ticker(
     db: Session = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
     x_guest_id: Optional[str] = Header(default=None, alias="X-Guest-Id"),
+    _rate: None = Depends(expensive_limit),
 ) -> InvestigationDetail:
     """PRD v3 Phase 8 — create + run reactive why-did-it-move pipeline."""
     owner_key = _require_owner(user, x_guest_id)
@@ -98,7 +101,7 @@ async def investigate_ticker(
     except Exception as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"Investigation failed: {exc}",
+            detail="INVESTIGATION_FAILED",
         ) from exc
 
 
@@ -109,6 +112,7 @@ async def investigate_ticker(
 async def sweep_investigations(
     body: InvestigationSweepRequest = InvestigationSweepRequest(),
     user: User = Depends(get_current_user),
+    _rate: None = Depends(expensive_limit),
 ) -> InvestigationSweepResponse:
     """PRD v3 Phase 11 — scan this user's holdings with trigger logic."""
     try:
@@ -132,36 +136,57 @@ async def sweep_investigations(
 async def preview_trigger(
     ticker: str,
     window_label: str = "1d",
-    _user: Optional[User] = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
 ) -> TriggerPreviewResponse:
-    """Preview Phase 11 idiosyncratic / vol-adjusted trigger decision."""
+    """Preview Phase 2 investigation gate (price + filings + earnings)."""
     try:
-        decision = await trigger_logic.evaluate_trigger(
-            ticker, window=window_label or "1d"
+        holdings = []
+        owner_key = None
+        if user is not None:
+            from app.services import watchlist_store
+
+            holdings = watchlist_store.list_watchlist(db, user)
+            owner_key = f"user:{user.id}"
+        gate = await investigation_gate.evaluate_investigation_gate(
+            ticker,
+            owner_key=owner_key,
+            db=db if owner_key else None,
+            holdings=holdings,
+            window=window_label or "1d",
+            persist_fingerprint=False,
         )
     except Exception as exc:
         raise HTTPException(
             status_code=502,
             detail=f"Trigger evaluation failed: {exc}",
         ) from exc
+    primary = gate.primary_event
     return TriggerPreviewResponse(
-        ticker=decision.move.ticker,
-        should_investigate=decision.should_investigate,
-        reason=decision.reason,
-        depth=decision.depth,
-        asset_class=decision.asset_class,
-        move_pct=decision.move.move_pct,
-        realized_vol_pct=decision.realized_vol_pct,
-        move_zscore=decision.move_zscore,
-        benchmark_move_pct=decision.benchmark_move_pct,
-        residual_pct=decision.residual_pct,
-        window_label=decision.move.window_label,
+        ticker=gate.ticker,
+        should_investigate=gate.should_investigate,
+        reason=gate.reason,
+        depth=gate.depth,
+        asset_class=gate.asset_class,
+        move_pct=gate.move_pct,
+        realized_vol_pct=gate.realized_vol_pct,
+        move_zscore=gate.move_zscore,
+        benchmark_move_pct=gate.benchmark_move_pct,
+        residual_pct=gate.residual_pct,
+        window_label=gate.window_label,
+        event_type=primary.event_type.value if primary else None,
+        materiality_score=gate.score,
+        portfolio_exposure=gate.exposure,
+        cooldown=gate.cooldown,
+        reopen=gate.reopen,
+        reopen_reason=gate.reopen_reason,
+        prior_investigation_id=gate.prior_investigation_id,
     )
 
 
 @router.get("/investigations", response_model=List[InvestigationSummary])
 async def list_investigations(
-    limit: int = 20,
+    limit: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
     x_guest_id: Optional[str] = Header(default=None, alias="X-Guest-Id"),
@@ -197,6 +222,44 @@ async def search_investigations(
             detail=f"Investigation search failed: {exc}",
         ) from exc
     return InvestigationSearchResponse.model_validate(payload)
+
+
+@router.get(
+    "/investigations/memory/{ticker}",
+    response_model=CompanyMemorySummary,
+)
+async def get_company_memory(
+    ticker: str,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+    x_guest_id: Optional[str] = Header(default=None, alias="X-Guest-Id"),
+) -> CompanyMemorySummary:
+    """Owner-scoped company memory summary. Additive; no portfolio fields."""
+    owner_key = _require_owner(user, x_guest_id)
+    from app.services import company_memory
+
+    return company_memory.build_summary(db, owner_key=owner_key, ticker=ticker)
+
+
+@router.get("/investigations/memory/{ticker}/related")
+async def get_related_investigations(
+    ticker: str,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+    x_guest_id: Optional[str] = Header(default=None, alias="X-Guest-Id"),
+) -> dict:
+    owner_key = _require_owner(user, x_guest_id)
+    from app.services import company_memory
+
+    ctx = company_memory.retrieve_for_investigation(
+        db, owner_key=owner_key, ticker=ticker
+    )
+    return {
+        "ticker": ticker.upper(),
+        "related_investigation_ids": ctx.related_investigation_ids,
+        "similar_events": [s.model_dump() for s in ctx.similar_events],
+        "management_trend": ctx.management_trend,
+    }
 
 
 @router.get("/investigations/{investigation_id}", response_model=InvestigationDetail)
@@ -399,6 +462,7 @@ async def run_investigation(
     db: Session = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
     x_guest_id: Optional[str] = Header(default=None, alias="X-Guest-Id"),
+    _rate: None = Depends(expensive_limit),
 ) -> InvestigationDetail:
     """PRD v3 Phase 8 — run planner → collect → rank on an existing case."""
     owner_key = _require_owner(user, x_guest_id)

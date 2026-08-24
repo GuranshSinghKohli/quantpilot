@@ -14,6 +14,18 @@ class EvidenceItemOut(BaseModel):
     excerpt: str
     source_url: str
     created_at: datetime
+    # Phase 5 additive provenance — older clients ignore these.
+    source_name: str = ""
+    published_at: Optional[datetime] = None
+    retrieved_at: Optional[datetime] = None
+    content_hash: str = ""
+    source_quality: str = ""
+    source_class: str = ""
+    source_taxonomy: str = ""
+    temporal_relevance: str = ""
+    source_group: str = ""
+    source_tier: str = ""
+    relevance: str = ""
 
     model_config = {"from_attributes": True}
 
@@ -37,6 +49,9 @@ class ClaimOut(BaseModel):
     devil_advocate_notes: str
     evidence_links: List[ClaimEvidenceLinkOut] = Field(default_factory=list)
     created_at: datetime
+    claim_type: str = "CAUSAL_EXPLANATION"
+    support_status: str = ""
+    support_assessment: Dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"from_attributes": True}
 
@@ -65,6 +80,13 @@ class DevilsAdvocateOutcome(BaseModel):
     notes: List[str] = Field(default_factory=list)
     confidence_delta: float = 0.0
     citation_coverage: float = 0.0
+    challenge_severity: str = ""
+    recommendation: str = ""
+    alternative_hypothesis_id: str = ""
+    additional_evidence_needed: List[str] = Field(default_factory=list)
+    questionable_assumptions: List[str] = Field(default_factory=list)
+    conclusion_strength: str = ""
+    confidence: str = ""
 
 
 class InvestigationRosterContext(BaseModel):
@@ -73,6 +95,12 @@ class InvestigationRosterContext(BaseModel):
     earnings: Dict[str, Any] = Field(default_factory=dict)
     macro: Dict[str, Any] = Field(default_factory=dict)
     memo: Dict[str, Any] = Field(default_factory=dict)
+    investigation_graph: Dict[str, Any] = Field(default_factory=dict)
+    evidence_graph: Dict[str, Any] = Field(default_factory=dict)
+    final_report: Dict[str, Any] = Field(default_factory=dict)
+    verification_summary: Dict[str, Any] = Field(default_factory=dict)
+    evidence_gaps: List[str] = Field(default_factory=list)
+    company_memory: Dict[str, Any] = Field(default_factory=dict)
 
 
 class InvestigationDetail(InvestigationSummary):
@@ -82,6 +110,7 @@ class InvestigationDetail(InvestigationSummary):
     roster: Optional[InvestigationRosterContext] = None
     claims: List[ClaimOut] = Field(default_factory=list)
     evidence_items: List[EvidenceItemOut] = Field(default_factory=list)
+    evidence_summary: Dict[str, Any] = Field(default_factory=dict)
 
 
 class InvestigationCreateRequest(BaseModel):
@@ -151,6 +180,9 @@ class InvestigationSweepResponse(BaseModel):
     launched: int = 0
     skipped_cooldown: int = 0
     skipped_trigger: int = 0
+    skipped_materiality: int = 0
+    reopened: int = 0
+    skipped_unchanged: int = 0
     errors: int = 0
     dry_run: bool = False
     details: List[Dict[str, Any]] = Field(default_factory=list)
@@ -168,6 +200,14 @@ class TriggerPreviewResponse(BaseModel):
     benchmark_move_pct: Optional[float] = None
     residual_pct: Optional[float] = None
     window_label: str = "1d"
+    # Phase 2 additive fields — older clients ignore them.
+    event_type: Optional[str] = None
+    materiality_score: Optional[float] = None
+    portfolio_exposure: Optional[float] = None
+    cooldown: bool = False
+    reopen: bool = False
+    reopen_reason: str = ""
+    prior_investigation_id: Optional[int] = None
 
 
 class InvestigationSearchHit(BaseModel):

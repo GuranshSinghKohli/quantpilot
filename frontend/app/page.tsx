@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import AgentWorkflow from "@/components/AgentWorkflow";
 import AppFooter from "@/components/AppFooter";
@@ -120,6 +121,20 @@ export default function Home() {
     activeInvestigationId
   );
   const lenis = useLenis();
+
+  useEffect(() => {
+    const tool = new URLSearchParams(window.location.search).get("tool");
+    if (
+      tool === "watchlist" ||
+      tool === "portfolio" ||
+      tool === "briefing" ||
+      tool === "alerts" ||
+      tool === "ideas" ||
+      tool === "history"
+    ) {
+      setToolsFocusRequest({ tab: tool, key: Date.now() });
+    }
+  }, []);
 
   const hasCase = activeInvestigationId != null;
   const isExampleCase = activeInvestigationId === EXAMPLE_CASE_ID;
@@ -612,6 +627,29 @@ export default function Home() {
             hasCase={hasCase}
           />
         </div>
+
+        {hasCase && currentTicker && activeInvestigationId != null && (
+          <div className="mt-3 flex flex-wrap gap-4 border border-hud px-3 py-3">
+            <Link
+              href={`/investigations/${activeInvestigationId}`}
+              className="font-mono text-sm uppercase tracking-osd text-caution hover:underline"
+            >
+              Full investigation
+            </Link>
+            <Link
+              href={`/companies/${encodeURIComponent(currentTicker)}`}
+              className="font-mono text-sm uppercase tracking-osd text-readout hover:text-caution"
+            >
+              Company intelligence
+            </Link>
+            <Link
+              href="/dashboard"
+              className="font-mono text-sm uppercase tracking-osd text-readout hover:text-caution"
+            >
+              Dashboard
+            </Link>
+          </div>
+        )}
 
         {hasCase && currentTicker && activeInvestigationId != null && (
           <div className="mt-3">

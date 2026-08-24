@@ -10,15 +10,14 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import (
-    INVESTIGATION_COOLDOWN_HOURS,
-    INVESTIGATION_SWEEP_MAX_PER_RUN,
-)
+from app.config import INVESTIGATION_SWEEP_MAX_PER_RUN, SWEEP_LOCK_TTL_SECONDS
 from app.db.models import User
 from app.db.session import SessionLocal
 from app.jobs.briefing_job import list_users_with_holdings
 from app.observability.logger import get_logger, log_event
-from app.services import evidence_ledger_store, redis_store, trigger_logic, watchlist_store
+from app.services import evidence_ledger_store, redis_store, watchlist_store
+from app.services.autonomous_monitor import IN_FLIGHT, log_monitor
+from app.services.investigation_gate import evaluate_investigation_gate
 from app.services.investigation_runner import investigate_ticker
 from app.services.redis_store import INVESTIGATION_QUEUE_KEY
 
@@ -32,7 +31,7 @@ async def run_investigation_sweep(
     dry_run: bool = False,
 ) -> Dict[str, Any]:
     """
-    Evaluate holdings with Phase 11 trigger logic and launch investigations.
+    Evaluate holdings with the Phase 2 investigation gate, then launch.
 
     If user is provided, only that user's holdings are scanned (manual API).
     Otherwise all users with holdings are scanned (scheduler).
@@ -41,10 +40,42 @@ async def run_investigation_sweep(
     launched = 0
     skipped_cooldown = 0
     skipped_trigger = 0
+    skipped_materiality = 0
+    reopened = 0
+    skipped_unchanged = 0
     errors = 0
     evaluated = 0
     details: List[Dict[str, Any]] = []
     limit = max(1, min(50, max_launches or INVESTIGATION_SWEEP_MAX_PER_RUN))
+    if not redis_store.acquire_lock("investigation_sweep", ttl_seconds=SWEEP_LOCK_TTL_SECONDS):
+        db.close()
+        log_event(
+            logger,
+            logging.INFO,
+            "MONITORING_SWEEP_SKIPPED",
+            event="MONITORING_SWEEP_SKIPPED",
+            reason="lock_held",
+        )
+        return {
+            "evaluated": 0,
+            "launched": 0,
+            "skipped_cooldown": 0,
+            "skipped_trigger": 0,
+            "skipped_materiality": 0,
+            "reopened": 0,
+            "skipped_unchanged": 0,
+            "errors": 0,
+            "dry_run": dry_run,
+            "details": [{"action": "skipped", "reason": "lock_held"}],
+        }
+    log_monitor("MONITOR_STARTED", status="start", dry_run=dry_run)
+    log_event(
+        logger,
+        logging.INFO,
+        "MONITORING_SWEEP_STARTED",
+        event="MONITORING_SWEEP_STARTED",
+        dry_run=dry_run,
+    )
 
     try:
         users = [user] if user is not None else list_users_with_holdings(db)
@@ -59,31 +90,70 @@ async def run_investigation_sweep(
                     break
                 evaluated += 1
                 try:
-                    if evidence_ledger_store.recent_investigation_exists(
-                        db,
-                        owner_key=owner_key,
-                        ticker=ticker,
-                        within_hours=INVESTIGATION_COOLDOWN_HOURS,
-                    ):
+                    last = evidence_ledger_store.latest_investigation(
+                        db, owner_key=owner_key, ticker=ticker
+                    )
+                    if last is not None and last.status in IN_FLIGHT:
                         skipped_cooldown += 1
                         details.append(
                             {
                                 "user_id": u.id,
                                 "ticker": ticker,
                                 "action": "cooldown",
+                                "reason": f"investigation #{last.id} is {last.status}",
                             }
+                        )
+                        log_monitor(
+                            "MONITOR_COOLDOWN",
+                            ticker=ticker,
+                            investigation_id=last.id,
+                            status=last.status,
                         )
                         continue
 
-                    decision = await trigger_logic.evaluate_trigger(ticker)
-                    if not decision.should_investigate:
+                    gate = await evaluate_investigation_gate(
+                        ticker,
+                        owner_key=owner_key,
+                        db=db,
+                        holdings=entries,
+                        window="1d",
+                        persist_fingerprint=not dry_run,
+                    )
+                    if gate.cooldown:
+                        skipped_cooldown += 1
+                        skipped_unchanged += 1
+                        details.append(
+                            {
+                                "user_id": u.id,
+                                "ticker": ticker,
+                                "action": "cooldown",
+                                "reason": gate.reason,
+                                "event_type": (
+                                    gate.primary_event.event_type.value
+                                    if gate.primary_event
+                                    else None
+                                ),
+                            }
+                        )
+                        continue
+                    if gate.reopen:
+                        reopened += 1
+                    if not gate.should_investigate:
+                        skipped_materiality += 1
                         skipped_trigger += 1
                         details.append(
                             {
                                 "user_id": u.id,
                                 "ticker": ticker,
-                                "action": "skip_trigger",
-                                "reason": decision.reason,
+                                "action": "skip_materiality",
+                                "reason": gate.reason,
+                                "score": gate.score,
+                                "exposure": gate.exposure,
+                                "event_type": (
+                                    gate.primary_event.event_type.value
+                                    if gate.primary_event
+                                    else None
+                                ),
                             }
                         )
                         continue
@@ -94,15 +164,21 @@ async def run_investigation_sweep(
                                 "user_id": u.id,
                                 "ticker": ticker,
                                 "action": "would_launch",
-                                "reason": decision.reason,
-                                "depth": decision.depth,
-                                "asset_class": decision.asset_class,
+                                "reason": gate.reason,
+                                "depth": gate.depth,
+                                "asset_class": gate.asset_class,
+                                "score": gate.score,
+                                "exposure": gate.exposure,
+                                "event_type": (
+                                    gate.primary_event.event_type.value
+                                    if gate.primary_event
+                                    else None
+                                ),
                             }
                         )
                         launched += 1
                         continue
 
-                    # Trigger already passed; reuse move metrics for materiality notify.
                     inv = await investigate_ticker(
                         db,
                         owner_key=owner_key,
@@ -111,7 +187,7 @@ async def run_investigation_sweep(
                         trigger_reason="scheduled",
                         window_label="1d",
                         use_trigger_gate=False,
-                        move_snapshot=decision.move,
+                        move_snapshot=gate.move,
                     )
                     launched += 1
                     details.append(
@@ -121,9 +197,24 @@ async def run_investigation_sweep(
                             "action": "launched",
                             "investigation_id": inv.id,
                             "status": inv.status,
-                            "depth": decision.depth,
-                            "asset_class": decision.asset_class,
+                            "depth": gate.depth,
+                            "asset_class": gate.asset_class,
+                            "score": gate.score,
+                            "exposure": gate.exposure,
+                            "reopen": gate.reopen,
+                            "event_type": (
+                                gate.primary_event.event_type.value
+                                if gate.primary_event
+                                else None
+                            ),
                         }
+                    )
+                    log_monitor(
+                        "MONITOR_LAUNCH",
+                        ticker=ticker,
+                        investigation_id=inv.id,
+                        status=inv.status,
+                        reopen=gate.reopen,
                     )
                 except Exception as exc:
                     errors += 1
@@ -145,12 +236,16 @@ async def run_investigation_sweep(
                     )
     finally:
         db.close()
+        redis_store.release_lock("investigation_sweep")
 
     summary = {
         "evaluated": evaluated,
         "launched": launched,
         "skipped_cooldown": skipped_cooldown,
         "skipped_trigger": skipped_trigger,
+        "skipped_materiality": skipped_materiality,
+        "reopened": reopened,
+        "skipped_unchanged": skipped_unchanged,
         "errors": errors,
         "dry_run": dry_run,
         "details": details[:100],
@@ -158,7 +253,14 @@ async def run_investigation_sweep(
     log_event(
         logger,
         logging.INFO,
-        "Investigation sweep complete",
+        "MONITORING_SWEEP_COMPLETED",
+        event="MONITORING_SWEEP_COMPLETED",
+        **{k: v for k, v in summary.items() if k != "details"},
+    )
+    log_monitor(
+        "MONITOR_COMPLETED",
+        status="complete",
+        relevance=launched,
         **{k: v for k, v in summary.items() if k != "details"},
     )
     return summary

@@ -29,6 +29,7 @@ from app.models.investigation_schemas import InvestigationCreateRequest  # noqa:
 from app.services import asset_class as asset_class_service  # noqa: E402
 from app.services import evidence_ledger_store  # noqa: E402
 from app.services.move_detector import MoveSnapshot  # noqa: E402
+from app.models.event_schemas import InvestigationGateDecision  # noqa: E402
 from app.services.trigger_logic import TriggerDecision, _decide  # noqa: E402
 
 init_db()
@@ -165,21 +166,26 @@ def test_sweep_dry_run_and_preview_endpoints():
     headers = _auth_headers("phase11sweep@example.com")
     client.post("/api/watchlist/NVDA", headers=headers)
 
-    decision = TriggerDecision(
+    move = _move(-5.0)
+    gate = InvestigationGateDecision(
+        ticker="NVDA",
         should_investigate=True,
-        move=_move(-5.0),
         reason="test fire",
         depth="deep",
+        score=82.0,
         asset_class="equity",
-        realized_vol_pct=1.8,
+        move=move,
+        move_pct=-5.0,
+        residual_pct=-4.7,
         move_zscore=-2.8,
         benchmark_move_pct=-0.3,
-        residual_pct=-4.7,
+        realized_vol_pct=1.8,
+        window_label="1d",
     )
 
     with patch(
-        "app.jobs.investigation_sweep_job.trigger_logic.evaluate_trigger",
-        new=AsyncMock(return_value=decision),
+        "app.jobs.investigation_sweep_job.evaluate_investigation_gate",
+        new=AsyncMock(return_value=gate),
     ):
         res = client.post(
             "/api/investigations/sweep",
@@ -194,8 +200,8 @@ def test_sweep_dry_run_and_preview_endpoints():
     assert any(d.get("action") == "would_launch" for d in body["details"])
 
     with patch(
-        "app.routers.investigations.trigger_logic.evaluate_trigger",
-        new=AsyncMock(return_value=decision),
+        "app.routers.investigations.investigation_gate.evaluate_investigation_gate",
+        new=AsyncMock(return_value=gate),
     ):
         preview = client.get("/api/investigations/trigger/NVDA", headers=headers)
     assert preview.status_code == 200, preview.text
@@ -230,21 +236,7 @@ def test_run_investigation_sweep_respects_cooldown():
         )
         user = MagicMock()
         user.id = user_id
-        decision = TriggerDecision(
-            should_investigate=True,
-            move=_move(-6.0, ticker="TSLA"),
-            reason="would fire",
-            depth="deep",
-            asset_class="equity",
-            realized_vol_pct=2.0,
-            move_zscore=-3.0,
-            benchmark_move_pct=0.0,
-            residual_pct=-6.0,
-        )
         with patch(
-            "app.jobs.investigation_sweep_job.trigger_logic.evaluate_trigger",
-            new=AsyncMock(return_value=decision),
-        ), patch(
             "app.jobs.investigation_sweep_job.watchlist_store.list_watchlist",
             return_value=[MagicMock(ticker="TSLA")],
         ):

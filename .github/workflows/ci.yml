@@ -31,6 +31,7 @@ jobs:
         env:
           BRIEFING_ENABLED: "false"
           ALERTS_ENABLED: "false"
+          INVESTIGATIONS_SWEEP_ENABLED: "false"
           JWT_SECRET_KEY: ci-test-secret
           OPENAI_API_KEY: ""
           LANGSMITH_TRACING: "false"

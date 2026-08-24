@@ -27,6 +27,8 @@ import type {
   Claim,
   ClaimEvidenceLink,
   SmartSummary,
+  DashboardResponse,
+  CompanyIntelligence,
 } from "@/types";
 
 function normalizeApiUrl(raw: string): string {
@@ -115,6 +117,17 @@ function getBaseUrl(): string {
   );
 }
 
+function clearAuthIfExpired(path: string, status: number): void {
+  if (
+    status === 401 &&
+    typeof window !== "undefined" &&
+    !path.startsWith("/api/auth/login") &&
+    !path.startsWith("/api/auth/register")
+  ) {
+    setAuthToken(null);
+  }
+}
+
 async function parseError(response: Response): Promise<string> {
   try {
     const body = await response.json();
@@ -153,6 +166,7 @@ async function apiFetch<T>(
     });
 
     if (!response.ok) {
+      clearAuthIfExpired(path, response.status);
       throw new ApiError(await parseError(response), response.status);
     }
 
@@ -299,6 +313,7 @@ export async function fetchAnalysisStream(
     );
 
     if (!response.ok) {
+      clearAuthIfExpired(`/api/analysis/${ticker}/stream`, response.status);
       throw new ApiError(await parseError(response), response.status);
     }
 
@@ -747,4 +762,30 @@ export async function sendInvestigationChat(
       timeoutMs: 60_000,
     }
   );
+}
+
+export async function fetchDashboard(): Promise<DashboardResponse> {
+  return apiFetch<DashboardResponse>("/api/dashboard");
+}
+
+export async function fetchCompanyIntelligence(
+  ticker: string
+): Promise<CompanyIntelligence> {
+  return apiFetch<CompanyIntelligence>(
+    `/api/companies/${encodeURIComponent(ticker)}/intelligence`
+  );
+}
+
+export async function fetchCompanyMemory(ticker: string) {
+  return apiFetch(`/api/investigations/memory/${encodeURIComponent(ticker)}`);
+}
+
+export async function setAlertFeedback(
+  eventId: number,
+  feedback: "useful" | "not_useful" | ""
+): Promise<AlertEvent> {
+  return apiFetch<AlertEvent>(`/api/alerts/events/${eventId}/feedback`, {
+    method: "POST",
+    body: JSON.stringify({ feedback }),
+  });
 }

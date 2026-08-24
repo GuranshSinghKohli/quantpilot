@@ -78,6 +78,11 @@ class AlertEventOut(BaseModel):
     created_at: str
     read_at: Optional[str] = None
     is_read: bool = False
+    feedback: str = ""
+
+
+class AlertFeedbackRequest(BaseModel):
+    feedback: Literal["", "useful", "not_useful"] = ""
 
 
 class AlertEvaluateResponse(BaseModel):

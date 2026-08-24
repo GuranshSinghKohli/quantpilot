@@ -52,7 +52,11 @@ def _fallback_summary(detail: InvestigationDetail) -> SmartSummaryResponse:
         weight = int(round((claim.confidence_score or 0) * 100))
         bullets.append(f"Alt reason ({weight}%): {claim.statement}")
     if detail.da_outcome and detail.da_outcome.outcome:
-        bullets.append(f"Devil's Advocate: {detail.da_outcome.outcome}.")
+        severity = getattr(detail.da_outcome, "challenge_severity", "") or ""
+        da_label = f"Devil's Advocate: {detail.da_outcome.outcome}."
+        if severity:
+            da_label = f"{da_label} Severity {severity}."
+        bullets.append(da_label)
         if detail.da_outcome.counterargument:
             bullets.append(detail.da_outcome.counterargument[:280])
     if detail.evidence_count or detail.evidence_items:

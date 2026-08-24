@@ -304,6 +304,7 @@ export interface AlertEvent {
   created_at: string;
   read_at: string | null;
   is_read: boolean;
+  feedback?: string;
 }
 
 export interface WatchlistEntry {
@@ -381,6 +382,13 @@ export interface EvidenceItem {
   excerpt: string;
   source_url: string;
   created_at: string;
+  source_name?: string;
+  published_at?: string | null;
+  retrieved_at?: string | null;
+  source_quality?: string;
+  source_class?: string;
+  source_tier?: string;
+  relevance?: string;
 }
 
 export interface ClaimEvidenceLink {
@@ -424,12 +432,25 @@ export interface DevilsAdvocateOutcome {
   notes?: string[];
   confidence_delta?: number;
   citation_coverage?: number;
+  challenge_severity?: string;
+  recommendation?: string;
+  alternative_hypothesis_id?: string;
+  additional_evidence_needed?: string[];
+  questionable_assumptions?: string[];
+  conclusion_strength?: string;
+  confidence?: string;
 }
 
 export interface InvestigationRosterContext {
   earnings?: Record<string, unknown>;
   macro?: Record<string, unknown>;
   memo?: Record<string, unknown>;
+  investigation_graph?: Record<string, unknown>;
+  evidence_graph?: Record<string, unknown>;
+  final_report?: Record<string, unknown>;
+  verification_summary?: Record<string, unknown>;
+  evidence_gaps?: string[];
+  company_memory?: Record<string, unknown>;
 }
 
 export interface InvestigationDetail extends InvestigationSummary {
@@ -446,6 +467,7 @@ export interface InvestigationSweepResponse {
   launched: number;
   skipped_cooldown: number;
   skipped_trigger: number;
+  skipped_materiality?: number;
   errors: number;
   dry_run: boolean;
   details: Array<Record<string, unknown>>;
@@ -491,4 +513,100 @@ export interface TriggerPreviewResponse {
   benchmark_move_pct?: number | null;
   residual_pct?: number | null;
   window_label: string;
+  event_type?: string | null;
+  materiality_score?: number | null;
+  portfolio_exposure?: number | null;
+  cooldown?: boolean;
+}
+
+export interface ActivityItem {
+  at: string;
+  ticker: string;
+  kind: string;
+  title: string;
+  detail: string;
+  investigation_id?: number | null;
+  source: string;
+}
+
+export interface DashboardCounts {
+  investigations_today: number;
+  active: number;
+  completed_today: number;
+  skipped: number;
+  alerts_unread: number;
+  alerts_today: number;
+}
+
+export interface PortfolioSnapshot {
+  holdings_count: number;
+  tickers: string[];
+  total_market_value?: number | null;
+  weighted_by_real_positions: boolean;
+  largest_ticker?: string | null;
+  largest_weight_pct?: number | null;
+  note: string;
+}
+
+export interface DashboardResponse {
+  generated_at: string;
+  counts: DashboardCounts;
+  portfolio: PortfolioSnapshot;
+  active: InvestigationSummary[];
+  recent: InvestigationSummary[];
+  alerts: AlertEvent[];
+  activity: ActivityItem[];
+  company_updates: Array<{
+    ticker: string;
+    themes: string[];
+    risks: string[];
+    management_trend: string;
+    last_updated?: string | null;
+  }>;
+  notes: string[];
+}
+
+export interface CompanyMemoryItem {
+  id: number;
+  ticker: string;
+  memory_type: string;
+  statement: string;
+  theme_key: string;
+  status: string;
+  polarity: string;
+  observed_at?: string | null;
+  last_seen_at?: string | null;
+  observation_count: number;
+  evidence_id?: number | null;
+  investigation_id?: number | null;
+  source_url: string;
+  source_type: string;
+  supersedes_id?: number | null;
+  historical: boolean;
+}
+
+export interface CompanyMemorySummary {
+  ticker: string;
+  company_name?: string;
+  last_updated?: string | null;
+  recent_themes: string[];
+  recurring_risks: string[];
+  recent_investigations: string[];
+  management_trend: string;
+  key_facts: string[];
+  active_risks: CompanyMemoryItem[];
+  management_themes: CompanyMemoryItem[];
+  important_events: CompanyMemoryItem[];
+  key_claims: CompanyMemoryItem[];
+  notes: string[];
+}
+
+export interface CompanyIntelligence {
+  ticker: string;
+  memory: CompanyMemorySummary;
+  investigations: InvestigationSummary[];
+  timeline: CompanyMemoryItem[];
+  related_investigation_ids: number[];
+  management_trend: string;
+  notes: string[];
 }

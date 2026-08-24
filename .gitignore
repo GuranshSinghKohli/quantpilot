@@ -51,6 +51,13 @@ backend/data/watchlist.json
 backend/data/*.db
 backend/tests/_test_*.db
 
+# Phase 11 evaluation run artifacts (keep last_run after a measured run)
+evals/reports/**/*.json
+evals/reports/**/*.md
+!evals/reports/README.md
+!evals/reports/last_run.json
+!evals/reports/last_run.md
+
 # Docker
 .docker/
 

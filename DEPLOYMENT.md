@@ -2,6 +2,17 @@
 
 Deploy the **backend** to [Railway](https://railway.app) and the **frontend** to [Vercel](https://vercel.com). See [ENV_VARIABLES.md](./ENV_VARIABLES.md) for every variable.
 
+Local production-style stack (Postgres + Redis + API + Next.js):
+
+```bash
+cp backend/.env.example backend/.env   # fill OPENAI_API_KEY and JWT_SECRET_KEY
+docker compose up --build
+```
+
+API: `http://localhost:8000/health` and `/ready`. UI: `http://localhost:3000`.
+
+OpenClaw is **not** started by Compose. Point `OPENCLAW_BROWSER_URL` at a trusted sidecar if you need IR browser fallback.
+
 > **You must deploy both services** and connect them via `NEXT_PUBLIC_API_URL` + `ALLOWED_ORIGINS`. Live deployment requires your GitHub repo and platform accounts — this guide is step-by-step for you to run.
 
 ---
@@ -123,7 +134,7 @@ On your **live Vercel URL**:
 2. Search **AAPL**
 3. Wait for the multi-agent pipeline (~30–60s)
 4. Confirm: report, confidence meter, citations, watchlist/history
-5. Optional: `curl https://YOUR-RAILWAY-URL/api/observability/runs`
+5. Optional: `curl https://YOUR-RAILWAY-URL/ready` and signed-in `GET /api/observability/status`
 
 ### Troubleshooting
 

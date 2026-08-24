@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.auth.deps import get_optional_user
+from app.security.rate_limit import expensive_limit
 from app.db.models import User
 from app.db.session import get_db
 from app.memory import report_memory
@@ -46,6 +47,7 @@ async def analyze_ticker(
     background_tasks: BackgroundTasks,
     user: Optional[User] = Depends(get_optional_user),
     x_guest_id: Optional[str] = Header(default=None, alias="X-Guest-Id"),
+    _rate: None = Depends(expensive_limit),
 ) -> AnalysisResponse:
     symbol = _validate_ticker(ticker)
     owner_key, user_id = _resolve_owner(user, x_guest_id)
@@ -116,6 +118,7 @@ async def analyze_ticker_stream(
     ticker: str,
     user: Optional[User] = Depends(get_optional_user),
     x_guest_id: Optional[str] = Header(default=None, alias="X-Guest-Id"),
+    _rate: None = Depends(expensive_limit),
 ) -> StreamingResponse:
     symbol = _validate_ticker(ticker)
     owner_key, user_id = _resolve_owner(user, x_guest_id)
@@ -188,7 +191,11 @@ async def analyze_ticker_stream(
 
 
 @router.post("/chat/{ticker}", response_model=ChatResponse)
-async def research_chat(ticker: str, body: ChatRequest) -> ChatResponse:
+async def research_chat(
+    ticker: str,
+    body: ChatRequest,
+    _rate: None = Depends(expensive_limit),
+) -> ChatResponse:
     symbol = _validate_ticker(ticker)
     question = (body.question or "").strip()
     if not question:

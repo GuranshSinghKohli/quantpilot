@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from app.agents.llm import call_openai_json
 from app.observability.logger import get_logger, log_event
+from app.services import evidence_graph, verification_engine
 
 logger = get_logger("investigation_verification")
 
@@ -16,6 +18,9 @@ async def verify_hypotheses(
     ticker: str,
     hypotheses: List[Dict[str, Any]],
     evidence: List[Dict[str, Any]],
+    hypothesis_context: Optional[Dict[str, Any]] = None,
+    investigation_id: int = 0,
+    event_time: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """
     Ensure every hypothesis that reaches the user is grounded.
@@ -56,6 +61,8 @@ async def verify_hypotheses(
             }
             for i, h in enumerate(hypotheses)
         ],
+        "hypothesis_context": hypothesis_context or {},
+        "claim_assessments": (hypothesis_context or {}).get("claim_assessments") or [],
     }
 
     result = await call_openai_json(
@@ -69,6 +76,11 @@ async def verify_hypotheses(
             "keep_indices: hypotheses safe to show. "
             "force_links: when a keep hypothesis needs stronger/corrected evidence indices. "
             "Reject company-specific claims with no attributable evidence. "
+            "Use claim_assessments (support status, temporal relevance, conflicts, gaps). "
+            "Reject fabricated citations and unsupported causal claims. "
+            "Distinguish FACT vs INTERPRETATION vs CAUSAL_EXPLANATION. "
+            "Do not treat a reported fact (weaker guidance) as proof it caused the print. "
+            "Do not treat post-event commentary as proof of the cause. "
             "market_noise claims may keep a price evidence index."
         ),
         user_prompt=f"Verify investigation claims:\n{json.dumps(payload, default=str)}",
@@ -135,26 +147,49 @@ async def verify_hypotheses(
     for n in result.get("notes") or []:
         if isinstance(n, str) and n.strip():
             notes.append(n.strip())
+    for row in (hypothesis_context or {}).get("claim_assessments") or []:
+        if not isinstance(row, dict):
+            continue
+        status = str(row.get("status") or "")
+        if status in {"INSUFFICIENT_EVIDENCE", "UNSUPPORTED"}:
+            notes.append(
+                f"Evidence graph: {row.get('claim_type') or 'claim'} is {status}."
+            )
+        if row.get("conflict") and row.get("conflict") != "NO_CONFLICT":
+            notes.append(str(row.get("conflict_note") or row.get("conflict")))
 
     coverage = (
         len(final) / max(1, len(final) + len(rejected))
         if (final or rejected)
         else 1.0
     )
+    rewritten, report = verification_engine.verify_investigation(
+        final,
+        evidence,
+        investigation_id=investigation_id,
+        event_time=event_time,
+    )
+    notes.extend(report.notes)
+    if report.conclusion_check.hedged_statements:
+        notes.append("Causal claims were hedged where certainty was insufficient.")
     log_event(
         logger,
         logging.INFO,
         "Investigation verification complete",
         ticker=ticker,
-        kept=len(final),
+        kept=len(rewritten),
         rejected=len(rejected),
         citation_coverage=round(coverage, 3),
     )
     return {
-        "hypotheses": final,
+        "hypotheses": rewritten,
         "rejected": rejected[:12],
-        "notes": notes[:12],
+        "notes": list(dict.fromkeys(notes))[:16],
         "citation_coverage": round(coverage, 3),
+        "verification_report": report.model_dump(),
+        "conclusion_strength": report.conclusion_strength,
+        "evidence_gaps": report.evidence_gaps.gaps,
+        "rejected_claims": report.rejected_claims,
     }
 
 
@@ -194,6 +229,20 @@ def _heuristic_verify(
                     }
                 )
                 continue
+
+        ok, reason = evidence_graph.validate_citations(
+            str(clone.get("statement") or ""),
+            evidence,
+            indices,
+        )
+        if not ok:
+            rejected.append(
+                {
+                    "statement": clone.get("statement"),
+                    "reason": reason,
+                }
+            )
+            continue
 
         clone["evidence_indices"] = indices
         kept.append(clone)

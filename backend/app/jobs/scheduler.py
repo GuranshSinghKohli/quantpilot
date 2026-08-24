@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -34,7 +35,14 @@ def start_scheduler() -> Optional[BackgroundScheduler]:
     if _scheduler is not None and _scheduler.running:
         return _scheduler
 
-    if not BRIEFING_ENABLED and not ALERTS_ENABLED and not INVESTIGATIONS_SWEEP_ENABLED:
+    lightweight = os.getenv("QUANTPILOT_LIGHTWEIGHT", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    sweep_on = INVESTIGATIONS_SWEEP_ENABLED and not lightweight
+    if not BRIEFING_ENABLED and not ALERTS_ENABLED and not sweep_on:
         log_event(logger, logging.INFO, "All schedulers disabled")
         return None
 
@@ -77,7 +85,7 @@ def start_scheduler() -> Optional[BackgroundScheduler]:
             interval_minutes=minutes,
         )
 
-    if INVESTIGATIONS_SWEEP_ENABLED:
+    if sweep_on:
         minutes = max(5, min(240, INVESTIGATION_SWEEP_INTERVAL_MINUTES))
         scheduler.add_job(
             run_investigation_sweep_sync,

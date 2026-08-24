@@ -13,7 +13,8 @@ All secrets belong in `.env` / `.env.local` files — never commit them to Git.
 | `JWT_SECRET_KEY` | **Required** (production) | Secret used to sign auth tokens. Change from the dev default before deploying. | long random string |
 | `JWT_EXPIRE_DAYS` | Optional | Access token lifetime in days (default `7`) | `7` |
 | `INVESTIGATION_NOISE_PCT` | Optional | Absolute daily move % below which proactive runs may skip as market noise (default `1.5`). User-initiated investigate ignores this unless `skip_if_noise=true`. | `1.5` |
-| `INVESTIGATIONS_SWEEP_ENABLED` | Optional | APScheduler portfolio investigation sweep (PRD v3 · 11). Default `false`. | `false` |
+| `INVESTIGATIONS_SWEEP_ENABLED` | Optional | APScheduler portfolio investigation sweep (Phase 9 default-on). Tests/CI set `false`. | `true` |
+| `INVESTIGATION_REOPEN_MOVE_DELTA` | Optional | Reopen a cooled-down ticker if the new move is this many percentage points larger (default `3.0`) | `3.0` |
 | `INVESTIGATION_SWEEP_INTERVAL_MINUTES` | Optional | Minutes between investigation sweeps (default `30`, clamped 5–240) | `30` |
 | `INVESTIGATION_SWEEP_MAX_PER_RUN` | Optional | Max investigations launched per sweep (default `5`) | `5` |
 | `INVESTIGATION_COOLDOWN_HOURS` | Optional | Skip re-investigate if a case exists within this many hours (default `6`) | `6` |
@@ -36,6 +37,12 @@ All secrets belong in `.env` / `.env.local` files — never commit them to Git.
 | `QUOTE_CACHE_TTL_SECONDS` | Optional | Quote cache TTL in Redis/memory (default `60`) | `60` |
 | `BROWSER_MCP_ENABLED` | Optional | Enable IR/browser MCP tools used by investigations + earnings (default `true`) | `true` |
 | `MCP_BROWSER_TIMEOUT_SECONDS` | Optional | Timeout for IR/browser MCP tools (default `45`) | `45` |
+| `MAX_BROWSER_TASKS_PER_INVESTIGATION` | Optional | Cap expensive Browser MCP contract tools per case (default `2`) | `2` |
+| `MAX_BROWSER_PAGES_PER_TASK` | Optional | Max official pages visited per document-discovery task (default `4`) | `4` |
+| `MAX_BROWSER_RETRIES` | Optional | Retries for transient browser connection/load failures only (default `1`) | `1` |
+| `BROWSER_NAV_TIMEOUT_SECONDS` | Optional | OpenClaw navigation timeout (default `20`) | `20` |
+| `BROWSER_DISCOVERY_TIMEOUT_SECONDS` | Optional | Document discovery budget (default `30`) | `30` |
+| `BROWSER_EXTRACT_TIMEOUT_SECONDS` | Optional | PDF/page extraction timeout (default `15`) | `15` |
 | `OPENCLAW_IR_FALLBACK` | Optional | If `true`, try OpenClaw navigate when httpx IR fetch fails/thin. Default `false` (httpx primary; OpenClaw navigate can be flaky / open tabs). Existing-session snapshots for portfolio sync are separate. | `false` |
 | `OPENCLAW_BROWSER_URL` | Optional | OpenClaw browser control base URL (preferred IR path) | `http://127.0.0.1:18791` |
 | `OPENCLAW_GATEWAY_TOKEN` | Optional | Bearer token for OpenClaw browser/gateway auth | gateway token |
@@ -54,6 +61,14 @@ All secrets belong in `.env` / `.env.local` files — never commit them to Git.
 | `OTEL_SERVICE_NAME` | Optional | Service name for OTel resource (default `quantpilot-api`) | `quantpilot-api` |
 | `QUANTPILOT_ROOT` | Optional | Override monorepo root path if MCP server is not auto-detected | `/app` |
 | `PORT` | Optional | Injected by Railway; used by uvicorn | `8000` |
+| `ENVIRONMENT` | Optional | `development` or `production`. Production hides internal error detail. | `production` |
+| `RATE_LIMIT_ENABLED` | Optional | Rate-limit expensive investigate/analysis routes (default `true`) | `true` |
+| `RATE_LIMIT_EXPENSIVE_PER_MINUTE` | Optional | Max expensive POSTs per IP per minute (default `8`) | `8` |
+| `MAX_REQUEST_BODY_BYTES` | Optional | Reject larger JSON bodies (default `1000000`) | `1000000` |
+| `MAX_LLM_CALLS_PER_INVESTIGATION` | Optional | Hard cap on LLM calls for one investigation (default `24`) | `24` |
+| `MAX_TOKENS_PER_INVESTIGATION` | Optional | Token budget for one investigation (default `80000`) | `80000` |
+| `MAX_RETRIES` | Optional | LLM retry attempts after the first call (default `1`) | `1` |
+| `SWEEP_LOCK_TTL_SECONDS` | Optional | Monitoring sweep lock TTL so a crash cannot block forever (default `180`) | `180` |
 
 Copy `backend/.env.example` to `backend/.env` for local development.
 

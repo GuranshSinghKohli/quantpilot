@@ -207,6 +207,7 @@ def _migrate_alert_events_columns() -> None:
     additions = {
         "investigation_id": "INTEGER",
         "materiality_score": "FLOAT",
+        "feedback": "VARCHAR(32) DEFAULT ''",
     }
     with engine.begin() as conn:
         for column, ddl_type in additions.items():
@@ -229,6 +230,44 @@ def _migrate_alert_events_columns() -> None:
                 )
 
 
+def _migrate_evidence_graph_columns() -> None:
+    """Phase 5 — optional provenance columns on existing ledgers."""
+    inspector = inspect(engine)
+    tables = inspector.get_table_names()
+    additions = {
+        "evidence_items": {"content_hash": "VARCHAR(64) DEFAULT ''"},
+        "claims": {"claim_type": "VARCHAR(32) DEFAULT 'CAUSAL_EXPLANATION'"},
+    }
+    with engine.begin() as conn:
+        for table, columns in additions.items():
+            if table not in tables:
+                continue
+            existing = {col["name"] for col in inspector.get_columns(table)}
+            for column, ddl_type in columns.items():
+                if column in existing:
+                    continue
+                try:
+                    conn.execute(
+                        text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}")
+                    )
+                    log_event(
+                        logger,
+                        logging.INFO,
+                        "Migrated evidence graph column",
+                        table=table,
+                        column=column,
+                    )
+                except Exception as exc:
+                    log_event(
+                        logger,
+                        logging.WARNING,
+                        "Evidence graph column migration skipped",
+                        table=table,
+                        column=column,
+                        error=str(exc),
+                    )
+
+
 def init_db() -> None:
     if is_sqlite():
         path_part = DATABASE_URL.split("sqlite:///", 1)[-1]
@@ -238,6 +277,7 @@ def init_db() -> None:
     _migrate_holdings_columns()
     _migrate_investigations_columns()
     _migrate_alert_events_columns()
+    _migrate_evidence_graph_columns()
     db = SessionLocal()
     try:
         anon = _ensure_anonymous_user(db)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -148,6 +148,8 @@ class AlertEvent(Base):
         DateTime(timezone=True), default=_utc_now, index=True
     )
     read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Phase 10 — optional operator feedback on an alert.
+    feedback: Mapped[str] = mapped_column(String(32), default="")
 
     user: Mapped["User"] = relationship()
     rule: Mapped[Optional["AlertRule"]] = relationship(back_populates="events")
@@ -187,6 +189,9 @@ class Investigation(Base):
     """One row per investigation: why a ticker moved (or on-demand ask)."""
 
     __tablename__ = "investigations"
+    __table_args__ = (
+        Index("ix_investigations_owner_ticker_created", "owner_key", "ticker", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     owner_key: Mapped[str] = mapped_column(String(80), index=True)
@@ -244,6 +249,8 @@ class Claim(Base):
     confidence_score: Mapped[float] = mapped_column(Float, default=0.0)
     rank: Mapped[int] = mapped_column(Integer, default=0)
     devil_advocate_notes: Mapped[str] = mapped_column(Text, default="")
+    # Phase 5 — FACT | INTERPRETATION | CAUSAL_EXPLANATION | RISK | CONCLUSION
+    claim_type: Mapped[str] = mapped_column(String(32), default="CAUSAL_EXPLANATION")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
     investigation: Mapped["Investigation"] = relationship(back_populates="claims")
@@ -271,6 +278,8 @@ class EvidenceItem(Base):
     excerpt: Mapped[str] = mapped_column(Text, default="")
     source_url: Mapped[str] = mapped_column(String(1024), default="")
     raw_payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    # Phase 5 — SHA-256 of normalized excerpt/title for exact-content dedup
+    content_hash: Mapped[str] = mapped_column(String(64), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
     investigation: Mapped["Investigation"] = relationship(back_populates="evidence_items")
@@ -308,3 +317,51 @@ class ClaimEvidenceLink(Base):
 
     claim: Mapped["Claim"] = relationship(back_populates="evidence_links")
     evidence: Mapped["EvidenceItem"] = relationship(back_populates="claim_links")
+
+
+class CompanyMemoryItem(Base):
+    """Phase 8 — append-only, owner-scoped, source-backed company memory."""
+
+    __tablename__ = "company_memory_items"
+    __table_args__ = (
+        Index("ix_company_memory_owner_ticker", "owner_key", "ticker"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    owner_key: Mapped[str] = mapped_column(String(80), index=True)
+    ticker: Mapped[str] = mapped_column(String(16), index=True)
+    # COMPANY_FACT | MANAGEMENT_STATEMENT | RISK | EVENT | INVESTIGATION_CONCLUSION | THEME
+    memory_type: Mapped[str] = mapped_column(String(32), index=True)
+    statement: Mapped[str] = mapped_column(Text, default="")
+    theme_key: Mapped[str] = mapped_column(String(64), default="", index=True)
+    # ACTIVE | CONFIRMED | WEAKENED | CONTRADICTED | OUTDATED | ARCHIVED
+    status: Mapped[str] = mapped_column(String(32), default="ACTIVE", index=True)
+    polarity: Mapped[str] = mapped_column(String(16), default="NEUTRAL")
+    fingerprint: Mapped[str] = mapped_column(String(64), default="", index=True)
+    observed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    observation_count: Mapped[int] = mapped_column(Integer, default=1)
+    evidence_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("evidence_items.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    investigation_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("investigations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_url: Mapped[str] = mapped_column(String(1024), default="")
+    source_type: Mapped[str] = mapped_column(String(32), default="")
+    supersedes_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("company_memory_items.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    extra_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utc_now, index=True
+    )

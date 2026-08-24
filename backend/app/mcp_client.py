@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 
 from app.config import BACKEND_DIR, REPO_ROOT
 from app.observability.logger import get_logger, log_event
+from app.security.untrusted import sanitize_untrusted_text
 
 PROJECT_ROOT = REPO_ROOT
 MCP_SERVER_SCRIPT = PROJECT_ROOT / "mcp_server" / "server.py"
@@ -26,6 +27,11 @@ BROWSER_TOOL_NAMES = {
     "fetch_browser_page",
     "get_shareholder_letter",
     "snapshot_active_browser_tab",
+    "browser_search",
+    "browser_open",
+    "browser_find_document",
+    "browser_download",
+    "browser_extract",
 }
 
 logger = get_logger("mcp_client")
@@ -226,6 +232,23 @@ def _max_retries_for_tool(tool_name: str) -> int:
     return MCP_MAX_RETRIES
 
 
+_TEXT_KEYS = {"text", "excerpt", "content", "body", "summary", "title", "snippet"}
+
+
+def _sanitize_tool_result(payload: Any) -> Any:
+    if isinstance(payload, dict):
+        out = {}
+        for key, value in payload.items():
+            if isinstance(value, str) and str(key).lower() in _TEXT_KEYS:
+                out[key] = sanitize_untrusted_text(value, max_chars=12000)
+            else:
+                out[key] = _sanitize_tool_result(value)
+        return out
+    if isinstance(payload, list):
+        return [_sanitize_tool_result(item) for item in payload]
+    return payload
+
+
 async def call_tool(
     tool_name: str,
     arguments: Dict[str, Any],
@@ -238,22 +261,35 @@ async def call_tool(
 
     for attempt in range(max_retries + 1):
         start = time.perf_counter()
+        is_browser = tool_name in BROWSER_TOOL_NAMES
+        started_event = "BROWSER_TASK_STARTED" if is_browser else "MCP_TOOL_STARTED"
+        log_event(
+            logger,
+            logging.INFO,
+            started_event,
+            event=started_event,
+            tool_name=tool_name,
+            ticker=ticker,
+            attempt=attempt + 1,
+        )
         try:
             session = await get_mcp_session()
             result = await session.call_tool(
                 tool_name, arguments, timeout=call_timeout
             )
             duration_ms = int((time.perf_counter() - start) * 1000)
+            done_event = "BROWSER_TASK_COMPLETED" if is_browser else "MCP_TOOL_COMPLETED"
             log_event(
                 logger,
                 logging.INFO,
-                "MCP tool call completed",
+                done_event,
+                event=done_event,
                 tool_name=tool_name,
                 ticker=ticker,
                 success=True,
                 duration_ms=duration_ms,
             )
-            return result
+            return _sanitize_tool_result(result)
         except MCPUnavailableError:
             raise
         except MCPClientError as exc:
@@ -270,10 +306,12 @@ async def call_tool(
             )
 
         duration_ms = int((time.perf_counter() - start) * 1000)
+        failed_event = "BROWSER_TASK_FAILED" if is_browser else "MCP_TOOL_FAILED"
         log_event(
             logger,
             logging.WARNING if attempt < max_retries else logging.ERROR,
-            "MCP tool call failed",
+            failed_event,
+            event=failed_event,
             tool_name=tool_name,
             ticker=ticker,
             success=False,
@@ -292,3 +330,25 @@ async def call_tool(
     raise MCPUnavailableError(
         f"MCP server unreachable for tool '{tool_name}' after retries."
     )
+
+
+async def close_mcp_session() -> None:
+    """Release the stdio MCP subprocess on shutdown."""
+    global _session
+    async with _lock:
+        session = _session
+        _session = None
+    if session is None:
+        return
+    try:
+        session_cm = getattr(session, "_session_cm", None)
+        stdio_cm = getattr(session, "_stdio_cm", None)
+        if session_cm is not None:
+            await session_cm.__aexit__(None, None, None)
+        if stdio_cm is not None:
+            await stdio_cm.__aexit__(None, None, None)
+        process = getattr(session, "_process", None)
+        if process is not None and process.returncode is None:
+            process.terminate()
+    except Exception as exc:
+        log_event(logger, logging.WARNING, "MCP session close failed", error=str(exc))

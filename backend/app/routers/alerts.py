@@ -12,6 +12,7 @@ from app.jobs.alert_job import run_alert_evaluation
 from app.models.alert_schemas import (
     AlertEvaluateResponse,
     AlertEventOut,
+    AlertFeedbackRequest,
     AlertRuleCreate,
     AlertRuleOut,
     AlertRuleUpdate,
@@ -106,6 +107,24 @@ def read_event(
     user: User = Depends(get_current_user),
 ) -> AlertEventOut:
     event = alert_store.mark_event_read(db, user, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Alert event not found.")
+    return alert_store.event_to_out(event)
+
+
+@router.post("/events/{event_id}/feedback", response_model=AlertEventOut)
+def feedback_event(
+    event_id: int,
+    body: AlertFeedbackRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AlertEventOut:
+    """Phase 10 — useful / not_useful. Owner-scoped. No personalization."""
+    from app.services import intelligence_dashboard
+
+    event = intelligence_dashboard.set_alert_feedback(
+        db, user, event_id, body.feedback
+    )
     if event is None:
         raise HTTPException(status_code=404, detail="Alert event not found.")
     return alert_store.event_to_out(event)

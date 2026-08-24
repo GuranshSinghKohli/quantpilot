@@ -49,6 +49,7 @@ def event_to_out(event: AlertEvent) -> AlertEventOut:
         created_at=_iso(event.created_at) or datetime.now(timezone.utc).isoformat(),
         read_at=_iso(event.read_at),
         is_read=event.read_at is not None,
+        feedback=getattr(event, "feedback", "") or "",
     )
 
 

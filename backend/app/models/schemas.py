@@ -10,6 +10,19 @@ class HealthResponse(BaseModel):
     sentry: bool = False
     otel: bool = False
     version: str = "1.0.0"
+    application: str = "ok"
+    database: str = "unknown"
+    redis: str = "unknown"
+    draining: bool = False
+
+
+class ReadyResponse(BaseModel):
+    status: str
+    application: str
+    database: str
+    redis: str
+    draining: bool = False
+    request_id: str = ""
 
 
 class StockResponse(BaseModel):

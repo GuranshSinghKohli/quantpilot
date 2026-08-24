@@ -80,10 +80,21 @@ OPENCLAW_BROWSER_URL = os.getenv("OPENCLAW_BROWSER_URL", "").strip()
 OPENCLAW_GATEWAY_TOKEN = os.getenv("OPENCLAW_GATEWAY_TOKEN", "").strip()
 OPENCLAW_BROWSER_PROFILE = os.getenv("OPENCLAW_BROWSER_PROFILE", "openclaw").strip()
 MCP_BROWSER_TIMEOUT_SECONDS = int(os.getenv("MCP_BROWSER_TIMEOUT_SECONDS", "45"))
+MAX_BROWSER_TASKS_PER_INVESTIGATION = int(
+    os.getenv("MAX_BROWSER_TASKS_PER_INVESTIGATION", "2")
+)
+MAX_BROWSER_PAGES_PER_TASK = int(os.getenv("MAX_BROWSER_PAGES_PER_TASK", "4"))
+MAX_BROWSER_RETRIES = int(os.getenv("MAX_BROWSER_RETRIES", "1"))
+BROWSER_NAV_TIMEOUT_SECONDS = int(os.getenv("BROWSER_NAV_TIMEOUT_SECONDS", "20"))
+BROWSER_DISCOVERY_TIMEOUT_SECONDS = int(
+    os.getenv("BROWSER_DISCOVERY_TIMEOUT_SECONDS", "30")
+)
+BROWSER_EXTRACT_TIMEOUT_SECONDS = int(os.getenv("BROWSER_EXTRACT_TIMEOUT_SECONDS", "15"))
 
 # PRD v3 Phase 11 — scheduled investigation sweep + trigger thresholds
+# Phase 9 — default-on. Tests/CI set this false; QUANTPILOT_LIGHTWEIGHT also disables.
 INVESTIGATIONS_SWEEP_ENABLED = os.getenv(
-    "INVESTIGATIONS_SWEEP_ENABLED", "false"
+    "INVESTIGATIONS_SWEEP_ENABLED", "true"
 ).strip().lower() in {"1", "true", "yes", "on"}
 INVESTIGATION_SWEEP_INTERVAL_MINUTES = int(
     os.getenv("INVESTIGATION_SWEEP_INTERVAL_MINUTES", "30")
@@ -93,6 +104,40 @@ INVESTIGATION_COOLDOWN_HOURS = float(os.getenv("INVESTIGATION_COOLDOWN_HOURS", "
 INVESTIGATION_VOL_Z_THRESHOLD = float(os.getenv("INVESTIGATION_VOL_Z_THRESHOLD", "1.5"))
 INVESTIGATION_IDIO_PCT = float(os.getenv("INVESTIGATION_IDIO_PCT", "1.0"))
 INVESTIGATION_BENCHMARK = os.getenv("INVESTIGATION_BENCHMARK", "SPY").strip() or "SPY"
+INVESTIGATION_PRICE_MOVE_THRESHOLD = float(
+    os.getenv("INVESTIGATION_PRICE_MOVE_THRESHOLD", "2.5")
+)
+# Pre-investigation gate (distinct from post-investigation notify bar).
+INVESTIGATION_MATERIALITY_THRESHOLD = float(
+    os.getenv("INVESTIGATION_MATERIALITY_THRESHOLD", "40")
+)
+# Points added at 100% portfolio weight (0.22 weight → 22 points at default 100).
+INVESTIGATION_EXPOSURE_WEIGHT = float(os.getenv("INVESTIGATION_EXPOSURE_WEIGHT", "100"))
+INVESTIGATION_EARNINGS_LOOKAHEAD_DAYS = int(
+    os.getenv("INVESTIGATION_EARNINGS_LOOKAHEAD_DAYS", "2")
+)
+INVESTIGATION_EARNINGS_LOOKBACK_DAYS = int(
+    os.getenv("INVESTIGATION_EARNINGS_LOOKBACK_DAYS", "1")
+)
+INVESTIGATION_FILING_LOOKBACK_DAYS = int(
+    os.getenv("INVESTIGATION_FILING_LOOKBACK_DAYS", "3")
+)
+INVESTIGATION_EVENT_BUCKET_HOURS = int(
+    os.getenv("INVESTIGATION_EVENT_BUCKET_HOURS", "6")
+)
+INVESTIGATION_REOPEN_MOVE_DELTA = float(
+    os.getenv("INVESTIGATION_REOPEN_MOVE_DELTA", "3.0")
+)
+MAX_INVESTIGATION_ITERATIONS = int(os.getenv("MAX_INVESTIGATION_ITERATIONS", "2"))
+MAX_CHALLENGE_LOOPS = int(os.getenv("MAX_CHALLENGE_LOOPS", "1"))
+INVESTIGATION_RESEARCH_CONCURRENCY = int(
+    os.getenv("INVESTIGATION_RESEARCH_CONCURRENCY", "4")
+)
+INVESTIGATION_TOOL_RETRIES = int(os.getenv("INVESTIGATION_TOOL_RETRIES", "1"))
+INVESTIGATION_GRAPH_ENABLED = os.getenv(
+    "INVESTIGATION_GRAPH_ENABLED", "true"
+).strip().lower() in {"1", "true", "yes", "on"}
+MAX_HYPOTHESES = int(os.getenv("MAX_HYPOTHESES", "6"))
 
 # PRD v3 Phase 12 — proactive monitoring notifications (materiality bar)
 INVESTIGATION_NOTIFY_ENABLED = os.getenv(
@@ -114,6 +159,25 @@ ALERT_EMAIL_ENABLED = os.getenv("ALERT_EMAIL_ENABLED", "false").strip().lower() 
     "yes",
     "on",
 }
+
+# Phase 12 — environment + LLM / request safeguards
+ENVIRONMENT = (
+    os.getenv("ENVIRONMENT", "").strip()
+    or os.getenv("SENTRY_ENVIRONMENT", "").strip()
+    or "development"
+).lower()
+MAX_REQUEST_BODY_BYTES = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(1_000_000)))
+MAX_LLM_CALLS_PER_INVESTIGATION = int(os.getenv("MAX_LLM_CALLS_PER_INVESTIGATION", "24"))
+MAX_TOKENS_PER_INVESTIGATION = int(os.getenv("MAX_TOKENS_PER_INVESTIGATION", "80000"))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "1"))
+RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+RATE_LIMIT_EXPENSIVE_PER_MINUTE = int(os.getenv("RATE_LIMIT_EXPENSIVE_PER_MINUTE", "8"))
+SWEEP_LOCK_TTL_SECONDS = int(os.getenv("SWEEP_LOCK_TTL_SECONDS", "180"))
 
 # Repo Phase 12 — observability (all optional)
 LANGSMITH_TRACING = os.getenv("LANGSMITH_TRACING", "false").strip().lower() in {

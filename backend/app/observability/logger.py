@@ -6,6 +6,9 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from app.security.request_context import correlation_fields
+from app.security.secrets import redact_mapping
+
 LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
 LOG_FILE = LOG_DIR / "quantpilot.log"
 
@@ -50,6 +53,7 @@ def get_logger(name: str) -> logging.Logger:
 
 
 def log_event(logger: logging.Logger, level: int, message: str, **extra: Any) -> None:
+    merged = {**correlation_fields(), **extra}
     record = logger.makeRecord(
         logger.name,
         level,
@@ -59,5 +63,5 @@ def log_event(logger: logging.Logger, level: int, message: str, **extra: Any) ->
         (),
         None,
     )
-    record.extra_data = extra
+    record.extra_data = redact_mapping(merged)
     logger.handle(record)
