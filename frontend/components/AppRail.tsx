@@ -9,11 +9,6 @@ import type { ToolsTab } from "@/components/ToolsDock";
 const DEPARTMENTS = [
   { id: "investigate", label: "Investigate", href: "/" },
   { id: "dashboard", label: "Dashboard", href: "/dashboard" },
-  { id: "watchlist", label: "Watching", tab: "watchlist" as ToolsTab },
-  { id: "portfolio", label: "Holdings", tab: "portfolio" as ToolsTab },
-  { id: "briefing", label: "Briefing", tab: "briefing" as ToolsTab },
-  { id: "alerts", label: "Alerts", tab: "alerts" as ToolsTab },
-  { id: "ideas", label: "Ideas", tab: "ideas" as ToolsTab },
   { id: "history", label: "Reports", tab: "history" as ToolsTab },
 ] as const;
 

@@ -1,19 +1,20 @@
 "use client";
 
 import { Bracketed, ColumnHeader } from "@/components/hud/primitives";
+import { WORKFLOW } from "@/lib/stack";
 
 const STEPS = [
   {
     n: "1",
-    text: "Investigate: planner picks tools, then ranker → verification → Devil's Advocate. Linear Python runner, not LangGraph.",
+    text: "Investigate: event gate → planner picks tools → rank claims into the Evidence Ledger → verification → Devil's Advocate. Linear runner.",
   },
   {
     n: "2",
-    text: "Full report: LangGraph StateGraph, 11 nodes after fetch — news through memo — shared state, sequential edges.",
+    text: "Deep research: LangGraph StateGraph — news, financials, SEC, earnings, macro, risk, debate, verification, report. Shared state, sequential edges.",
   },
   {
     n: "3",
-    text: "Each claim keeps evidence links. Unverified rows stay marked. DA can demote the lead.",
+    text: "Each claim keeps evidence links. Unverified rows stay marked. Conflicting evidence is shown. DA can demote the lead.",
   },
 ];
 
@@ -21,6 +22,9 @@ export default function HowItWorks() {
   return (
     <Bracketed as="section" aria-label="How the graph runs" className="p-3 sm:p-4">
       <ColumnHeader>Orchestration</ColumnHeader>
+      <p className="mb-3 font-mono text-xs uppercase tracking-osd text-caution">
+        {WORKFLOW}
+      </p>
 
       <ol className="space-y-3">
         {STEPS.map((step) => (

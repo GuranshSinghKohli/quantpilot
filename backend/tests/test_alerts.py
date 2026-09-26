@@ -1,4 +1,4 @@
-"""Phase 9 — smart alerts + redis fallback tests."""
+"""Redis fallback tests (price-alert product routes were removed)."""
 
 import os
 from pathlib import Path
@@ -22,84 +22,14 @@ init_db()
 client = TestClient(app)
 
 
-def _auth_headers(email: str = "alerts@example.com") -> dict:
-    password = "securepass1"
-    reg = client.post(
-        "/api/auth/register",
-        json={"email": email, "password": password},
-    )
-    if reg.status_code == 409:
-        reg = client.post(
-            "/api/auth/login",
-            json={"email": email, "password": password},
-        )
-    assert reg.status_code in (200, 201), reg.text
-    return {"Authorization": f"Bearer {reg.json()['access_token']}"}
-
-
 def test_redis_memory_fallback():
     assert redis_store.redis_mode() == "memory"
     redis_store.cache_set("test:key", {"a": 1}, ttl_seconds=30)
     assert redis_store.cache_get("test:key") == {"a": 1}
-    redis_store.queue_push({"job": "evaluate_alerts"})
-    assert redis_store.queue_pop() == {"job": "evaluate_alerts"}
+    redis_store.queue_push({"job": "research"})
+    assert redis_store.queue_pop() == {"job": "research"}
 
 
-def test_alert_rules_crud_and_events():
-    headers = _auth_headers()
-    assert client.get("/api/alerts/rules").status_code == 401
-
-    created = client.post(
-        "/api/alerts/rules",
-        headers=headers,
-        json={
-            "ticker": "AAPL",
-            "alert_type": "price_above",
-            "threshold": 1.0,
-            "cooldown_minutes": 5,
-        },
-    )
-    assert created.status_code == 201, created.text
-    rule_id = created.json()["id"]
-
-    rules = client.get("/api/alerts/rules", headers=headers)
-    assert rules.status_code == 200
-    assert any(r["id"] == rule_id for r in rules.json())
-
-    evaluated = client.post("/api/alerts/evaluate", headers=headers)
-    assert evaluated.status_code == 200, evaluated.text
-    body = evaluated.json()
-    assert body["evaluated_rules"] >= 1
-    assert body["redis_mode"] == "memory"
-
-    events = client.get("/api/alerts/events", headers=headers)
-    assert events.status_code == 200
-
-    deleted = client.delete(f"/api/alerts/rules/{rule_id}", headers=headers)
-    assert deleted.status_code == 200
-
-
-def test_news_sentiment_threshold_must_be_in_unit_range():
-    headers = _auth_headers("sentiment@example.com")
-    bad = client.post(
-        "/api/alerts/rules",
-        headers=headers,
-        json={
-            "ticker": "AAPL",
-            "alert_type": "news_sentiment",
-            "threshold": 200,
-        },
-    )
-    assert bad.status_code == 422
-
-    good = client.post(
-        "/api/alerts/rules",
-        headers=headers,
-        json={
-            "ticker": "AAPL",
-            "alert_type": "news_sentiment",
-            "threshold": 0.3,
-        },
-    )
-    assert good.status_code == 201, good.text
-    assert good.json()["threshold"] == 0.3
+def test_health_still_ok():
+    r = client.get("/health")
+    assert r.status_code == 200

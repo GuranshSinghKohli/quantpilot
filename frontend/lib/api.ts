@@ -1,23 +1,14 @@
 import type {
   AnalysisResponse,
   AlertEvent,
-  AlertRule,
-  AlertType,
   AuthResponse,
   AuthUser,
   ChatResponse,
-  DailyBriefing,
   FilingsData,
   HistoryEntry,
   MemorySearchResult,
-  PortfolioAnalysis,
-  PortfolioSummary,
-  PortfolioSyncOutput,
-  RecommendationsResponse,
   StockData,
   StoredReport,
-  SyncedPosition,
-  WatchlistEntry,
   InvestigationDetail,
   InvestigationSummary,
   InvestigationSearchResponse,
@@ -391,158 +382,6 @@ export async function sendChatMessage(
   });
 }
 
-export async function fetchPortfolioAnalysis(): Promise<PortfolioAnalysis> {
-  return apiFetch<PortfolioAnalysis>("/api/portfolio/analyze", {
-    timeoutMs: 60_000,
-  });
-}
-
-/** ANSH — OpenClaw portfolio advisor chat. */
-export async function sendAnshChat(body: {
-  message: string;
-  horizon?: string | null;
-  risk_tolerance?: string | null;
-  goal?: string | null;
-  history?: { role: "user" | "assistant"; content: string }[];
-}): Promise<ChatResponse> {
-  return apiFetch<ChatResponse>("/api/portfolio/ansh/chat", {
-    method: "POST",
-    body: JSON.stringify({
-      message: body.message,
-      horizon: body.horizon ?? null,
-      risk_tolerance: body.risk_tolerance ?? null,
-      goal: body.goal ?? null,
-      history: body.history ?? [],
-    }),
-    timeoutMs: 90_000,
-  });
-}
-
-export async function addPortfolioHolding(
-  ticker: string
-): Promise<WatchlistEntry> {
-  const symbol = ticker.toUpperCase().trim();
-  return apiFetch<WatchlistEntry>(
-    `/api/portfolio/holdings/${encodeURIComponent(symbol)}`,
-    { method: "POST" }
-  );
-}
-
-export async function previewPortfolioSync(
-  options: { rawText?: string; useOpenclaw?: boolean }
-): Promise<PortfolioSyncOutput> {
-  return apiFetch<PortfolioSyncOutput>("/api/portfolio/sync/preview", {
-    method: "POST",
-    body: JSON.stringify({
-      raw_text: options.rawText ?? null,
-      use_openclaw: options.useOpenclaw ?? false,
-    }),
-    timeoutMs: 60_000,
-  });
-}
-
-export async function confirmPortfolioSync(
-  positions: SyncedPosition[]
-): Promise<PortfolioSummary> {
-  return apiFetch<PortfolioSummary>("/api/portfolio/sync/confirm", {
-    method: "POST",
-    body: JSON.stringify({ positions }),
-  });
-}
-
-export async function fetchLatestBriefing(): Promise<DailyBriefing> {
-  return apiFetch<DailyBriefing>("/api/portfolio/briefing");
-}
-
-export async function generateBriefing(): Promise<DailyBriefing> {
-  return apiFetch<DailyBriefing>("/api/portfolio/briefing/generate", {
-    method: "POST",
-    timeoutMs: 180_000,
-  });
-}
-
-export async function fetchBriefings(limit = 7): Promise<DailyBriefing[]> {
-  const params = new URLSearchParams({ limit: String(limit) });
-  return apiFetch<DailyBriefing[]>(`/api/portfolio/briefings?${params}`);
-}
-
-export async function fetchAlertRules(): Promise<AlertRule[]> {
-  return apiFetch<AlertRule[]>("/api/alerts/rules");
-}
-
-export async function createAlertRule(body: {
-  ticker: string;
-  alert_type: AlertType | string;
-  threshold: number;
-  cooldown_minutes?: number;
-  note?: string;
-}): Promise<AlertRule> {
-  return apiFetch<AlertRule>("/api/alerts/rules", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-
-export async function deleteAlertRule(ruleId: number): Promise<void> {
-  await apiFetch(`/api/alerts/rules/${ruleId}`, { method: "DELETE" });
-}
-
-export async function fetchAlertEvents(
-  unreadOnly = false
-): Promise<AlertEvent[]> {
-  const params = new URLSearchParams({
-    unread_only: unreadOnly ? "true" : "false",
-    limit: "50",
-  });
-  return apiFetch<AlertEvent[]>(`/api/alerts/events?${params}`);
-}
-
-export async function fetchAlertUnreadCount(): Promise<number> {
-  const res = await apiFetch<{ count: number }>("/api/alerts/unread-count");
-  return res.count;
-}
-
-export async function markAlertRead(eventId: number): Promise<AlertEvent> {
-  return apiFetch<AlertEvent>(`/api/alerts/events/${eventId}/read`, {
-    method: "POST",
-  });
-}
-
-export async function markAllAlertsRead(): Promise<void> {
-  await apiFetch("/api/alerts/events/read-all", { method: "POST" });
-}
-
-export async function evaluateAlerts(): Promise<{
-  evaluated_rules: number;
-  triggered: number;
-  redis_mode: string;
-  events: AlertEvent[];
-}> {
-  return apiFetch("/api/alerts/evaluate", {
-    method: "POST",
-    timeoutMs: 120_000,
-  });
-}
-
-export async function fetchWatchlist(): Promise<WatchlistEntry[]> {
-  return apiFetch<WatchlistEntry[]>("/api/watchlist");
-}
-
-export async function addToWatchlist(ticker: string): Promise<WatchlistEntry> {
-  const symbol = ticker.trim().toUpperCase();
-  return apiFetch<WatchlistEntry>(
-    `/api/watchlist/${encodeURIComponent(symbol)}`,
-    { method: "POST" }
-  );
-}
-
-export async function removeFromWatchlist(ticker: string): Promise<void> {
-  await apiFetch<{ status: string }>(
-    `/api/watchlist/${encodeURIComponent(ticker)}`,
-    { method: "DELETE" }
-  );
-}
-
 export async function fetchHistory(): Promise<HistoryEntry[]> {
   return apiFetch<HistoryEntry[]>("/api/memory/history");
 }
@@ -556,19 +395,6 @@ export async function fetchPastReports(ticker: string): Promise<StoredReport[]> 
 export async function searchMemory(query: string): Promise<MemorySearchResult> {
   const params = new URLSearchParams({ q: query });
   return apiFetch<MemorySearchResult>(`/api/memory/search?${params}`);
-}
-
-export async function fetchRecommendations(
-  tickers?: string[]
-): Promise<RecommendationsResponse> {
-  const params = new URLSearchParams({ limit: "5" });
-  if (tickers?.length) {
-    params.set("tickers", tickers.join(","));
-  }
-  return apiFetch<RecommendationsResponse>(
-    `/api/recommendations?${params}`,
-    { timeoutMs: 60_000 }
-  );
 }
 
 export async function fetchInvestigations(
@@ -778,6 +604,12 @@ export async function fetchCompanyIntelligence(
 
 export async function fetchCompanyMemory(ticker: string) {
   return apiFetch(`/api/investigations/memory/${encodeURIComponent(ticker)}`);
+}
+
+export async function markAlertRead(eventId: number): Promise<AlertEvent> {
+  return apiFetch<AlertEvent>(`/api/alerts/events/${eventId}/read`, {
+    method: "POST",
+  });
 }
 
 export async function setAlertFeedback(

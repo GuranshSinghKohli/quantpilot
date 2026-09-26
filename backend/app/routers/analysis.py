@@ -5,18 +5,15 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 
 from app.auth.deps import get_optional_user
 from app.security.rate_limit import expensive_limit
 from app.db.models import User
-from app.db.session import get_db
 from app.memory import report_memory
-from app.models.agent_schemas import AnalysisResponse, ChatRequest, ChatResponse, PortfolioAnalysis
+from app.models.agent_schemas import AnalysisResponse, ChatRequest, ChatResponse
 from app.observability.logger import get_logger, log_event
 from app.observability.workflow_tracker import workflow_tracker
-from app.services import analysis_history_store, watchlist_store
-from app.services.portfolio_analyzer import analyze_portfolio
+from app.services import analysis_history_store
 from app.services.research_chat import answer_research_question
 from app.workflows.analysis_graph import run_analysis, stream_analysis
 from app.workflows.analysis_response import build_analysis_response
@@ -207,16 +204,3 @@ async def research_chat(
         symbol, question, body.analysis_context
     )
 
-
-@router.get("/portfolio/analyze", response_model=PortfolioAnalysis)
-async def portfolio_analyze(
-    db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-) -> PortfolioAnalysis:
-    entries = watchlist_store.list_watchlist(db, user)
-    positions = {
-        e.ticker: {"shares": e.shares, "avg_cost": e.avg_cost}
-        for e in entries
-        if e.shares is not None
-    }
-    return await analyze_portfolio([e.ticker for e in entries], positions=positions)

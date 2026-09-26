@@ -20,7 +20,7 @@ from app.models.dashboard_schemas import (
     DashboardResponse,
     PortfolioSnapshot,
 )
-from app.services import alert_store, company_memory, evidence_ledger_store, watchlist_store
+from app.services import alert_store, company_memory, evidence_ledger_store
 
 
 def _now() -> datetime:
@@ -87,12 +87,15 @@ def build_dashboard(
             >= today
         )
 
-    portfolio = _portfolio_snapshot(db, user)
+    portfolio = PortfolioSnapshot(
+        note="QuantPilot is a research desk, not a portfolio product.",
+    )
     activity = _activity_from_records(db, owner_key, user)
     company_updates = _company_updates(db, owner_key, cases[:8])
     notes = [
-        "Counts and activity are derived from stored investigations and alerts.",
+        "Counts and activity are derived from stored investigations.",
         "No placeholder market values are invented.",
+        "This platform does not manage holdings or issue investment recommendations.",
     ]
     return DashboardResponse(
         generated_at=_iso(_now()),
@@ -176,44 +179,6 @@ def set_alert_feedback(
     db.commit()
     db.refresh(event)
     return event
-
-
-def _portfolio_snapshot(db: Session, user: Optional[User]) -> PortfolioSnapshot:
-    if user is None:
-        return PortfolioSnapshot(note="Sign in to attach holdings to this desk.")
-    entries = watchlist_store.list_watchlist(db, user)
-    tickers = [e.ticker.upper() for e in entries if e.ticker]
-    valued = 0.0
-    has_value = False
-    weights: List[tuple] = []
-    for entry in entries:
-        shares = getattr(entry, "shares", None)
-        cost = getattr(entry, "avg_cost", None)
-        if shares and cost:
-            notional = float(shares) * float(cost)
-            valued += notional
-            has_value = True
-            weights.append((entry.ticker.upper(), notional))
-    largest_ticker = None
-    largest_weight_pct = None
-    if has_value and valued > 0 and weights:
-        weights.sort(key=lambda item: item[1], reverse=True)
-        largest_ticker = weights[0][0]
-        largest_weight_pct = round(weights[0][1] / valued * 100.0, 1)
-    note = (
-        "Cost-basis snapshot from stored positions. Live marks are not invented."
-        if has_value
-        else "Holdings listed without inventing a market value."
-    )
-    return PortfolioSnapshot(
-        holdings_count=len(tickers),
-        tickers=tickers[:16],
-        total_market_value=round(valued, 2) if has_value else None,
-        weighted_by_real_positions=has_value,
-        largest_ticker=largest_ticker,
-        largest_weight_pct=largest_weight_pct,
-        note=note,
-    )
 
 
 def _activity_from_records(

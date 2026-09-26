@@ -11,9 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import INVESTIGATION_SWEEP_MAX_PER_RUN, SWEEP_LOCK_TTL_SECONDS
-from app.db.models import User
+from app.db.models import Holding, Portfolio, User
 from app.db.session import SessionLocal
-from app.jobs.briefing_job import list_users_with_holdings
 from app.observability.logger import get_logger, log_event
 from app.services import evidence_ledger_store, redis_store, watchlist_store
 from app.services.autonomous_monitor import IN_FLIGHT, log_monitor
@@ -22,6 +21,17 @@ from app.services.investigation_runner import investigate_ticker
 from app.services.redis_store import INVESTIGATION_QUEUE_KEY
 
 logger = get_logger("investigation_sweep")
+
+
+def _users_with_tracked_tickers(db: Session) -> List[User]:
+    return list(
+        db.scalars(
+            select(User)
+            .join(Portfolio, Portfolio.user_id == User.id)
+            .join(Holding, Holding.portfolio_id == Portfolio.id)
+            .distinct()
+        ).all()
+    )
 
 
 async def run_investigation_sweep(
@@ -78,7 +88,7 @@ async def run_investigation_sweep(
     )
 
     try:
-        users = [user] if user is not None else list_users_with_holdings(db)
+        users = [user] if user is not None else _users_with_tracked_tickers(db)
         for u in users:
             if launched >= limit:
                 break

@@ -47,8 +47,8 @@ JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-only-change-me-quantpilot")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_DAYS = int(os.getenv("JWT_EXPIRE_DAYS", "7"))
 
-# Phase 8 — daily portfolio briefings
-BRIEFING_ENABLED = os.getenv("BRIEFING_ENABLED", "true").strip().lower() in {
+# Legacy flags — portfolio briefings and price alerts were removed.
+BRIEFING_ENABLED = os.getenv("BRIEFING_ENABLED", "false").strip().lower() in {
     "1",
     "true",
     "yes",
@@ -60,7 +60,7 @@ BRIEFING_MAX_HOLDINGS = int(os.getenv("BRIEFING_MAX_HOLDINGS", "12"))
 
 # Phase 9 - Redis + smart alerts
 REDIS_URL = os.getenv("REDIS_URL", "").strip()
-ALERTS_ENABLED = os.getenv("ALERTS_ENABLED", "true").strip().lower() in {
+ALERTS_ENABLED = os.getenv("ALERTS_ENABLED", "false").strip().lower() in {
     "1",
     "true",
     "yes",

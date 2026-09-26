@@ -9,18 +9,17 @@
 [![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
 [![Railway](https://img.shields.io/badge/Deploy-Railway-0B0D0E?logo=railway&logoColor=white)](https://railway.app/)
 
-**QuantPilot AI** is an autonomous investigation engine for equities: answer *why did this move?* with ranked claims and an Evidence Ledger, while still shipping full multi-agent research reports. A LangGraph pipeline pulls live market data, SEC filings, and news via MCP tools, then debates, verifies, and memos — with confidence scoring, fact/insight separation, and vector memory through a Next.js dashboard.
+**QuantPilot** is a flagship systems project: an evidence-driven market and technology intelligence platform. It detects events, maps company/technology relationships, measures related market impact, and uses specialized agents to produce source-backed research — not stock-price predictions or investment recommendations. The desk is built to be explainable: workflow, agents, evidence, and the stack are visible on the page.
 
 ---
 
 ## What it does
 
-- **Why did it move?** — Reactive investigation: detect move → plan evidence → collect via MCP → rank weighted hypotheses into the Evidence Ledger
-- **One-click equity research** — Enter a ticker and receive a full multi-section report plus shareable investment memo
-- **Transparent agent pipeline** — News, financial, SEC, earnings, macro, risk, bull/bear, verification, report, and memo agents
-- **Grounded citations** — Facts (prices, filings, headlines) stay separated from model insight
-- **Persistent memory** — Per-user / per-device history, ChromaDB reports, watchlist, and portfolio OS
-- **Production observability** — Structured logs, workflow runs, optional LangSmith / OTel / Sentry
+- **Event-led research** — Detect a material event, collect evidence, verify claims, and write a structured report
+- **Evidence Ledger** — Ranked, cited claims with a verification / Devil's Advocate pass
+- **Multi-agent research** — News, company, market, filings, and verification agents (LangGraph)
+- **Fact vs inference** — Grounded facts stay separated from model interpretation
+- **Not a trading desk** — No portfolio OS, broker sync, investment memos, or price-alert recommendations
 
 ![Dashboard](./assets/dashboard.png)
 
@@ -29,29 +28,32 @@
 ## Architecture overview
 
 ```
-Browser → Vercel (Next.js) → Railway (FastAPI) → LangGraph → Agents → MCP → yfinance / SEC / OpenAI
+Browser (Next.js) → FastAPI → LangGraph / investigation runner → MCP → yfinance / SEC / OpenAI
                                       ↓
-                                 ChromaDB + Watchlist
+                         Postgres/SQLite + Evidence Ledger + ChromaDB
 ```
 
-Full diagram and technology rationale: **[ARCHITECTURE.md](./ARCHITECTURE.md)**
+Workflow: **Event → Entity → Relationship → Market → Research → Verification → Report**
+
+Full diagram: **[ARCHITECTURE.md](./ARCHITECTURE.md)** · Target architecture: **[docs/FINAL_ARCHITECTURE.md](./docs/FINAL_ARCHITECTURE.md)**
 
 ---
 
 ## Tech stack
 
+**Shipped in this repo**
+
 | Layer | Technology | Purpose |
 |-------|------------|---------|
-| Frontend | Next.js 14, TypeScript, Tailwind | Dashboard UI, API client, deploy on Vercel |
-| Backend | FastAPI, Pydantic, uvicorn | REST API, CORS, background tasks |
-| Orchestration | LangGraph | Stateful multi-agent workflow |
-| Agents | OpenAI GPT-4o-mini | News, valuation, SEC, earnings, macro, risk, debate, verification, report |
-| Tools | MCP (stdio server) | Standardized financial tool interface |
-| Memory | ChromaDB, PostgreSQL | Vector reports; users / portfolios / watchlist |
-| Auth | JWT + bcrypt | Register / login, user-scoped holdings |
-| Data | yfinance, SEC EDGAR | Market data and filings |
-| Observability | JSON logging, workflow tracker | Agent timing, confidence, failures |
-| Deployment | Railway (API), Vercel (UI) | Production hosting |
+| Frontend | Next.js 14, TypeScript, Tailwind | Investigation desk, API client |
+| Backend | Python, FastAPI, Pydantic | REST API, jobs, schemas |
+| Agents | LangGraph, OpenAI | Multi-agent research + verification |
+| Store | PostgreSQL / SQLite, optional Redis, ChromaDB | Ledger, cache, report search |
+| Tools | MCP, yfinance, SEC EDGAR | Market data and filings |
+| Auth | JWT + bcrypt | Persist research history |
+| Quality | Pytest, GitHub Actions, Docker | Tests, CI, local/prod images |
+
+**Spec next (not shipped yet):** Kafka, S3 / Spark / Airflow, Neo4j, pgvector, Terraform, AWS, OpenTelemetry / Prometheus / Grafana. Do not treat these as current.
 
 ---
 

@@ -14,6 +14,7 @@ import MoveHeadline from "@/components/MoveHeadline";
 import CaseHistory from "@/components/case/CaseHistory";
 import CausesColumn from "@/components/case/CausesColumn";
 import HowItWorks from "@/components/case/HowItWorks";
+import ProjectStack from "@/components/ProjectStack";
 import ReceiptsColumn from "@/components/case/ReceiptsColumn";
 import { useCase } from "@/components/case/useCase";
 import InvestigationChatPanel from "@/components/InvestigationChatPanel";
@@ -25,7 +26,6 @@ import {
 } from "@/components/hud/primitives";
 import { useLenis } from "lenis/react";
 import LoadingPipeline from "@/components/LoadingPipeline";
-import InvestmentMemoPanel from "@/components/InvestmentMemoPanel";
 import ReportDisplay from "@/components/ReportDisplay";
 import ResearchExtrasPanel from "@/components/ResearchExtrasPanel";
 import ResearchChatPanel from "@/components/ResearchChatPanel";
@@ -37,7 +37,6 @@ import SearchBar, {
 import SECFilingsPanel from "@/components/SECFilingsPanel";
 import ToolsDock, { type ToolsTab } from "@/components/ToolsDock";
 import {
-  addToWatchlist,
   ApiError,
   checkApiHealth,
   investigateTicker,
@@ -46,8 +45,6 @@ import {
   fetchInvestigations,
   fetchPastReports,
   fetchStockData,
-  fetchWatchlist,
-  removeFromWatchlist,
 } from "@/lib/api";
 import { EXAMPLE_CASE, EXAMPLE_CASE_ID } from "@/lib/exampleCase";
 import type {
@@ -56,7 +53,6 @@ import type {
   AuthUser,
   HistoryEntry,
   StockData,
-  WatchlistEntry,
 } from "@/types";
 
 const INITIAL_STEPS: AgentStep[] = [
@@ -70,7 +66,6 @@ const INITIAL_STEPS: AgentStep[] = [
   { id: "bear", name: "Bear Agent", status: "waiting" },
   { id: "verification", name: "Verification Agent", status: "waiting" },
   { id: "report", name: "Report Agent", status: "waiting" },
-  { id: "memo", name: "Memo Agent", status: "waiting" },
 ];
 
 const AGENT_INDEX: Record<string, number> = {
@@ -84,7 +79,6 @@ const AGENT_INDEX: Record<string, number> = {
   bear: 7,
   verification: 8,
   report: 9,
-  memo: 10,
 };
 
 export default function Home() {
@@ -97,9 +91,7 @@ export default function Home() {
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>(INITIAL_STEPS);
   const [error, setError] = useState<string | null>(null);
   const [recentTickers, setRecentTickers] = useState<string[]>([]);
-  const [watchlist, setWatchlist] = useState<WatchlistEntry[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [watchlistLoading, setWatchlistLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [analyzedAt, setAnalyzedAt] = useState<string | undefined>();
   const [apiReachable, setApiReachable] = useState<boolean | null>(null);
@@ -124,14 +116,7 @@ export default function Home() {
 
   useEffect(() => {
     const tool = new URLSearchParams(window.location.search).get("tool");
-    if (
-      tool === "watchlist" ||
-      tool === "portfolio" ||
-      tool === "briefing" ||
-      tool === "alerts" ||
-      tool === "ideas" ||
-      tool === "history"
-    ) {
+    if (tool === "history") {
       setToolsFocusRequest({ tab: tool, key: Date.now() });
     }
   }, []);
@@ -142,12 +127,6 @@ export default function Home() {
   const completedAgentCount = agentSteps.filter(
     (step) => step.status === "complete"
   ).length;
-  const isOnWatchlist = Boolean(
-    currentTicker &&
-      watchlist.some(
-        (e) => e.ticker.toUpperCase() === currentTicker.toUpperCase()
-      )
-  );
   const caseBusy =
     isOpeningInvestigation ||
     (caseDetail != null &&
@@ -228,22 +207,13 @@ export default function Home() {
     };
   }, []);
 
-  const refreshWatchlist = useCallback(async () => {
-    try {
-      setWatchlist(await fetchWatchlist());
-    } catch {
-      // watchlist fetch failed; keep local state
-    }
-  }, []);
-
   const refreshSidebar = useCallback(async () => {
-    await refreshWatchlist();
     try {
       setHistory(await fetchHistory());
     } catch {
       // history optional (may fail without Chroma/OpenAI)
     }
-  }, [refreshWatchlist]);
+  }, []);
 
   useEffect(() => {
     refreshSidebar();
@@ -276,10 +246,6 @@ export default function Home() {
         block: "start",
       });
   }, [lenis]);
-
-  const handlePositionClick = useCallback(() => {
-    setToolsFocusRequest({ tab: "portfolio", key: Date.now() });
-  }, []);
 
   function resetAgentSteps() {
     setAgentSteps(
@@ -441,50 +407,6 @@ export default function Home() {
     }
   }
 
-  async function handleAddWatchlist() {
-    if (!currentTicker) {
-      setError("Frame a ticker first, then track it.");
-      return;
-    }
-    if (isOnWatchlist) {
-      setNotice(`${currentTicker} is already tracked.`);
-      setTimeout(() => setNotice(null), 3000);
-      return;
-    }
-
-    setWatchlistLoading(true);
-    setNotice(null);
-    setError(null);
-    try {
-      const entry = await addToWatchlist(currentTicker);
-      setWatchlist((prev) =>
-        prev.some((e) => e.ticker.toUpperCase() === entry.ticker.toUpperCase())
-          ? prev
-          : [entry, ...prev]
-      );
-      setNotice(`${entry.ticker} is now tracked.`);
-      setTimeout(() => setNotice(null), 4000);
-      await refreshWatchlist();
-    } catch (err) {
-      setError(
-        err instanceof ApiError ? err.message : "Could not track that ticker."
-      );
-    } finally {
-      setWatchlistLoading(false);
-    }
-  }
-
-  async function handleRemoveWatchlist(ticker: string) {
-    try {
-      await removeFromWatchlist(ticker);
-      await refreshSidebar();
-    } catch (err) {
-      setError(
-        err instanceof ApiError ? err.message : "Could not untrack that ticker."
-      );
-    }
-  }
-
   async function handleHistorySelect(ticker: string) {
     setHistoryLoading(true);
     setError(null);
@@ -532,7 +454,6 @@ export default function Home() {
         onUserChange={handleUserChange}
         sourcesAvailable={Boolean(analysisReport && !isLoading)}
         onSourcesClick={handleSourcesClick}
-        onPortfolioClick={handlePositionClick}
         caseId={activeInvestigationId}
         search={
           <SearchBar
@@ -660,8 +581,9 @@ export default function Home() {
           </div>
         )}
 
-        <div className="mt-3">
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
           <HowItWorks />
+          <ProjectStack />
         </div>
 
         <div className="mt-3">
@@ -674,18 +596,9 @@ export default function Home() {
 
         <div className="mt-4">
           <ToolsDock
-            user={user}
-            watchlist={watchlist}
             history={history}
-            currentTicker={currentTicker}
-            watchlistLoading={watchlistLoading}
             historyLoading={historyLoading}
-            isLoadingAnalysis={isLoading}
-            onSelectTicker={runInvestigate}
-            onOpenInvestigation={(id, ticker) => handleCaseSelect(id, ticker)}
             onHistorySelect={handleHistorySelect}
-            onAddWatchlist={handleAddWatchlist}
-            onRemoveWatchlist={handleRemoveWatchlist}
             focusRequest={toolsFocusRequest}
           />
         </div>
@@ -716,16 +629,7 @@ export default function Home() {
 
             {analysisReport && !isLoading && (
               <>
-                {analysisReport.investment_memo && (
-                  <InvestmentMemoPanel memo={analysisReport.investment_memo} />
-                )}
-
-                <ReportDisplay
-                  analysis={analysisReport}
-                  omitOverlappingSummary={Boolean(
-                    analysisReport.investment_memo
-                  )}
-                />
+                <ReportDisplay analysis={analysisReport} />
 
                 {analysisReport.debate_output && (
                   <DebatePanel debate={analysisReport.debate_output} />

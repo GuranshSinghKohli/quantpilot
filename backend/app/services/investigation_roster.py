@@ -1,4 +1,4 @@
-"""PRD v3 Phase 13 — run Earnings / Macro / Memo agents on investigation evidence."""
+"""Run Earnings / Macro agents on investigation evidence — no investment memo."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from app.agents.earnings_agent import analyze_earnings
-from app.agents.investment_memo_agent import generate_investment_memo
 from app.agents.macro_agent import analyze_macro
 from app.observability.logger import get_logger, log_event
 from app.services.move_detector import MoveSnapshot
@@ -25,8 +24,8 @@ async def run_roster_pass(
     """
     Light roster expansion for investigations (not the full research graph).
 
-    Reuses existing Earnings / Macro / Investment Memo agents with evidence
-    already collected for the case.
+    Reuses Earnings / Macro agents with evidence already collected for the case.
+    Does not produce buy/hold/sell recommendations.
     """
     ticker = move.ticker
     headlines = _headlines_from_evidence(evidence_rows)
@@ -40,7 +39,6 @@ async def run_roster_pass(
 
     earnings: Dict[str, Any] = {}
     macro: Dict[str, Any] = {}
-    memo: Dict[str, Any] = {}
 
     try:
         earn, _ir = await analyze_earnings(
@@ -75,75 +73,10 @@ async def run_roster_pass(
         )
         macro = {"macro_summary": "Macro context unavailable.", "relevance": "none"}
 
-    leading = ""
-    if hypotheses:
-        ranked = sorted(
-            hypotheses,
-            key=lambda h: int(h.get("rank") or 99),
-        )
-        if ranked:
-            leading = str(ranked[0].get("statement") or "")
-
-    move_bit = (
-        f"{move.move_pct:+.2f}%" if move.move_pct is not None else "an unresolved move"
-    )
-    final_report = {
-        "recommendation": "WATCH",
-        "executive_summary": (
-            f"{ticker} moved {move_bit} over {move.window_label}. "
-            f"Leading claim: {leading or 'see Evidence Ledger'}."
-        ),
-        "key_findings": [h.get("statement") for h in (hypotheses or [])[:3] if h.get("statement")],
-    }
-    debate = {
-        "bull": {"thesis": leading or "See supporting claims in the ledger."},
-        "bear": {
-            "thesis": (da_outcome or {}).get("counterargument")
-            or "See Devil's Advocate notes."
-        },
-    }
-    risk_factors: List[str] = []
-    counter = str((da_outcome or {}).get("counterargument") or "").strip()
-    if counter:
-        risk_factors.append(counter[:280])
-    if verification_notes.strip():
-        risk_factors.append(verification_notes.strip()[:240])
-    if not risk_factors:
-        risk_factors = ["See investigation verification notes."]
-    risk = {"risk_factors": risk_factors[:5]}
-
-    try:
-        memo_out = await generate_investment_memo(
-            ticker,
-            final_report,
-            metrics_output={"key_metrics": fundamentals.get("key_metrics") or fundamentals},
-            risk_output=risk,
-            debate_output=debate,
-            earnings_output=earnings,
-            macro_output=macro,
-            verification_output={"notes": verification_notes},
-        )
-        memo = memo_out.model_dump()
-        # Reframe title for investigation context.
-        memo["memo_title"] = f"{ticker} Investigation Brief"
-    except Exception as exc:
-        log_event(
-            logger,
-            logging.WARNING,
-            "Investigation memo pass failed",
-            ticker=ticker,
-            error=str(exc),
-        )
-        memo = {
-            "memo_title": f"{ticker} Investigation Brief",
-            "one_liner": final_report["executive_summary"][:280],
-            "decision": "WATCH",
-        }
-
     roster = {
         "earnings": earnings,
         "macro": macro,
-        "memo": memo,
+        "memo": {},
     }
     log_event(
         logger,
@@ -152,7 +85,6 @@ async def run_roster_pass(
         ticker=ticker,
         earnings_tone=earnings.get("tone"),
         macro_relevance=macro.get("relevance"),
-        memo_decision=memo.get("decision"),
     )
     return roster
 

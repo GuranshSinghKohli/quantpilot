@@ -171,13 +171,11 @@ class PerAgentConfidence(BaseModel):
     bear: float = 0.0
     verification: float = 0.0
     report: float = 0.0
-    memo: float = 0.0
 
 
 class AnalysisResponse(BaseModel):
     ticker: str
     final_report: FinalReportOutput
-    investment_memo: Optional[InvestmentMemoOutput] = None
     news_output: Optional[NewsAgentOutput] = None
     metrics_output: Optional[FinancialMetricsAgentOutput] = None
     sec_output: Optional[SECFilingAgentOutput] = None

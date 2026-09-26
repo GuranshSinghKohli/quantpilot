@@ -1,4 +1,4 @@
-"""APScheduler wiring for briefings, smart alerts, and investigation sweeps."""
+"""APScheduler wiring for investigation sweeps."""
 
 from __future__ import annotations
 
@@ -7,20 +7,12 @@ import os
 from typing import Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import (
-    ALERT_INTERVAL_MINUTES,
-    ALERTS_ENABLED,
-    BRIEFING_ENABLED,
-    BRIEFING_HOUR_UTC,
-    BRIEFING_MINUTE_UTC,
     INVESTIGATION_SWEEP_INTERVAL_MINUTES,
     INVESTIGATIONS_SWEEP_ENABLED,
 )
-from app.jobs.alert_job import run_alert_evaluation_sync
-from app.jobs.briefing_job import run_daily_briefings_sync
 from app.jobs.investigation_sweep_job import run_investigation_sweep_sync
 from app.observability.logger import get_logger, log_event
 
@@ -42,48 +34,11 @@ def start_scheduler() -> Optional[BackgroundScheduler]:
         "on",
     }
     sweep_on = INVESTIGATIONS_SWEEP_ENABLED and not lightweight
-    if not BRIEFING_ENABLED and not ALERTS_ENABLED and not sweep_on:
+    if not sweep_on:
         log_event(logger, logging.INFO, "All schedulers disabled")
         return None
 
     scheduler = BackgroundScheduler(timezone="UTC")
-
-    if BRIEFING_ENABLED:
-        scheduler.add_job(
-            run_daily_briefings_sync,
-            trigger=CronTrigger(
-                hour=max(0, min(23, BRIEFING_HOUR_UTC)),
-                minute=max(0, min(59, BRIEFING_MINUTE_UTC)),
-            ),
-            id="daily_portfolio_briefings",
-            replace_existing=True,
-            max_instances=1,
-            coalesce=True,
-        )
-        log_event(
-            logger,
-            logging.INFO,
-            "Briefing scheduler registered",
-            hour_utc=BRIEFING_HOUR_UTC,
-            minute_utc=BRIEFING_MINUTE_UTC,
-        )
-
-    if ALERTS_ENABLED:
-        minutes = max(1, min(180, ALERT_INTERVAL_MINUTES))
-        scheduler.add_job(
-            run_alert_evaluation_sync,
-            trigger=IntervalTrigger(minutes=minutes),
-            id="smart_alert_evaluation",
-            replace_existing=True,
-            max_instances=1,
-            coalesce=True,
-        )
-        log_event(
-            logger,
-            logging.INFO,
-            "Alert scheduler registered",
-            interval_minutes=minutes,
-        )
 
     if sweep_on:
         minutes = max(5, min(240, INVESTIGATION_SWEEP_INTERVAL_MINUTES))

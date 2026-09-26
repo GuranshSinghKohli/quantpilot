@@ -26,8 +26,9 @@ from app.db.session import SessionLocal, init_db  # noqa: E402
 from app.jobs.investigation_sweep_job import run_investigation_sweep  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.investigation_schemas import InvestigationCreateRequest  # noqa: E402
+from app.db.models import User  # noqa: E402
 from app.services import asset_class as asset_class_service  # noqa: E402
-from app.services import evidence_ledger_store  # noqa: E402
+from app.services import evidence_ledger_store, watchlist_store  # noqa: E402
 from app.services.move_detector import MoveSnapshot  # noqa: E402
 from app.models.event_schemas import InvestigationGateDecision  # noqa: E402
 from app.services.trigger_logic import TriggerDecision, _decide  # noqa: E402
@@ -164,7 +165,14 @@ def test_cooldown_helper():
 
 def test_sweep_dry_run_and_preview_endpoints():
     headers = _auth_headers("phase11sweep@example.com")
-    client.post("/api/watchlist/NVDA", headers=headers)
+    me = client.get("/api/auth/me", headers=headers).json()
+    db = SessionLocal()
+    try:
+        user = db.get(User, me["id"])
+        assert user is not None
+        watchlist_store.add_holding(db, "NVDA", user=user)
+    finally:
+        db.close()
 
     move = _move(-5.0)
     gate = InvestigationGateDecision(
@@ -220,7 +228,6 @@ def test_run_investigation_sweep_respects_cooldown():
     headers = _auth_headers("phase11cool@example.com")
     me = client.get("/api/auth/me", headers=headers).json()
     user_id = me["id"]
-    client.post("/api/watchlist/TSLA", headers=headers)
 
     db = SessionLocal()
     try:

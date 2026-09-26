@@ -18,9 +18,9 @@ export default function AppFooter({
         <TapeCounter value={formatted} />
 
         <p className="order-last max-w-xl font-mono text-xs leading-relaxed tracking-wide text-readout lg:order-none">
-          Personal bench, not a product launch. LangGraph for the 11-node
-          research graph; investigation_runner for planner → rank → verify →
-          DA. yfinance + EDGAR. Not advice.
+          Systems project, not a product launch. Next.js + FastAPI + LangGraph.
+          Evidence Ledger: planner → rank → verify → DA. yfinance + EDGAR.
+          Not advice.
         </p>
 
         <div

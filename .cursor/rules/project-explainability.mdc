@@ -1,0 +1,21 @@
+---
+description: QuantPilot is a self-explaining engineering project, not a consumer product
+alwaysApply: true
+---
+
+# Project, not a product launch
+
+QuantPilot is a flagship Data + AI + systems project. Every surface we add should be explainable to a reviewer: what it is, why that layer exists, and which technology implements it.
+
+## Always
+
+- Show the workflow (Event → Entity → Relationship → Market → Research → Verification → Report), not a black-box "AI answer."
+- Name the stack in-repo and in the UI: current (Next.js, TypeScript, Tailwind, FastAPI, LangGraph, Postgres/SQLite, Redis optional, ChromaDB, MCP, yfinance, EDGAR) vs target (Kafka, S3, Spark, Airflow, Neo4j, pgvector, Terraform, AWS). Do not pretend target tech is shipped.
+- Keep UI/UX like a technical bench: node names, job stages, evidence IDs, uncertainty, contradictions. Do not hide the pipeline behind consumer brokerage copy.
+- Update README / PRODUCT.md / on-desk stack copy when a real layer is added. Do not invent metrics, sources, or "we use Kafka" until the code does.
+
+## Never
+
+- Do not restyle this as a retail trading app, recommendation engine, or polished SaaS landing page.
+- Do not add buy/hold/sell product features or personal portfolio OS.
+- Do not generate the entire target architecture in one pass. Build incrementally and leave the new piece labeled.

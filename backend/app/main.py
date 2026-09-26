@@ -30,10 +30,7 @@ from app.routers import (
     investigations,
     memory,
     observability,
-    portfolio,
-    recommendations,
     stocks,
-    watchlist,
 )
 
 request_logger = get_logger("api")
@@ -64,9 +61,9 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(
     title="QuantPilot API",
     description=(
-        "QuantPilot API — autonomous investigation engine with JWT auth, "
-        "Evidence Ledger investigations, company memory, alerts, and a multi-agent research pipeline. "
-        "Interactive OpenAPI: /docs"
+        "QuantPilot API — evidence-driven market and technology intelligence. "
+        "Investigations, company memory, and a multi-agent research pipeline. "
+        "Not an investment advisor. Interactive OpenAPI: /docs"
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -92,11 +89,8 @@ app.include_router(analysis.router, prefix="/api")
 app.include_router(memory.router, prefix="/api")
 app.include_router(investigations.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
-app.include_router(watchlist.router, prefix="/api")
-app.include_router(portfolio.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
 app.include_router(observability.router, prefix="/api")
-app.include_router(recommendations.router, prefix="/api")
 
 
 @app.middleware("http")

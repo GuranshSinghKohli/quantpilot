@@ -82,7 +82,7 @@ function DashboardBody({
   data: DashboardResponse;
   onAlertChange: (next: AlertEvent) => void;
 }) {
-  const { counts, portfolio } = data;
+  const { counts } = data;
   const todayLine =
     counts.investigations_today === 0
       ? "No material events investigated today."
@@ -96,68 +96,20 @@ function DashboardBody({
         <p className="osd-label">Intelligence desk</p>
         <h1 className="osd-header mt-1">{todayLine}</h1>
         <p className="mt-2 text-sm text-readout">
-          Counts come from stored investigations and alerts. Nothing here is
-          invented for display.
+          Counts come from stored investigations. Nothing here is invented for
+          display. Systems project desk — Next.js + FastAPI + LangGraph — not a
+          portfolio product.
         </p>
       </header>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4">
         <Bracketed as="section" className="p-4">
-          <ColumnHeader brief={portfolio.note}>Portfolio snapshot</ColumnHeader>
-          {portfolio.holdings_count === 0 ? (
-            <NoSignal
-              title="No holdings attached"
-              detail="Sign in and save positions to see concentration from stored cost basis."
-            />
-          ) : (
-            <dl className="space-y-2 text-sm text-osd">
-              <div>
-                <dt className="osd-label">Holdings</dt>
-                <dd>{portfolio.holdings_count}</dd>
-              </div>
-              {portfolio.total_market_value != null && (
-                <div>
-                  <dt className="osd-label">Cost-basis total</dt>
-                  <dd data-figures>
-                    {portfolio.total_market_value.toLocaleString()}
-                  </dd>
-                </div>
-              )}
-              {portfolio.largest_ticker && portfolio.largest_weight_pct != null && (
-                <div>
-                  <dt className="osd-label">Largest (cost basis)</dt>
-                  <dd>
-                    {portfolio.largest_ticker} {portfolio.largest_weight_pct}%
-                  </dd>
-                </div>
-              )}
-              <div>
-                <dt className="osd-label">Tickers</dt>
-                <dd className="flex flex-wrap gap-2">
-                  {portfolio.tickers.map((ticker) => (
-                    <Link
-                      key={ticker}
-                      href={`/companies/${ticker}`}
-                      className="text-caution hover:underline"
-                    >
-                      {ticker}
-                    </Link>
-                  ))}
-                </dd>
-              </div>
-            </dl>
-          )}
-        </Bracketed>
-
-        <Bracketed as="section" className="p-4 lg:col-span-2">
-          <ColumnHeader>Autonomous intelligence</ColumnHeader>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <ColumnHeader>Research activity</ColumnHeader>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Count label="Investigations today" value={counts.investigations_today} />
             <Count label="Active" value={counts.active} />
             <Count label="Completed today" value={counts.completed_today} />
             <Count label="Skipped / suppressed" value={counts.skipped} />
-            <Count label="Alerts today" value={counts.alerts_today} />
-            <Count label="Unread alerts" value={counts.alerts_unread} />
           </div>
         </Bracketed>
       </div>
