@@ -10,8 +10,6 @@ if _TEST_DB.exists():
     _TEST_DB.unlink()
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB.as_posix()}"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key"
-os.environ["BRIEFING_ENABLED"] = "false"
-os.environ["ALERTS_ENABLED"] = "false"
 os.environ["INVESTIGATIONS_SWEEP_ENABLED"] = "false"
 os.environ["QUANTPILOT_LIGHTWEIGHT"] = "true"
 os.environ["REDIS_URL"] = ""
@@ -21,6 +19,7 @@ os.environ["ENVIRONMENT"] = "development"
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app import config as app_config  # noqa: E402
+from app.core.migrations import head_revision  # noqa: E402
 from app.db.session import SessionLocal, init_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.security.llm_budget import (  # noqa: E402
@@ -59,6 +58,9 @@ def test_health_and_ready_distinguish_dependencies():
     ready = client.get("/ready")
     assert ready.status_code == 200
     assert ready.json()["database"] == "ok"
+    assert ready.json()["migrations_current"] is True
+    assert ready.json()["db_revision"] == head_revision()
+    assert ready.json()["status"] == "ok"
     assert "request_id" in ready.json()
     assert ready.headers.get("x-request-id")
 

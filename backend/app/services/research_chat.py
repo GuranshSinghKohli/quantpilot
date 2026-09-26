@@ -23,11 +23,8 @@ def _format_context(
         report = analysis_context.get("final_report") or analysis_context
         if isinstance(report, dict):
             summary = report.get("executive_summary") or report.get("summary", "")
-            rec = report.get("recommendation", "")
             if summary:
                 parts.append(f"Current report summary: {summary}")
-            if rec:
-                parts.append(f"Recommendation: {rec}")
 
         debate = analysis_context.get("debate_output")
         if debate:

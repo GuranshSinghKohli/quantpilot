@@ -44,7 +44,6 @@ def _fallback(
                 content=", ".join(risk_output.get("risk_factors", [])),
             ),
         ],
-        recommendation="Hold. Conduct further due diligence before investing.",
     )
 
 
@@ -85,11 +84,12 @@ async def generate_report(
                 "You are a senior equity research analyst. Write a structured research report. "
                 "Synthesize bull/bear debate, earnings, macro, and verification flags when provided. "
                 "Prefer verified claims; call out unsupported claims cautiously. "
-                "This is research tooling, not financial advice. "
+                "This is research tooling, not financial advice: never issue buy/hold/sell "
+                "calls, price targets, or position advice. "
                 "Respond ONLY with valid JSON: "
                 '{"ticker": string, "report_title": string, "executive_summary": string, '
                 '"sections": [{"title": string, "content": string}, ...], '
-                '"recommendation": string, "disclaimer": string}'
+                '"disclaimer": string}'
             ),
             user_prompt=f"Generate research report for {ticker}:\n{payload}",
             fallback=fallback.model_dump(),

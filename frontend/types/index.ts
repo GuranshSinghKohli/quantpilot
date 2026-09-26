@@ -53,26 +53,7 @@ export interface FinalReport {
   report_title: string;
   executive_summary: string;
   sections: ReportSection[];
-  recommendation: string;
   disclaimer: string;
-}
-
-export interface InvestmentMemo {
-  ticker: string;
-  memo_title: string;
-  one_liner: string;
-  investment_thesis: string;
-  key_numbers: string[];
-  catalysts: string[];
-  risks: string[];
-  bull_case_summary: string;
-  bear_case_summary: string;
-  decision: "BUY" | "HOLD" | "SELL" | "WATCH";
-  conviction: "low" | "medium" | "high";
-  time_horizon: string;
-  what_would_change_my_mind: string[];
-  disclaimer: string;
-  confidence_score?: number;
 }
 
 export interface NewsOutput {
@@ -180,13 +161,11 @@ export interface PerAgentConfidence {
   bear: number;
   verification?: number;
   report: number;
-  memo?: number;
 }
 
 export interface AnalysisResponse {
   ticker: string;
   final_report: FinalReport;
-  investment_memo?: InvestmentMemo | null;
   news_output?: NewsOutput | null;
   metrics_output?: MetricsOutput | null;
   sec_output?: SECOutput | null;
@@ -209,90 +188,8 @@ export interface ChatResponse {
   sources_used: string[];
 }
 
-export interface PortfolioHolding {
-  ticker: string;
-  current_price: number | null;
-  pe_ratio: number | null;
-  risk_level: string;
-  valuation: string;
-  weight_pct: number;
-  shares?: number | null;
-  avg_cost?: number | null;
-  market_value?: number | null;
-  unrealized_gain_pct?: number | null;
-}
-
-export interface PortfolioAnalysis {
-  holdings: PortfolioHolding[];
-  avg_pe: number | null;
-  risk_mix: Record<string, number>;
-  sector_note: string;
-  weakest_ticker: string | null;
-  summary: string;
-  disclaimer: string;
-  total_market_value?: number | null;
-  weighted_by_real_positions?: boolean;
-}
-
-export interface SyncedPosition {
-  ticker: string;
-  shares?: number | null;
-  avg_cost?: number | null;
-  market_value?: number | null;
-  raw_line?: string;
-}
-
-export interface PortfolioSyncOutput {
-  positions: SyncedPosition[];
-  broker_guess: string;
-  warnings: string[];
-  confidence_score: number;
-  source: string;
-}
-
-export interface PortfolioSummary {
-  id: number;
-  name: string;
-  holdings_count: number;
-  holdings: WatchlistEntry[];
-}
-
-export interface DailyBriefing {
-  id: number;
-  generated_at: string;
-  headline: string;
-  summary: string;
-  highlights: string[];
-  risks: string[];
-  watch_tickers: string[];
-  holdings_snapshot: PortfolioHolding[];
-  confidence_score: number;
-  status: string;
-  error_message: string;
-  disclaimer: string;
-}
-
-export type AlertType =
-  | "price_above"
-  | "price_below"
-  | "volatility_pct"
-  | "news_sentiment";
-
-export interface AlertRule {
-  id: number;
-  ticker: string;
-  alert_type: AlertType | string;
-  threshold: number;
-  enabled: boolean;
-  cooldown_minutes: number;
-  last_triggered_at: string | null;
-  created_at: string;
-  note: string;
-}
-
 export interface AlertEvent {
   id: number;
-  rule_id: number | null;
   ticker: string;
   alert_type: string;
   title: string;
@@ -305,15 +202,6 @@ export interface AlertEvent {
   read_at: string | null;
   is_read: boolean;
   feedback?: string;
-}
-
-export interface WatchlistEntry {
-  ticker: string;
-  added_at: string;
-  notes: string;
-  shares?: number | null;
-  avg_cost?: number | null;
-  source?: string;
 }
 
 export interface AuthUser {
@@ -331,7 +219,7 @@ export interface AuthResponse {
 export interface HistoryEntry {
   ticker: string;
   timestamp: string;
-  recommendation: string;
+  headline: string;
   risk_level: RiskLevel | string;
 }
 
@@ -345,24 +233,6 @@ export interface StoredReport {
 export interface MemorySearchResult {
   query: string;
   results: StoredReport[];
-}
-
-export interface RecommendationPick {
-  ticker: string;
-  score: number;
-  outlook: "bullish" | "neutral" | "bearish";
-  near_term_view: string;
-  catalyst_hint?: string;
-  reasons: string[];
-  current_price: number | null;
-}
-
-export interface RecommendationsResponse {
-  disclaimer: string;
-  generated_at: string;
-  horizon: string;
-  picks: RecommendationPick[];
-  scanned_tickers: string[];
 }
 
 /** PRD v3 Phase 7 — Evidence Ledger */

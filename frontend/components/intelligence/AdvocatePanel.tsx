@@ -68,7 +68,7 @@ export default function AdvocatePanel({
         </p>
       )}
       {recommendation && (
-        <p className="osd-label mt-4">Recommendation {recommendation}</p>
+        <p className="osd-label mt-4">Verdict {recommendation}</p>
       )}
     </section>
   );

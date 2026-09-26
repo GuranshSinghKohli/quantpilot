@@ -81,15 +81,6 @@ def separate_facts_and_insights(
                 }
             )
 
-    rec = final_report.get("recommendation", "")
-    if rec:
-        insights.append(
-            {
-                "content": f"Recommendation: {rec}",
-                "generated_by": "report_agent / LLM",
-            }
-        )
-
     metrics_summary = metrics_output.get("analysis_summary")
     if metrics_summary:
         insights.append(

@@ -41,7 +41,7 @@ def add_run(
     owner_key: str,
     user: Optional[User],
     ticker: str,
-    recommendation: str = "",
+    headline: str = "",
     risk_level: str = "",
     chroma_doc_id: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -50,7 +50,7 @@ def add_run(
         owner_key=owner_key,
         user_id=user.id if user is not None else None,
         ticker=symbol,
-        recommendation=(recommendation or "")[:512],
+        headline=(headline or "")[:512],
         risk_level=(risk_level or "")[:32],
         chroma_doc_id=chroma_doc_id,
         created_at=datetime.now(timezone.utc),
@@ -96,6 +96,6 @@ def _to_entry(run: AnalysisRun) -> Dict[str, Any]:
     return {
         "ticker": run.ticker,
         "timestamp": created.isoformat() if created else datetime.now(timezone.utc).isoformat(),
-        "recommendation": run.recommendation or "",
+        "headline": run.headline or "",
         "risk_level": run.risk_level or "",
     }

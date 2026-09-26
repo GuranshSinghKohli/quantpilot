@@ -9,8 +9,6 @@ if _TEST_DB.exists():
     _TEST_DB.unlink()
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB.as_posix()}"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key"
-os.environ["BRIEFING_ENABLED"] = "false"
-os.environ["ALERTS_ENABLED"] = "false"
 os.environ["QUANTPILOT_LIGHTWEIGHT"] = "true"
 
 import asyncio  # noqa: E402

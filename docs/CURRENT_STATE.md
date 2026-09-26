@@ -5,6 +5,8 @@ Baseline commit `4cf2b4e` plus an **uncommitted** cleanup that removed the perso
 
 All numbers below were measured from the working tree, not estimated.
 
+> Snapshot taken **before Phase 1**. For what Phase 1 changed (Alembic, typed settings, core schema, test tiers), see "Phase 1 — as built" in [IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md).
+
 | Area | Size |
 |---|---|
 | `backend/app` | 109 Python files, ~21,100 lines |

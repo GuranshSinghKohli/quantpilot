@@ -20,6 +20,8 @@ class ReadyResponse(BaseModel):
     status: str
     application: str
     database: str
+    db_revision: Optional[str] = None
+    migrations_current: bool = False
     redis: str
     draining: bool = False
     request_id: str = ""

@@ -35,7 +35,7 @@ Browser (Next.js) → FastAPI → LangGraph / investigation runner → MCP → y
 
 Workflow: **Event → Entity → Relationship → Market → Research → Verification → Report**
 
-Full diagram: **[ARCHITECTURE.md](./ARCHITECTURE.md)** · Target architecture: **[docs/FINAL_ARCHITECTURE.md](./docs/FINAL_ARCHITECTURE.md)**
+Full diagram: **[ARCHITECTURE.md](./ARCHITECTURE.md)** · Current state, decisions and roadmap: **[docs/CURRENT_STATE.md](./docs/CURRENT_STATE.md)** · **[docs/ARCHITECTURE_DECISIONS.md](./docs/ARCHITECTURE_DECISIONS.md)** · **[docs/IMPLEMENTATION_ROADMAP.md](./docs/IMPLEMENTATION_ROADMAP.md)**
 
 ---
 
@@ -96,15 +96,22 @@ cd quantpilot
 
 ### 2. Backend (port 8000)
 
+Python 3.11 (see `.python-version`).
+
 ```bash
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+uv venv --python 3.11 .venv          # or: python3.11 -m venv .venv
+uv pip install -r requirements-dev.txt  # runtime + pytest
 cp .env.example .env
 # Edit .env — OPENAI_API_KEY, SEC_EDGAR_USER_AGENT
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+cd .. && make migrate && make api       # alembic upgrade head, then uvicorn --reload
 ```
+
+Schema changes go through Alembic (`backend/alembic/versions/`); the API never runs `create_all`. In development the API also migrates on startup (`DB_AUTO_MIGRATE`). `GET /ready` reports `db_revision` and `migrations_current`.
+
+**Tests.** `make test` runs the full suite on a throwaway SQLite file. `make db && make test-integration` runs the Postgres tier (`backend/tests/integration/`: migration drift, core repositories) against `quantpilot_test`, which the compose Postgres creates on first boot.
+
+**Compose.** `make up` starts pgvector-enabled Postgres 16, Redis, a one-shot `migrate` service, the API and the frontend; `make dev` adds API hot reload. Host ports are overridable (`POSTGRES_PORT`, `REDIS_PORT`). pgvector is available in the image but not used by any table yet.
 
 The MCP server is **auto-spawned** by the backend over stdio — no separate terminal required for normal use.
 

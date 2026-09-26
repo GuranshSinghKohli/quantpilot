@@ -8,8 +8,6 @@ from pathlib import Path
 
 os.environ.setdefault("QUANTPILOT_LIGHTWEIGHT", "true")
 os.environ.setdefault("INVESTIGATIONS_SWEEP_ENABLED", "false")
-os.environ.setdefault("BRIEFING_ENABLED", "false")
-os.environ.setdefault("ALERTS_ENABLED", "false")
 
 from evals.dataset import DatasetError, load_dataset, public_case_view, validate_case
 from evals.datasets.catalog import cases_by_id, load_v1

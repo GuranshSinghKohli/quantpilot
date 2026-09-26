@@ -10,9 +10,9 @@ export const CURRENT_STACK: { layer: string; tech: string }[] = [
   { layer: "Frontend", tech: "Next.js 14, TypeScript, Tailwind" },
   { layer: "API", tech: "Python, FastAPI" },
   { layer: "Agents", tech: "LangGraph + OpenAI" },
-  { layer: "Store", tech: "PostgreSQL / SQLite, optional Redis, ChromaDB" },
+  { layer: "Store", tech: "PostgreSQL / SQLite (Alembic), optional Redis, ChromaDB" },
   { layer: "Tools", tech: "MCP, yfinance, SEC EDGAR" },
-  { layer: "Ship", tech: "Docker, GitHub Actions, Pytest" },
+  { layer: "Ship", tech: "Docker Compose, GitHub Actions, Pytest (SQLite + Postgres tiers)" },
 ];
 
 export const TARGET_STACK: { layer: string; tech: string }[] = [

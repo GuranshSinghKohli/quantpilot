@@ -1,13 +1,21 @@
-"""Ensure the monorepo root (containing mcp_server/) is importable in tests."""
+"""Test process setup: import path, quiet background jobs, isolated database.
+
+This file is loaded before any test module imports ``app``. The engine is built
+once per process from the first DATABASE_URL it sees, so the URL must point at
+a throwaway file here — otherwise it falls through to ``.env`` and the tests
+write into the developer's database.
+"""
 
 import os
 import sys
 from pathlib import Path
 
-# Phase 9 sweep defaults on in production. Keep test processes quiet.
+_TEST_DB = Path(__file__).resolve().parent / "_test_session.db"
+if _TEST_DB.exists():
+    _TEST_DB.unlink()
+os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB.as_posix()}"
+
 os.environ.setdefault("INVESTIGATIONS_SWEEP_ENABLED", "false")
-os.environ.setdefault("BRIEFING_ENABLED", "false")
-os.environ.setdefault("ALERTS_ENABLED", "false")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]

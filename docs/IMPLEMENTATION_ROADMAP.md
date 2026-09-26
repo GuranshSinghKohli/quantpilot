@@ -33,6 +33,17 @@ The working tree holds an uncommitted, tested removal of the trading-desk surfac
 
 **Goal.** A repo where schema changes are migrations, config is typed and validated, Postgres is the dev and integration-test database, and the minimal core domain exists as tables and models. **No new user-facing features. No Kafka, S3, Spark, Airflow, Neo4j, or pgvector usage.** Existing routes and the UI keep working unchanged.
 
+### Phase 1 — as built
+
+Differences between the plan below and what shipped:
+
+- **Migration chain.** `0001_baseline` (the 12 pre-Alembic tables), `0002_drop_legacy_briefings_alert_rules`, `0003_core_foundation`, `0004_analysis_runs_headline` (renames `recommendation` → `headline`; buy/hold/sell output removed from reports).
+- **Adopting old databases.** Instead of a manual `alembic stamp`, `app.core.migrations.upgrade_to_head` detects a pre-Alembic database, adds the columns the old ALTERs would have added, creates any missing legacy tables and indexes, stamps `0001` and upgrades. On adopted databases, seven of the ALTER-added columns stay nullable and SQLite lacks the `alert_events.investigation_id` foreign key. Fresh databases have neither gap.
+- **Startup.** `DB_AUTO_MIGRATE` (unset = on only in development). When it is off and the database is behind, the API still serves, but the scheduler doesn't start and `/ready` reports `migrations_current: false`. Railway runs `alembic upgrade head` before uvicorn, and compose runs a one-shot `migrate` service.
+- **Idempotency.** Research-job keys are unique per owner, not globally. Reusing a key for a different request raises `IdempotencyConflict`.
+- **Defaults.** `INVESTIGATIONS_SWEEP_ENABLED` now defaults to `false`.
+- **Test isolation.** `tests/conftest.py` pins a throwaway SQLite file before any app import. Earlier, the legacy suite could bind to `backend/data/quantpilot.db` depending on import order.
+
 ### 1.1 Runtime + repo hygiene
 - **What.** Pin Python 3.11 (`.python-version`, README). Split `requirements.txt` (runtime) from `requirements-dev.txt` (pytest, ruff). Add a `Makefile` with the commands in "Local commands" below. Move `docs/PHASE_*.md` to `docs/history/` with a one-line index, and rewrite `ARCHITECTURE.md` to point at the current docs.
 - **Why.** Removes the 3.9/3.11 split (ADR-019). Old phase numbering collides with this roadmap.
@@ -44,7 +55,7 @@ The working tree holds an uncommitted, tested removal of the trading-desk surfac
 - **Test.** Unit tests: defaults, env override, invalid values fail fast, secrets never appear in `repr`.
 
 ### 1.3 Structured logging
-- **What.** Move the JSON formatter to `app/core/logging.py`; add `service`, `env`, `version` fields; stdout-only when `ENVIRONMENT != development`. Keep `get_logger` / `log_event` signatures.
+- **What.** Move the JSON formatter to `app/core/structured_logging.py` (not `logging.py`, which would shadow the stdlib module); add `service`, `env`, `version` fields; stdout-only when `ENVIRONMENT != development`. Keep `get_logger` / `log_event` signatures.
 - **Why.** Logs must be machine-joinable across API and future workers (ADR-017).
 - **Test.** Unit test on formatter output and redaction.
 
@@ -57,13 +68,13 @@ The working tree holds an uncommitted, tested removal of the trading-desk surfac
 - **Why.** ADR-002, ADR-003.
 - **Test.** Integration: `upgrade head → downgrade base → upgrade head` on Postgres; baseline matches the models (no autogenerate diff).
 
-### 1.5 Core domain schema (`0002_core_foundation`)
+### 1.5 Core domain schema (`0003_core_foundation`)
 - **What.** SQLAlchemy models in `app/domain/` plus Pydantic schemas, for the tables in the "Phase 1 schema" section below. Minimal repository functions with idempotent upserts for `sources`, `events`, `companies`, `relationships`, `research_jobs`.
 - **Why.** Every later phase writes to these tables. They are created now, empty, and exercised only by tests. **No route or pipeline writes to them in Phase 1.**
 - **Test.** Integration: constraints (unique dedup keys, FK integrity, CHECK enums), idempotent upsert returns the same row twice, cascade and restrict behavior.
 
 ### 1.6 Docker dev environment
-- **What.** Compose uses `pgvector/pgvector:pg16`, adds a one-shot `migrate` service (`alembic upgrade head`), and the backend depends on it completing. `docker-compose.override.yml` for hot reload. Redis stays optional.
+- **What.** Compose uses `pgvector/pgvector:pg16`, adds a one-shot `migrate` service (`alembic upgrade head`), and the backend depends on it completing. `docker-compose.dev.yml` overlay for hot reload (opt-in, so plain `docker compose up` stays production-shaped). Redis stays optional.
 - **Why.** One command for a production-shaped local stack.
 - **Test.** `make up && make ready` returns `migrations_current: true`.
 
@@ -131,7 +142,7 @@ market_event_windows id, event_id FK→events, company_entity_id FK→entities, 
 
 research_jobs       id, owner_key, job_type [event_research|company_research|technology_research],
                     status [queued|running|succeeded|partial|failed|cancelled],
-                    idempotency_key UNIQUE, request JSONB, event_id NULL FK→events,
+                    idempotency_key, UNIQUE(owner_key, idempotency_key), request JSONB, event_id NULL FK→events,
                     current_stage NULL, attempts, error NULL,
                     queued_at, started_at NULL, finished_at NULL
 

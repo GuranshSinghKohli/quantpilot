@@ -1,0 +1,10 @@
+# Dev overlay: mounts source and reloads the API on change.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# The frontend is usually faster run on the host (`cd frontend && npm run dev`).
+
+services:
+  backend:
+    volumes:
+      - ./backend:/app/backend
+      - ./mcp_server:/app/mcp_server
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

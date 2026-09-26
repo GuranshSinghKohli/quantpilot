@@ -1,39 +1,23 @@
+"""Session re-exports plus startup data preparation (migrations + guest bootstrap)."""
+
 import json
 import logging
 from pathlib import Path
-from typing import Generator, Optional
+from typing import Optional
 
-from sqlalchemy import create_engine, inspect, select, text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app.config import (
-    BACKEND_DIR,
-    DATABASE_URL,
-    is_sqlite,
-)
-from app.db.models import Base, Holding, Portfolio, User
+from app.core.db import SessionLocal, engine, get_db  # noqa: F401
+from app.core.migrations import migration_state, upgrade_to_head
+from app.core.settings import BACKEND_DIR, get_settings
+from app.db.models import Holding, Portfolio, User
 from app.observability.logger import get_logger, log_event
 
 logger = get_logger("db")
 
-_connect_args = {"check_same_thread": False} if is_sqlite() else {}
-engine = create_engine(
-    DATABASE_URL,
-    connect_args=_connect_args,
-    pool_pre_ping=True,
-)
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-
 LEGACY_WATCHLIST_PATH = BACKEND_DIR / "data" / "watchlist.json"
 ANON_EMAIL = "anonymous@local.quantpilot"
-
-
-def get_db() -> Generator[Session, None, None]:
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def _ensure_anonymous_user(db: Session) -> User:
@@ -138,159 +122,46 @@ def get_anonymous_user(db: Session) -> User:
     return _ensure_anonymous_user(db)
 
 
-def _migrate_holdings_columns() -> None:
-    """Add columns introduced after initial table creation (SQLite/Postgres safe)."""
-    inspector = inspect(engine)
-    if "holdings" not in inspector.get_table_names():
-        return
-    existing = {col["name"] for col in inspector.get_columns("holdings")}
-    additions = {
-        "shares": "FLOAT",
-        "avg_cost": "FLOAT",
-        "source": "VARCHAR(32) DEFAULT 'manual'",
-    }
-    with engine.begin() as conn:
-        for column, ddl_type in additions.items():
-            if column in existing:
-                continue
-            try:
-                conn.execute(text(f"ALTER TABLE holdings ADD COLUMN {column} {ddl_type}"))
-                log_event(logger, logging.INFO, "Migrated holdings table", column=column)
-            except Exception as exc:
-                log_event(
-                    logger,
-                    logging.WARNING,
-                    "Holdings column migration skipped",
-                    column=column,
-                    error=str(exc),
-                )
-
-
-def _migrate_investigations_columns() -> None:
-    """Add Phase 9 verification/DA columns on existing DBs."""
-    inspector = inspect(engine)
-    if "investigations" not in inspector.get_table_names():
-        return
-    existing = {col["name"] for col in inspector.get_columns("investigations")}
-    additions = {
-        "verification_notes": "TEXT DEFAULT ''",
-        "da_outcome_json": "TEXT DEFAULT '{}'",
-        "roster_json": "TEXT DEFAULT '{}'",
-    }
-    with engine.begin() as conn:
-        for column, ddl_type in additions.items():
-            if column in existing:
-                continue
-            try:
-                conn.execute(
-                    text(f"ALTER TABLE investigations ADD COLUMN {column} {ddl_type}")
-                )
-                log_event(
-                    logger, logging.INFO, "Migrated investigations table", column=column
-                )
-            except Exception as exc:
-                log_event(
-                    logger,
-                    logging.WARNING,
-                    "Investigations column migration skipped",
-                    column=column,
-                    error=str(exc),
-                )
-
-
-def _migrate_alert_events_columns() -> None:
-    """PRD v3 Phase 12 — material investigation notification columns."""
-    inspector = inspect(engine)
-    if "alert_events" not in inspector.get_table_names():
-        return
-    existing = {col["name"] for col in inspector.get_columns("alert_events")}
-    additions = {
-        "investigation_id": "INTEGER",
-        "materiality_score": "FLOAT",
-        "feedback": "VARCHAR(32) DEFAULT ''",
-    }
-    with engine.begin() as conn:
-        for column, ddl_type in additions.items():
-            if column in existing:
-                continue
-            try:
-                conn.execute(
-                    text(f"ALTER TABLE alert_events ADD COLUMN {column} {ddl_type}")
-                )
-                log_event(
-                    logger, logging.INFO, "Migrated alert_events table", column=column
-                )
-            except Exception as exc:
-                log_event(
-                    logger,
-                    logging.WARNING,
-                    "Alert events column migration skipped",
-                    column=column,
-                    error=str(exc),
-                )
-
-
-def _migrate_evidence_graph_columns() -> None:
-    """Phase 5 — optional provenance columns on existing ledgers."""
-    inspector = inspect(engine)
-    tables = inspector.get_table_names()
-    additions = {
-        "evidence_items": {"content_hash": "VARCHAR(64) DEFAULT ''"},
-        "claims": {"claim_type": "VARCHAR(32) DEFAULT 'CAUSAL_EXPLANATION'"},
-    }
-    with engine.begin() as conn:
-        for table, columns in additions.items():
-            if table not in tables:
-                continue
-            existing = {col["name"] for col in inspector.get_columns(table)}
-            for column, ddl_type in columns.items():
-                if column in existing:
-                    continue
-                try:
-                    conn.execute(
-                        text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}")
-                    )
-                    log_event(
-                        logger,
-                        logging.INFO,
-                        "Migrated evidence graph column",
-                        table=table,
-                        column=column,
-                    )
-                except Exception as exc:
-                    log_event(
-                        logger,
-                        logging.WARNING,
-                        "Evidence graph column migration skipped",
-                        table=table,
-                        column=column,
-                        error=str(exc),
-                    )
-
-
-def init_db() -> None:
-    if is_sqlite():
-        path_part = DATABASE_URL.split("sqlite:///", 1)[-1]
-        Path(path_part).parent.mkdir(parents=True, exist_ok=True)
-
-    Base.metadata.create_all(bind=engine)
-    _migrate_holdings_columns()
-    _migrate_investigations_columns()
-    _migrate_alert_events_columns()
-    _migrate_evidence_graph_columns()
+def _seed() -> None:
     db = SessionLocal()
     try:
         anon = _ensure_anonymous_user(db)
         _migrate_legacy_watchlist(db, anon)
-        log_event(
-            logger,
-            logging.INFO,
-            "Database ready",
-            dialect=engine.dialect.name,
-            sqlite=is_sqlite(),
-        )
     finally:
         db.close()
+
+
+def _ensure_sqlite_dir() -> None:
+    url = engine.url
+    if url.get_backend_name() == "sqlite" and url.database and url.database != ":memory:":
+        Path(url.database).parent.mkdir(parents=True, exist_ok=True)
+
+
+def init_db() -> None:
+    """Migrate to head and seed the guest user. Used by tests and DB_AUTO_MIGRATE."""
+    _ensure_sqlite_dir()
+    upgrade_to_head(engine)
+    _seed()
+    log_event(logger, logging.INFO, "Database ready", dialect=engine.dialect.name)
+
+
+def prepare_database() -> bool:
+    """App startup: migrate only when allowed, never touch a schema that is behind."""
+    if get_settings().auto_migrate:
+        init_db()
+        return True
+    state = migration_state(engine)
+    if not state.is_current:
+        log_event(
+            logger,
+            logging.ERROR,
+            "Database schema is not at Alembic head; run `alembic upgrade head`",
+            current=state.current,
+            head=state.head,
+        )
+        return False
+    _seed()
+    return True
 
 
 def resolve_user_for_watchlist(db: Session, user: Optional[User]) -> User:

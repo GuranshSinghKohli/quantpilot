@@ -59,7 +59,7 @@ In **Variables**, add:
 | `OPENAI_API_KEY` | Your OpenAI key |
 | `SEC_EDGAR_USER_AGENT` | `QuantPilot/1.0 (your-email@example.com)` |
 | `ALLOWED_ORIGINS` | `http://localhost:3000` (add Vercel URL after frontend deploy) |
-| `DATABASE_URL` | From Railway Postgres plugin (required for durable watchlists) |
+| `DATABASE_URL` | From Railway Postgres plugin (schema applied by `alembic upgrade head` in the start command) |
 | `JWT_SECRET_KEY` | Long random secret for signing auth tokens |
 
 ### 5. Start command
@@ -67,8 +67,10 @@ In **Variables**, add:
 Railway reads `backend/railway.toml` and `backend/Procfile`:
 
 ```toml
-startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+startCommand = "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
 ```
+
+Migrations run before the API starts. `alembic upgrade head` is idempotent, so restarts are safe. If a migration fails the deploy fails instead of serving a stale schema. Check `GET /ready` afterwards: `migrations_current` should be `true`.
 
 No manual override needed unless you prefer the dashboard.
 

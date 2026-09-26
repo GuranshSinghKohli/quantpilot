@@ -204,7 +204,7 @@ async def smart_summarize_text(
             if line.strip() and len(line.strip()) > 40
         ][:5]
         or ["Report available above — open sections for detail."],
-        takeaway="Skim the executive summary and recommendation in the full report.",
+        takeaway="Skim the executive summary and the cited evidence in the full report.",
         source="heuristic",
     )
     system = (

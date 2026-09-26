@@ -7,7 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import MAX_REQUEST_BODY_BYTES, get_allowed_origins
-from app.db.session import engine, init_db
+from app.core.settings import get_settings
+from app.db.session import engine, prepare_database
 from app.exceptions import register_exception_handlers
 from app.jobs.scheduler import shutdown_scheduler, start_scheduler
 from app.models.schemas import HealthResponse, ReadyResponse
@@ -43,8 +44,9 @@ _EXPENSIVE_PREFIXES = (
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    init_db()
-    start_scheduler()
+    get_settings().validate_for_environment()
+    if prepare_database():
+        start_scheduler()
     log_event(request_logger, logging.INFO, "APPLICATION_STARTED", event="APPLICATION_STARTED")
     try:
         yield
@@ -65,7 +67,7 @@ app = FastAPI(
         "Investigations, company memory, and a multi-agent research pipeline. "
         "Not an investment advisor. Interactive OpenAPI: /docs"
     ),
-    version="1.0.0",
+    version=get_settings().SERVICE_VERSION,
     lifespan=lifespan,
 )
 
@@ -163,7 +165,7 @@ async def health() -> HealthResponse:
         langsmith=bool(obs.get("langsmith")),
         sentry=bool(obs.get("sentry")),
         otel=bool(obs.get("otel")),
-        version=app.version or "1.0.0",
+        version=app.version,
         application=str(ready["application"]),
         database=str(ready["database"]),
         redis=str(ready["redis"]),

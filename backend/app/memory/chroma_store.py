@@ -84,7 +84,7 @@ def save_report(ticker: str, report_dict: Dict[str, Any], metadata: Dict[str, An
         {
             "ticker": ticker.upper(),
             "timestamp": timestamp,
-            "recommendation": metadata.get("recommendation", ""),
+            "headline": metadata.get("headline", ""),
             "risk_level": metadata.get("risk_level", ""),
             "owner_key": metadata.get("owner_key", ""),
         }

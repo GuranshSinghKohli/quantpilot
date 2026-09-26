@@ -16,7 +16,7 @@ router = APIRouter(tags=["memory"])
 class SessionHistoryEntry(BaseModel):
     ticker: str
     timestamp: str
-    recommendation: str
+    headline: str
     risk_level: str
 
 

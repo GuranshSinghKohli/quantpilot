@@ -9,11 +9,14 @@ All secrets belong in `.env` / `.env.local` files — never commit them to Git.
 | `OPENAI_API_KEY` | **Required** | Powers all LangGraph agents and ChromaDB embeddings (`text-embedding-3-small`) | `sk-proj-...` |
 | `SEC_EDGAR_USER_AGENT` | **Required** | SEC EDGAR API requires a descriptive User-Agent with contact info | `QuantPilot/1.0 (you@email.com)` |
 | `ALLOWED_ORIGINS` | **Required** (production) | Comma-separated CORS origins allowed to call the API | `https://quantpilot.vercel.app,http://localhost:3000` |
-| `DATABASE_URL` | **Required** (production) | PostgreSQL connection string. Locally defaults to SQLite at `backend/data/quantpilot.db` if unset. Railway Postgres plugin sets this automatically. | `postgresql://user:pass@host:5432/railway` |
+| `DATABASE_URL` | **Required** (production) | PostgreSQL connection string. Locally defaults to SQLite at `backend/data/quantpilot.db` if unset. Railway Postgres plugin sets this automatically. Schema is managed by Alembic (`alembic upgrade head`). | `postgresql://user:pass@host:5432/railway` |
+| `DB_AUTO_MIGRATE` | Optional | Run `alembic upgrade head` at API startup. Unset = on only when `ENVIRONMENT=development`. When off and the database is behind, the scheduler stays down and `/ready` reports `migrations_current: false`. | `false` |
+| `ENVIRONMENT` | Optional | `development` (default) or `production`. Production refuses the dev `JWT_SECRET_KEY` and logs to stdout only. | `production` |
+| `SERVICE_NAME` / `SERVICE_VERSION` | Optional | Stamped on every JSON log line and `/health` (defaults `quantpilot-api` / `0.1.0`) | `quantpilot-api` |
 | `JWT_SECRET_KEY` | **Required** (production) | Secret used to sign auth tokens. Change from the dev default before deploying. | long random string |
 | `JWT_EXPIRE_DAYS` | Optional | Access token lifetime in days (default `7`) | `7` |
 | `INVESTIGATION_NOISE_PCT` | Optional | Absolute daily move % below which proactive runs may skip as market noise (default `1.5`). User-initiated investigate ignores this unless `skip_if_noise=true`. | `1.5` |
-| `INVESTIGATIONS_SWEEP_ENABLED` | Optional | APScheduler portfolio investigation sweep (Phase 9 default-on). Tests/CI set `false`. | `true` |
+| `INVESTIGATIONS_SWEEP_ENABLED` | Optional | APScheduler holdings investigation sweep (default `false`) | `false` |
 | `INVESTIGATION_REOPEN_MOVE_DELTA` | Optional | Reopen a cooled-down ticker if the new move is this many percentage points larger (default `3.0`) | `3.0` |
 | `INVESTIGATION_SWEEP_INTERVAL_MINUTES` | Optional | Minutes between investigation sweeps (default `30`, clamped 5–240) | `30` |
 | `INVESTIGATION_SWEEP_MAX_PER_RUN` | Optional | Max investigations launched per sweep (default `5`) | `5` |
@@ -27,13 +30,7 @@ All secrets belong in `.env` / `.env.local` files — never commit them to Git.
 | `INVESTIGATION_NOTIFY_MIN_DEPTH` | Optional | Alternate notify gate: min investigation depth `light`/`standard`/`deep` (default `standard`) | `standard` |
 | `INVESTIGATION_NOTIFY_COOLDOWN_HOURS` | Optional | Suppress duplicate investigation notifies per ticker (default `6`) | `6` |
 | `ALERT_EMAIL_ENABLED` | Optional | Log intent to email material alerts (SMTP not wired yet; in-app is primary) | `false` |
-| `BRIEFING_ENABLED` | Optional | Run APScheduler daily portfolio briefings (`true`/`false`, default `true`) | `true` |
-| `BRIEFING_HOUR_UTC` | Optional | UTC hour for daily briefing job (default `12`) | `12` |
-| `BRIEFING_MINUTE_UTC` | Optional | UTC minute for daily briefing job (default `0`) | `0` |
-| `BRIEFING_MAX_HOLDINGS` | Optional | Cap holdings included in one briefing (default `12`) | `12` |
 | `REDIS_URL` | Optional | Redis connection URL for cache/queues. If unset/unreachable, uses in-memory fallback. | `redis://localhost:6379/0` |
-| `ALERTS_ENABLED` | Optional | Run smart-alert evaluator on an interval (default `true`) | `true` |
-| `ALERT_INTERVAL_MINUTES` | Optional | Minutes between alert evaluation jobs (default `15`) | `15` |
 | `QUOTE_CACHE_TTL_SECONDS` | Optional | Quote cache TTL in Redis/memory (default `60`) | `60` |
 | `BROWSER_MCP_ENABLED` | Optional | Enable IR/browser MCP tools used by investigations + earnings (default `true`) | `true` |
 | `MCP_BROWSER_TIMEOUT_SECONDS` | Optional | Timeout for IR/browser MCP tools (default `45`) | `45` |
@@ -43,12 +40,11 @@ All secrets belong in `.env` / `.env.local` files — never commit them to Git.
 | `BROWSER_NAV_TIMEOUT_SECONDS` | Optional | OpenClaw navigation timeout (default `20`) | `20` |
 | `BROWSER_DISCOVERY_TIMEOUT_SECONDS` | Optional | Document discovery budget (default `30`) | `30` |
 | `BROWSER_EXTRACT_TIMEOUT_SECONDS` | Optional | PDF/page extraction timeout (default `15`) | `15` |
-| `OPENCLAW_IR_FALLBACK` | Optional | If `true`, try OpenClaw navigate when httpx IR fetch fails/thin. Default `false` (httpx primary; OpenClaw navigate can be flaky / open tabs). Existing-session snapshots for portfolio sync are separate. | `false` |
+| `OPENCLAW_IR_FALLBACK` | Optional | If `true`, try OpenClaw navigate when httpx IR fetch fails/thin. Default `false` (httpx primary; OpenClaw navigate can be flaky / open tabs). | `false` |
 | `OPENCLAW_BROWSER_URL` | Optional | OpenClaw browser control base URL (preferred IR path) | `http://127.0.0.1:18791` |
 | `OPENCLAW_GATEWAY_TOKEN` | Optional | Bearer token for OpenClaw browser/gateway auth | gateway token |
 | `OPENCLAW_GATEWAY_PASSWORD` | Optional | Alternate OpenClaw password auth header | password |
 | `OPENCLAW_BROWSER_PROFILE` | Optional | OpenClaw browser profile name (default `openclaw`) | `openclaw` |
-| `OPENCLAW_BROWSER_PROFILE_EXISTING` | Optional | OpenClaw profile for the "existing session" attach used by Portfolio Sync (default `user`) | `user` |
 | `OPENCLAW_USE_CLI` | Optional | Also try `openclaw browser` CLI for fetches. Leave off unless the CLI is verified: each invocation costs ~8s of Node startup, and `snapshot` may attach to a blank tab instead of the one `open` created, so IR fetches can exhaust the browser timeout and return nothing. The allowlisted httpx fallback is faster and covers the same IR pages. | `false` |
 | `LANGSMITH_TRACING` | Optional | Enable LangSmith / LangChain tracing for LangGraph runs (default `false`) | `true` |
 | `LANGSMITH_API_KEY` | Optional | LangSmith API key (`LANGCHAIN_API_KEY` also accepted) | `lsv2_...` |

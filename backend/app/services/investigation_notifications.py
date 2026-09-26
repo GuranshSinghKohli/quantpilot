@@ -109,7 +109,6 @@ def maybe_notify_investigation(
 
     event = AlertEvent(
         user_id=user.id,
-        rule_id=None,
         ticker=detail.ticker.upper().strip(),
         alert_type="investigation_material",
         title=title[:280],

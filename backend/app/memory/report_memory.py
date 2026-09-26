@@ -19,7 +19,7 @@ def _extract_metadata(state: Dict[str, Any]) -> Dict[str, str]:
     risk_output = state.get("risk_output") or {}
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "recommendation": str(final_report.get("recommendation", "")),
+        "headline": str(final_report.get("report_title", "")),
         "risk_level": str(risk_output.get("risk_level", "")),
     }
 
@@ -60,7 +60,7 @@ def save_report_from_state(
             owner_key=owner_key,
             user=user,
             ticker=ticker,
-            recommendation=metadata["recommendation"],
+            headline=metadata["headline"],
             risk_level=metadata["risk_level"],
             chroma_doc_id=chroma_doc_id,
         )

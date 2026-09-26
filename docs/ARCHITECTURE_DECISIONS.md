@@ -28,8 +28,8 @@ Baseline facts come from `CURRENT_STATE.md`.
 ## ADR-003 — Alembic owns schema changes
 
 **Decision.** Alembic migrations in `backend/alembic/`.
-- Migration `0001_baseline` reproduces the current schema exactly. Existing databases are marked with `alembic stamp`, not re-created.
-- `0002_core_foundation` adds the Phase 1 core tables.
+- Migration `0001_baseline` reproduces the current schema exactly. Existing databases are adopted (stamped at `0001` by `upgrade_to_head`), not re-created.
+- `0002` drops the dead briefing and alert-rule tables, `0003_core_foundation` adds the Phase 1 core tables, and `0004` renames `analysis_runs.recommendation` to `headline`.
 - `create_all` and the `_migrate_*_columns()` ALTERs are removed from the startup path.
 - `/ready` reports whether the database is at Alembic head.
 

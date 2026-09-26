@@ -1,5 +1,7 @@
 # QuantPilot AI — Architecture
 
+> Pre-Phase-1 system diagram, kept for reference. The current state, decisions and build order live in [docs/CURRENT_STATE.md](./docs/CURRENT_STATE.md), [docs/ARCHITECTURE_DECISIONS.md](./docs/ARCHITECTURE_DECISIONS.md) and [docs/IMPLEMENTATION_ROADMAP.md](./docs/IMPLEMENTATION_ROADMAP.md).
+
 ## System diagram
 
 ```
