@@ -50,6 +50,7 @@ data/watchlist.json
 backend/data/chroma_db/
 backend/data/watchlist.json
 backend/data/*.db
+backend/data/lake/
 backend/tests/_test_*.db
 
 # Phase 11 evaluation run artifacts (keep last_run after a measured run)

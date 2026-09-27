@@ -7,12 +7,13 @@ values as module attributes for code written before this module existed.
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from dotenv import load_dotenv
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -44,6 +45,7 @@ else:
 
 _DEFAULT_SQLITE = f"sqlite:///{(BACKEND_DIR / 'data' / 'quantpilot.db').as_posix()}"
 _DEV_JWT_SECRET = "dev-only-change-me-quantpilot"
+_KAFKA_NAME = re.compile(r"[A-Za-z0-9._-]{1,249}")
 
 
 class Settings(BaseSettings):
@@ -121,6 +123,28 @@ class Settings(BaseSettings):
     RATE_LIMIT_EXPENSIVE_PER_MINUTE: int = Field(8, ge=1)
     SWEEP_LOCK_TTL_SECONDS: int = Field(180, ge=1)
 
+    # Ingestion pipeline: Kafka (event backbone)
+    KAFKA_BOOTSTRAP_SERVERS: str = "localhost:9092"
+    KAFKA_TOPIC_NEWS_RAW: str = "quantpilot.news.raw"
+    KAFKA_TOPIC_MARKET_RAW: str = "quantpilot.market.raw"
+    KAFKA_TOPIC_COMPANY_RAW: str = "quantpilot.company.raw"
+    KAFKA_TOPIC_DLQ: str = "quantpilot.ingestion.dlq"
+    KAFKA_CONSUMER_GROUP_LAKE: str = "quantpilot.lake-writer"
+    KAFKA_MAX_MESSAGE_BYTES: int = Field(1_000_000, ge=1024)
+
+    # Ingestion pipeline: data lake (S3 API; MinIO locally)
+    LAKE_BACKEND: Literal["s3", "local"] = "s3"
+    LAKE_BUCKET: str = "quantpilot-lake"
+    LAKE_ENDPOINT_URL: str = ""
+    LAKE_REGION: str = "us-east-1"
+    LAKE_LOCAL_ROOT: str = (BACKEND_DIR / "data" / "lake").as_posix()
+
+    # Ingestion pipeline: sources + retries
+    INGEST_SYMBOLS: str = "AAPL,MSFT,NVDA"
+    PIPELINE_RETRY_MAX_ATTEMPTS: int = Field(5, ge=1, le=20)
+    PIPELINE_RETRY_BASE_SECONDS: float = Field(0.5, gt=0)
+    PIPELINE_RETRY_MAX_SECONDS: float = Field(30.0, gt=0)
+
     # Observability (all optional)
     LANGSMITH_TRACING: bool = False
     LANGSMITH_API_KEY: SecretStr = SecretStr("")
@@ -171,6 +195,47 @@ class Settings(BaseSettings):
     @classmethod
     def _benchmark_default(cls, value: str) -> str:
         return value or "SPY"
+
+    @field_validator(
+        "KAFKA_TOPIC_NEWS_RAW",
+        "KAFKA_TOPIC_MARKET_RAW",
+        "KAFKA_TOPIC_COMPANY_RAW",
+        "KAFKA_TOPIC_DLQ",
+        "KAFKA_CONSUMER_GROUP_LAKE",
+        mode="after",
+    )
+    @classmethod
+    def _kafka_name(cls, value: str) -> str:
+        if not _KAFKA_NAME.fullmatch(value):
+            raise ValueError(f"invalid Kafka topic/group name: {value!r}")
+        return value
+
+    @model_validator(mode="after")
+    def _retry_bounds(self) -> "Settings":
+        if self.PIPELINE_RETRY_MAX_SECONDS < self.PIPELINE_RETRY_BASE_SECONDS:
+            raise ValueError("PIPELINE_RETRY_MAX_SECONDS must be >= PIPELINE_RETRY_BASE_SECONDS")
+        topics = [
+            self.KAFKA_TOPIC_NEWS_RAW,
+            self.KAFKA_TOPIC_MARKET_RAW,
+            self.KAFKA_TOPIC_COMPANY_RAW,
+            self.KAFKA_TOPIC_DLQ,
+        ]
+        if len(set(topics)) != len(topics):
+            raise ValueError("Kafka raw and DLQ topics must be distinct")
+        return self
+
+    @property
+    def raw_topics(self) -> Dict[str, str]:
+        """Raw topic per pipeline domain (news | market | company)."""
+        return {
+            "news": self.KAFKA_TOPIC_NEWS_RAW,
+            "market": self.KAFKA_TOPIC_MARKET_RAW,
+            "company": self.KAFKA_TOPIC_COMPANY_RAW,
+        }
+
+    @property
+    def ingest_symbols(self) -> List[str]:
+        return [s.strip().upper() for s in self.INGEST_SYMBOLS.split(",") if s.strip()]
 
     @property
     def auto_migrate(self) -> bool:
