@@ -58,7 +58,7 @@ def test_news_dedup_key_ignores_tracking_params_and_source():
 
 def test_market_dedup_key_is_vendor_specific():
     key = market_record().dedup_key
-    assert key.endswith(":yfinance.market_daily")
+    assert key.endswith(":massive.market_daily")
 
 
 def test_company_dedup_key_uses_padded_cik():

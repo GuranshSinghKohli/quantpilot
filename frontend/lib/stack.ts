@@ -12,12 +12,16 @@ export const CURRENT_STACK: { layer: string; tech: string }[] = [
   { layer: "Agents", tech: "LangGraph + OpenAI" },
   { layer: "Store", tech: "PostgreSQL / SQLite (Alembic), optional Redis, ChromaDB" },
   { layer: "Tools", tech: "MCP, yfinance, SEC EDGAR" },
+  {
+    layer: "Ingest",
+    tech: "Massive + SEC adapters → Kafka (single-node KRaft) → lake writer → MinIO raw lake (compose profile)",
+  },
   { layer: "Ship", tech: "Docker Compose, GitHub Actions, Pytest (SQLite + Postgres tiers)" },
 ];
 
 export const TARGET_STACK: { layer: string; tech: string }[] = [
-  { layer: "Stream", tech: "Kafka + workers" },
-  { layer: "Lake", tech: "S3, Parquet, Spark, Airflow" },
+  { layer: "Stream", tech: "Managed Kafka (RF ≥ 3), more stream consumers" },
+  { layer: "Lake", tech: "AWS S3, Parquet, Spark, Airflow" },
   { layer: "Graph", tech: "Neo4j + pgvector" },
   { layer: "Infra", tech: "Terraform, AWS, OTel / Prometheus / Grafana" },
 ];

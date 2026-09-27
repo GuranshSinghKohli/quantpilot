@@ -116,11 +116,11 @@ def test_dead_letter_preserves_original_and_context():
         original_value=b'{"schema_version": 1}',
         max_bytes=1_000_000,
         first_failed_at=FIRST,
-        source="yfinance.market_daily",
+        source="massive.market_daily",
         original_topic="quantpilot.market.raw",
         partition=2,
         offset=41,
-        original_key=b"market:SYNTH:1d:2026-09-01:yfinance.market_daily",
+        original_key=b"market:SYNTH:1d:2026-09-01:massive.market_daily",
     )
     assert letter.failure_reason == "payload_invalid"
     assert letter.error_type == "PermanentError" and letter.retry_count == 0

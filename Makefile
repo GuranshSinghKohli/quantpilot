@@ -17,12 +17,17 @@ POSTGRES_PORT       ?= 5432
 PIPELINE = MINIO_ROOT_USER=$(MINIO_ROOT_USER) MINIO_ROOT_PASSWORD=$(MINIO_ROOT_PASSWORD) \
            MINIO_PORT=$(MINIO_PORT) KAFKA_PORT=$(KAFKA_PORT) POSTGRES_PORT=$(POSTGRES_PORT) \
            $(COMPOSE) --profile pipeline
+INGEST = $(PIPELINE) --profile ingest run --rm --no-deps ingest python -m app.pipeline
+opt = $(if $(2),$(1) $(2))
+LIMIT_OPTS = $(call opt,--max-records,$(MAX_RECORDS)) $(call opt,--page-size,$(PAGE_SIZE)) \
+             $(call opt,--max-pages,$(MAX_PAGES))
 LAKE_ENV = LAKE_BACKEND=s3 LAKE_ENDPOINT_URL=http://localhost:$(MINIO_PORT) \
            AWS_ACCESS_KEY_ID=$(MINIO_ROOT_USER) AWS_SECRET_ACCESS_KEY=$(MINIO_ROOT_PASSWORD)
 
 .PHONY: help up dev down db migrate revision api test test-unit test-integration typecheck ready \
         lake-up lake-down lake-init lake-check test-s3 \
-        kafka-up kafka-down kafka-check pipeline-up pipeline-down pipeline-logs publish-synthetic dlq test-kafka
+        kafka-up kafka-down kafka-check pipeline-up pipeline-down pipeline-logs publish-synthetic dlq test-kafka \
+        ingest-news ingest-market ingest-company sources-check
 
 help:
 	@echo "up                compose stack (postgres, redis, migrate, backend, frontend)"
@@ -49,7 +54,11 @@ help:
 	@echo "pipeline-down     stop the pipeline services"
 	@echo "publish-synthetic n=5  publish SYNTHETIC market events through the tracked publisher (compose Postgres)"
 	@echo "dlq               list dead letters (never commits)"
-	@echo "test-kafka        kafka tier against the compose broker (throwaway test.* topics and groups)"
+	@echo "test-kafka        kafka tier (+ mocked-provider e2e into MinIO) against the compose broker"
+	@echo "ingest-news       Massive news   [NEWS_TICKERS= NEWS_START= NEWS_END= MAX_RECORDS=]"
+	@echo "ingest-market     Massive bars   [MARKET_SYMBOLS= MARKET_START= MARKET_END= MAX_RECORDS=]"
+	@echo "ingest-company    SEC companies  [COMPANY_SYMBOLS= | COMPANY_ALL=1 MAX_RECORDS=]"
+	@echo "sources-check     provider health: configured / reachable / auth (not part of API /health)"
 
 up:
 	$(COMPOSE) up --build
@@ -134,4 +143,22 @@ dlq:
 	$(PIPELINE) run --rm --no-deps lake-writer python -m app.pipeline dlq
 
 test-kafka:
-	cd backend && TEST_KAFKA_BOOTSTRAP=localhost:$(KAFKA_PORT) ../$(PY) -m pytest tests/kafka -q
+	cd backend && TEST_KAFKA_BOOTSTRAP=localhost:$(KAFKA_PORT) TEST_S3_ENDPOINT=http://localhost:$(MINIO_PORT) \
+		TEST_S3_ACCESS_KEY_ID=$(MINIO_ROOT_USER) TEST_S3_SECRET_ACCESS_KEY=$(MINIO_ROOT_PASSWORD) \
+		../$(PY) -m pytest tests/kafka -q
+
+# Source ingestion runs in the one-shot `ingest` service (needs `make pipeline-up`).
+# Each variable is optional; unset means the Settings default (see ENV_VARIABLES.md).
+ingest-news:
+	$(INGEST) ingest news $(call opt,--symbols,$(NEWS_TICKERS)) $(call opt,--start,$(NEWS_START)) \
+		$(call opt,--end,$(NEWS_END)) $(LIMIT_OPTS)
+
+ingest-market:
+	$(INGEST) ingest market $(call opt,--symbols,$(MARKET_SYMBOLS)) $(call opt,--start,$(MARKET_START)) \
+		$(call opt,--end,$(MARKET_END)) $(LIMIT_OPTS)
+
+ingest-company:
+	$(INGEST) ingest company $(if $(COMPANY_ALL),--all,$(call opt,--symbols,$(COMPANY_SYMBOLS))) $(LIMIT_OPTS)
+
+sources-check:
+	$(INGEST) sources check

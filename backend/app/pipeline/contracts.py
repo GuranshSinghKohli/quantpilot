@@ -66,25 +66,25 @@ SOURCES: Dict[str, SourceSpec] = {
     spec.key: spec
     for spec in (
         SourceSpec(
-            "yfinance.market_daily",
+            "massive.market_daily",
             Domain.MARKET,
             DataSourceType.MARKET_DATA,
-            "yahoo_finance",
-            "Daily OHLCV bars via yfinance (unofficial Yahoo Finance API), unadjusted plus adj_close",
+            "massive",
+            "Massive (formerly Polygon.io) daily aggregates, unadjusted (adjusted=false); no currency or adj_close",
         ),
         SourceSpec(
-            "yfinance.news",
+            "massive.news",
             Domain.NEWS,
             DataSourceType.NEWS,
-            "yahoo_finance",
-            "Ticker news metadata and summaries via yfinance; no article bodies",
+            "massive",
+            "Massive /v2/reference/news: article metadata, description, tickers; no article bodies",
         ),
         SourceSpec(
             "sec.company_tickers",
             Domain.COMPANY,
             DataSourceType.REFERENCE_DATA,
-            "sec_edgar",
-            "SEC company_tickers_exchange.json: CIK, name, tickers, exchange",
+            "sec",
+            "SEC company_tickers_exchange.json: CIK, name, tickers, exchange (keyless reference data)",
         ),
         SourceSpec(
             "synthetic.market",
@@ -121,6 +121,10 @@ def _symbol(value: str) -> str:
     if not _SYMBOL.fullmatch(upper):
         raise ValueError(f"invalid symbol {value!r}")
     return upper
+
+
+def is_symbol(value: Any) -> bool:
+    return isinstance(value, str) and bool(_SYMBOL.fullmatch(value.strip().upper()))
 
 
 def _decimal(value: Any) -> Decimal:

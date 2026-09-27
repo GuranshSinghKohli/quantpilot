@@ -68,13 +68,13 @@ class Env:
 
 
 def test_ensure_source_is_idempotent(repo_db):
-    a = Env(repo_db, "yfinance.market_daily").source
+    a = Env(repo_db, "massive.market_daily").source
     b = repo.ensure_source(repo_db, key=a.key, domain=a.domain, provider=a.provider, description=a.description)
     assert a.id == b.id
 
 
 def test_claim_event_new_duplicate_and_retry(repo_db):
-    env = Env(repo_db, "yfinance.market_daily")
+    env = Env(repo_db, "massive.market_daily")
     ref = repo.EventRef(_hex(1), "market", "x", "k", _hex(2), 1)
     claim = lambda: repo.claim_event(repo_db, ref, run_id=env.run.id, source_id=env.source.id, topic="t")
 
@@ -94,7 +94,7 @@ def test_claim_event_new_duplicate_and_retry(repo_db):
 
 
 def test_advance_records_never_moves_backwards(repo_db):
-    env = Env(repo_db, "yfinance.market_daily")
+    env = Env(repo_db, "massive.market_daily")
     eid = env.event(1)
     assert repo.advance_records(repo_db, S.LANDED, [eid], raw_uri="s3://b/raw/x.json") == 1
     assert repo.advance_records(repo_db, S.PUBLISHED, [eid]) == 0
@@ -107,7 +107,7 @@ def test_advance_records_never_moves_backwards(repo_db):
 
 
 def test_run_tracker_records_counts_status_and_duration(repo_db):
-    tracker = RunTracker(lambda: nullcontext(repo_db), SOURCES["yfinance.market_daily"], params={"symbols": ["SYNTH"]})
+    tracker = RunTracker(lambda: nullcontext(repo_db), SOURCES["massive.market_daily"], params={"symbols": ["SYNTH"]})
     run_id = tracker.start()
     tracker.counters.received, tracker.counters.valid, tracker.counters.invalid = 3, 2, 1
     tracker.counters.published, tracker.counters.duplicate = 1, 1
@@ -122,7 +122,7 @@ def test_run_tracker_records_counts_status_and_duration(repo_db):
 
 
 def test_run_tracker_flags_broken_bookkeeping(repo_db):
-    tracker = RunTracker(lambda: nullcontext(repo_db), SOURCES["yfinance.news"])
+    tracker = RunTracker(lambda: nullcontext(repo_db), SOURCES["massive.news"])
     tracker.start()
     tracker.counters.received = 2  # never classified as valid or invalid
     tracker.finish()
@@ -132,7 +132,7 @@ def test_run_tracker_flags_broken_bookkeeping(repo_db):
 
 
 def test_run_summary_reads_downstream_progress(repo_db):
-    env = Env(repo_db, "yfinance.market_daily")
+    env = Env(repo_db, "massive.market_daily")
     ids = [env.event(n) for n in range(1, 5)]
     repo.record_deliveries(repo_db, [(i, 0, n) for n, i in enumerate(ids)])
     repo.advance_records(repo_db, S.LANDED, ids[:3])
@@ -143,7 +143,7 @@ def test_run_summary_reads_downstream_progress(repo_db):
 
 
 def test_processing_job_lifecycle_and_lineage(repo_db):
-    env = Env(repo_db, "yfinance.market_daily")
+    env = Env(repo_db, "massive.market_daily")
     eid = env.event(7)
     repo.record_deliveries(repo_db, [(eid, 1, 99)])
     repo.advance_records(repo_db, S.LANDED, [eid], raw_uri="s3://lake/raw/market/x.json")
@@ -155,7 +155,7 @@ def test_processing_job_lifecycle_and_lineage(repo_db):
     repo.advance_records(repo_db, S.LOADED, [eid], processing_job_id=env.job.id)
 
     trace = repo.lineage(repo_db, eid)
-    assert trace["source"]["key"] == "yfinance.market_daily"
+    assert trace["source"]["key"] == "massive.market_daily"
     assert trace["ingestion_run"]["id"] == str(env.run.id)
     assert trace["raw_record"]["kafka"] == {"topic": "test.topic", "partition": 1, "offset": 99}
     assert trace["raw_record"]["raw_uri"] == "s3://lake/raw/market/x.json"
@@ -173,12 +173,12 @@ def _bar(env: Env, n: int, *, close="105", at=T0, day=date(2026, 9, 1), symbol="
         raw_uri=f"s3://lake/raw/market/{n}.json", content_hash=_hex(20_000 + n),
         symbol=symbol, interval="1d", trading_date=day, bar_ts=datetime.combine(day, datetime.min.time(), timezone.utc),
         open=Decimal("100"), high=Decimal("110"), low=Decimal("95"), close=Decimal(close),
-        adj_close=Decimal(close), volume=1000, currency="USD", source="yahoo_finance",
+        adj_close=Decimal(close), volume=1000, currency="USD", source="massive",
     )
 
 
 def test_market_bars_newest_wins_and_reload_is_a_no_op(repo_db):
-    env = Env(repo_db, "yfinance.market_daily")
+    env = Env(repo_db, "massive.market_daily")
     first = [_bar(env, 1), _bar(env, 2, day=date(2026, 9, 2))]
     assert upsert_market_bars(repo_db, first).written == 2
 
@@ -198,7 +198,7 @@ def test_market_bars_newest_wins_and_reload_is_a_no_op(repo_db):
 
 
 def test_market_bars_tie_on_ingested_at_breaks_by_event_id(repo_db):
-    env = Env(repo_db, "yfinance.market_daily")
+    env = Env(repo_db, "massive.market_daily")
     low, high = _bar(env, 10, close="101"), _bar(env, 11, close="102")
     assert upsert_market_bars(repo_db, [high]).written == 1
     assert upsert_market_bars(repo_db, [low]).written == 0
@@ -209,14 +209,14 @@ def _news(env: Env, n: int, *, title="Synthetic headline", at=T0, url="https://e
     return NewsArticleIn(
         source_ingested_at=at, event_id=env.event(n), processing_job_id=env.job.id,
         raw_uri=f"s3://lake/raw/news/{n}.json", content_hash=_hex(30_000 + n),
-        source_key="yfinance.news", external_id=f"news-{n}", url=url, title=title,
+        source_key="massive.news", external_id=f"news-{n}", url=url, title=title,
         publisher="Example Wire", author=None, published_at=T0 - timedelta(hours=3),
         summary="Synthetic summary.", tickers=["SYNTH"],
     )
 
 
 def test_news_upserts_into_sources_and_news_articles(repo_db):
-    env = Env(repo_db, "yfinance.news")
+    env = Env(repo_db, "massive.news")
     stats = upsert_news(repo_db, [_news(env, 1), _news(env, 2, url="https://example.com/b")])
     assert stats.written == 2
     tie_loser = _news(env, 0, title="Should not win", url="https://example.com/b")  # same time, lower event_id

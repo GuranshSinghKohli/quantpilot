@@ -55,7 +55,7 @@ def test_unknown_or_mismatched_source_is_rejected():
     with pytest.raises(ValidationError, match="unknown source"):
         market_record(source="made.up")
     with pytest.raises(ValidationError, match="does not produce"):
-        market_record(source="yfinance.news")
+        market_record(source="massive.news")
 
 
 def test_extra_fields_are_forbidden():
@@ -99,7 +99,7 @@ def test_build_event_fills_every_derived_identity():
     ev = event(rec)
     assert ev.domain == "market" and ev.source_type == DataSourceType.MARKET_DATA
     assert ev.external_id == "SYNTH:1d:2026-09-01"
-    assert ev.dedup_key == "market:SYNTH:1d:2026-09-01:yfinance.market_daily"
+    assert ev.dedup_key == "market:SYNTH:1d:2026-09-01:massive.market_daily"
     assert ev.content_hash == rec.content_hash
     assert ev.occurred_at == rec.timestamp
     assert len(ev.event_id) == 64

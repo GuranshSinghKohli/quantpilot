@@ -35,6 +35,14 @@ os.environ["KAFKA_TOPIC_COMPANY_RAW"] = "test.unconfigured.company.raw"
 os.environ["KAFKA_TOPIC_DLQ"] = "test.unconfigured.ingestion.dlq"
 os.environ["KAFKA_CONSUMER_GROUP_LAKE"] = "test.unconfigured.lake-writer"
 
+# And for external sources: no keys and an unroutable host, so nothing under test
+# can reach a real provider even if .env holds credentials. Adapter tests inject
+# an httpx MockTransport.
+os.environ["NEWS_API_KEY"] = ""
+os.environ["MARKET_API_KEY"] = ""
+for _var in ("NEWS_BASE_URL", "MARKET_BASE_URL", "COMPANY_BASE_URL"):
+    os.environ[_var] = "http://127.0.0.1:9"
+
 os.environ.setdefault("INVESTIGATIONS_SWEEP_ENABLED", "false")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 

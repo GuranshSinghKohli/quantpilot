@@ -231,3 +231,30 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 
 **Cost.** Duplicate messages are possible in Kafka and in the DLQ, so consumers must stay idempotent. A crash-looping lake writer (unexpected error) stalls its partition rather than dropping data.
 
+## ADR-021 — Source adapters: fetch + normalize only, Massive + SEC
+
+**Status: Accepted, shipped in Phase 2 Step 2.5.**
+
+**Problem.** Real providers differ in auth, pagination, rate limits, identifiers and failure modes. That variety must not leak into the transport (Kafka), storage (lake) or canonical repositories built in Steps 2.2–2.4.
+
+**Decision.**
+- A `SourceAdapter` only fetches (`streams → pages → SourceItem(original)`) and normalizes (`normalize(item) → contract record`). It never publishes, stores, deduplicates or touches the database. `IngestionRunner` turns records into events (`build_event`, with the verbatim provider object as `original`) and hands them to the existing tracked `EventPublisher`.
+- All HTTP goes through one `SourceClient`: client-side throttle, then status classification, then the pipeline's `call_with_retry`. Retried: timeout, connection error, 408, 5xx, and 429 (honouring Retry-After up to a bound). Never retried: 400/404/422, 401/403 (which also stop the run), and a malformed 2xx body.
+- An explicit `(domain, provider)` registry builds adapters and names missing settings. There are no dynamic imports.
+- Providers:
+  - Massive (formerly Polygon.io) for news (`/v2/reference/news`) and daily bars (`/v2/aggs`). Both are documented, on the free plan, use cursor pagination and have stable ids.
+  - SEC `company_tickers_exchange.json` for companies: keyless, with CIK identity.
+  - yfinance stays an API tool and is not an ingestion source, because it is unofficial and undocumented and has no status-code contract.
+- Identity comes from the contracts (`event_id = sha256(source | external_id | content_hash)`), so rerunning a window produces duplicates. Cursors are not persisted across runs, on purpose: rerunning the window is the resume mechanism.
+
+**Rejected.**
+- Adapters that publish directly (couples source code to Kafka).
+- Per-provider retry logic (inconsistent budgets).
+- Persisted cursors / checkpoint tables (state without extra safety, given deterministic ids).
+- Scraping.
+
+**Cost.**
+- The news and market adapters share one free Massive key limited to 5 requests/minute, so runs are slow by design and must not run concurrently.
+- The free plan has 2 years of history and end-of-day data only.
+- Massive bars carry no currency and (with `adjusted=false`) no adjusted close; both are left `None`.
+

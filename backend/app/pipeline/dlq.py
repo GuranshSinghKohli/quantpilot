@@ -21,6 +21,12 @@ def deterministic_dlq_id(component: str, topic: str, partition: int, offset: int
     return uuid.uuid5(_DLQ_NAMESPACE, f"{component}|{topic}|{partition}|{offset}|{reason}")
 
 
+def deterministic_reject_id(source: str, original_sha256: str, reason: str) -> uuid.UUID:
+    """A provider item rejected before it became an event has no Kafka coordinates;
+    the same item rejected again (a rerun of the window) gets the same id."""
+    return uuid.uuid5(_DLQ_NAMESPACE, f"ingestor|{source}|{original_sha256}|{reason}")
+
+
 def failure_reason(error: BaseException) -> FailureReason:
     return _classify(error)[0]
 

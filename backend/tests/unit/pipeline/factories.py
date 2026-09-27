@@ -17,7 +17,7 @@ RUN_ID = uuid.UUID("00000000-0000-4000-8000-000000000001")
 
 def market_record(**overrides) -> MarketRecord:
     fields = dict(
-        source="yfinance.market_daily",
+        source="massive.market_daily",
         symbol="SYNTH",
         timestamp=datetime(2026, 9, 1, 13, 30, tzinfo=timezone.utc),
         trading_date=date(2026, 9, 1),
@@ -36,7 +36,7 @@ def market_record(**overrides) -> MarketRecord:
 
 def news_record(**overrides) -> NewsRecord:
     fields = dict(
-        source="yfinance.news",
+        source="massive.news",
         external_id="synthetic-news-1",
         title="Synthetic headline for tests",
         url="https://example.com/synthetic/article-1?utm_source=feed",

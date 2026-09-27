@@ -21,3 +21,11 @@ def test_suite_never_binds_to_developer_kafka():
     assert settings.KAFKA_BOOTSTRAP_SERVERS == "127.0.0.1:9"
     names = [*settings.raw_topics.values(), settings.KAFKA_TOPIC_DLQ, settings.KAFKA_CONSUMER_GROUP_LAKE]
     assert all(name.startswith("test.") for name in names)
+
+
+def test_suite_never_reaches_real_source_providers():
+    settings = get_settings()
+    assert not settings.NEWS_API_KEY.get_secret_value()
+    assert not settings.MARKET_API_KEY.get_secret_value()
+    for url in (settings.NEWS_BASE_URL, settings.MARKET_BASE_URL, settings.COMPANY_BASE_URL):
+        assert url == "http://127.0.0.1:9"

@@ -11,6 +11,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -48,6 +49,7 @@ _DEV_JWT_SECRET = "dev-only-change-me-quantpilot"
 _KAFKA_NAME = re.compile(r"[A-Za-z0-9._-]{1,249}")
 _HOST_PORT = re.compile(r"(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+):\d{1,5}")
 _S3_BUCKET = re.compile(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")
+_SYMBOL = re.compile(r"\^?[A-Z0-9][A-Z0-9.\-=]{0,15}")  # same rule as pipeline contracts
 
 
 class Settings(BaseSettings):
@@ -151,8 +153,32 @@ class Settings(BaseSettings):
     LAKE_REGION: str = "us-east-1"
     LAKE_LOCAL_ROOT: str = (BACKEND_DIR / "data" / "lake").as_posix()
 
-    # Ingestion pipeline: sources + retries
-    INGEST_SYMBOLS: str = "AAPL,MSFT,NVDA"
+    # Ingestion pipeline: external source adapters (only `python -m app.pipeline
+    # ingest` reads the keys; the API starts without them)
+    NEWS_PROVIDER: Literal["massive"] = "massive"
+    NEWS_API_KEY: SecretStr = SecretStr("")
+    NEWS_BASE_URL: str = "https://api.massive.com"
+    NEWS_TICKERS: str = "AAPL,MSFT,NVDA"
+    NEWS_REQUESTS_PER_MINUTE: float = Field(5.0, gt=0, le=6000)
+    MARKET_PROVIDER: Literal["massive"] = "massive"
+    MARKET_API_KEY: SecretStr = SecretStr("")
+    MARKET_BASE_URL: str = "https://api.massive.com"
+    MARKET_SYMBOLS: str = "AAPL,MSFT,NVDA"
+    MARKET_REQUESTS_PER_MINUTE: float = Field(5.0, gt=0, le=6000)
+    COMPANY_PROVIDER: Literal["sec"] = "sec"
+    COMPANY_BASE_URL: str = "https://www.sec.gov"
+    COMPANY_SYMBOLS: str = "AAPL,MSFT,NVDA"
+    COMPANY_REQUESTS_PER_MINUTE: float = Field(600.0, gt=0, le=600)
+    SEC_EDGAR_USER_AGENT: str = ""
+    SOURCE_TIMEOUT_SECONDS: float = Field(20.0, gt=0, le=120)
+    SOURCE_MAX_RETRY_AFTER_SECONDS: float = Field(120.0, ge=0, le=3600)
+    INGEST_LOOKBACK_DAYS: int = Field(7, ge=1, le=366)
+    INGEST_MAX_WINDOW_DAYS: int = Field(366, ge=1, le=731)
+    INGEST_MAX_RECORDS: int = Field(1000, ge=1, le=50_000)
+    INGEST_PAGE_SIZE: int = Field(100, ge=1, le=1000)
+    INGEST_MAX_PAGES: int = Field(20, ge=1, le=500)
+
+    # Ingestion pipeline: retries
     PIPELINE_RETRY_MAX_ATTEMPTS: int = Field(5, ge=1, le=20)
     PIPELINE_RETRY_BASE_SECONDS: float = Field(0.5, gt=0)
     PIPELINE_RETRY_MAX_SECONDS: float = Field(30.0, gt=0)
@@ -251,6 +277,29 @@ class Settings(BaseSettings):
             raise ValueError("LAKE_ENDPOINT_URL must be empty (AWS) or an http(s) URL")
         return value.rstrip("/")
 
+    @field_validator("NEWS_BASE_URL", "MARKET_BASE_URL", "COMPANY_BASE_URL")
+    @classmethod
+    def _source_base_url(cls, value: str) -> str:
+        parsed = urlsplit(value)
+        host = parsed.hostname or ""
+        if parsed.scheme not in {"http", "https"} or not host or parsed.query or parsed.fragment:
+            raise ValueError(f"source base URL must be http(s)://host[:port][/path], got {value!r}")
+        # Keys travel in a header: plain http only for loopback, Docker's host alias
+        # and single-label compose service names (a local mock provider).
+        local = host in {"localhost", "127.0.0.1", "::1", "host.docker.internal"} or "." not in host
+        if parsed.scheme == "http" and not local:
+            raise ValueError(f"source base URL must use https for non-local hosts: {value!r}")
+        return value.rstrip("/")
+
+    @field_validator("NEWS_TICKERS", "MARKET_SYMBOLS", "COMPANY_SYMBOLS")
+    @classmethod
+    def _symbol_list(cls, value: str) -> str:
+        symbols = [s.strip().upper() for s in value.split(",") if s.strip()]
+        bad = [s for s in symbols if not _SYMBOL.fullmatch(s)]
+        if bad:
+            raise ValueError(f"invalid symbols: {bad}")
+        return ",".join(dict.fromkeys(symbols))
+
     @model_validator(mode="after")
     def _retry_bounds(self) -> "Settings":
         if self.PIPELINE_RETRY_MAX_SECONDS < self.PIPELINE_RETRY_BASE_SECONDS:
@@ -278,9 +327,9 @@ class Settings(BaseSettings):
             "company": self.KAFKA_TOPIC_COMPANY_RAW,
         }
 
-    @property
-    def ingest_symbols(self) -> List[str]:
-        return [s.strip().upper() for s in self.INGEST_SYMBOLS.split(",") if s.strip()]
+    @staticmethod
+    def symbol_list(value: str) -> List[str]:
+        return [s for s in value.split(",") if s]
 
     @property
     def auto_migrate(self) -> bool:

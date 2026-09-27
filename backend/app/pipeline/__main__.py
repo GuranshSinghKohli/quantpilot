@@ -183,6 +183,84 @@ def _publish_synthetic(args: argparse.Namespace) -> int:
     return 0 if summary.publish_failed == 0 and summary.dead_lettered == 0 else 1
 
 
+def _request(args: argparse.Namespace, settings):
+    from app.pipeline.sources.base import IngestRequest
+    from app.pipeline.sources.registry import ConfigurationError
+    from app.pipeline.sources.window import resolve_window
+
+    defaults = {"news": settings.NEWS_TICKERS, "market": settings.MARKET_SYMBOLS, "company": settings.COMPANY_SYMBOLS}
+    if args.all and args.domain != "company":
+        raise ConfigurationError("--all applies to company reference data only")
+    raw = "" if args.all else (args.symbols if args.symbols is not None else defaults[args.domain])
+    symbols = tuple(dict.fromkeys(s.strip().upper() for s in raw.split(",") if s.strip()))
+    if args.domain == "market" and not symbols:
+        raise ConfigurationError("market ingestion needs symbols (--symbols or MARKET_SYMBOLS)")
+    for flag, value, ceiling in (("--max-records", args.max_records, 50_000), ("--page-size", args.page_size, 1000),
+                                 ("--max-pages", args.max_pages, 500)):
+        if value is not None and not 1 <= value <= ceiling:
+            raise ConfigurationError(f"{flag} must be between 1 and {ceiling}")
+    start, end = resolve_window(args.start, args.end, lookback_days=settings.INGEST_LOOKBACK_DAYS,
+                                max_window_days=settings.INGEST_MAX_WINDOW_DAYS)
+    return IngestRequest(
+        start=start, end=end, symbols=symbols,
+        max_records=args.max_records or settings.INGEST_MAX_RECORDS,
+        page_size=args.page_size or settings.INGEST_PAGE_SIZE,
+        max_pages=args.max_pages or settings.INGEST_MAX_PAGES,
+    )
+
+
+def _ingest(args: argparse.Namespace) -> int:
+    import json
+
+    from app.core.settings import get_settings
+    from app.domain.enums import IngestionRunStatus
+    from app.pipeline.ingest import IngestionRunner
+    from app.pipeline.kafka.producer import DeadLetterPublisher
+    from app.pipeline.metrics import Metrics
+    from app.pipeline.publisher import EventPublisher
+    from app.pipeline.sources.registry import ConfigurationError, Wiring, build_adapter
+
+    settings = get_settings()
+    try:
+        request = _request(args, settings)
+        metrics = Metrics()
+        adapter = build_adapter(args.domain, settings, Wiring(metrics=metrics))
+    except (ConfigurationError, ValueError) as exc:
+        print(f"ingest {args.domain}: {exc}", file=sys.stderr)
+        return 2
+    sessions = _require_migrated_db()
+    producer = _producer(settings, metrics)
+    dlq = DeadLetterPublisher(producer, settings.KAFKA_TOPIC_DLQ)
+    publisher = EventPublisher(session_factory=sessions, producer=producer, dlq=dlq, topics=settings.raw_topics,
+                               max_bytes=settings.KAFKA_MAX_MESSAGE_BYTES)
+    runner = IngestionRunner(adapter=adapter, publisher=publisher, dlq=dlq, session_factory=sessions,
+                             max_bytes=settings.KAFKA_MAX_MESSAGE_BYTES, metrics=metrics, trigger="cli")
+    try:
+        result = runner.run(request)
+    finally:
+        adapter.close()
+        producer.close()
+    print(json.dumps({**result.as_dict(), "metrics": metrics.snapshot()}, indent=2, default=str))
+    return 0 if result.status == IngestionRunStatus.COMPLETED else 1
+
+
+def _sources(args: argparse.Namespace) -> int:
+    import json
+
+    from app.core.settings import get_settings
+    from app.pipeline.sources.registry import DOMAINS, check_health
+
+    settings = get_settings()
+    unknown = [d for d in args.domains if d not in DOMAINS]
+    if unknown:
+        print(f"unknown source domains {unknown}; expected {list(DOMAINS)}", file=sys.stderr)
+        return 2
+    reports = [check_health(domain, settings).as_dict() for domain in (args.domains or DOMAINS)]
+    print(json.dumps({"sources": reports}, indent=2, default=str))
+    # Unconfigured sources are reported, not failed; configured-but-broken ones fail.
+    return 1 if any(r["configured"] and not r["healthy"] for r in reports) else 0
+
+
 def _dlq(args: argparse.Namespace) -> int:
     import json
     import uuid
@@ -242,6 +320,23 @@ def main(argv: Optional[List[str]] = None) -> int:
     synth_cmd = commands.add_parser("publish-synthetic", help="publish deterministic SYNTHETIC market events")
     synth_cmd.add_argument("--count", type=int, default=5)
     synth_cmd.set_defaults(handler=_publish_synthetic)
+
+    ingest_cmd = commands.add_parser("ingest", help="fetch a bounded window from an external source and publish it")
+    ingest_cmd.add_argument("domain", choices=["news", "market", "company"])
+    ingest_cmd.add_argument("--symbols", default=None,
+                            help="comma-separated tickers (default NEWS_TICKERS / MARKET_SYMBOLS / COMPANY_SYMBOLS)")
+    ingest_cmd.add_argument("--all", action="store_true", help="company only: every CIK (still capped by --max-records)")
+    ingest_cmd.add_argument("--start", default=None, help="YYYY-MM-DD or ISO 8601 with offset (default end - INGEST_LOOKBACK_DAYS)")
+    ingest_cmd.add_argument("--end", default=None, help="YYYY-MM-DD (end of that UTC day) or ISO 8601 (default now)")
+    ingest_cmd.add_argument("--max-records", type=int, default=None, help="cap across all streams (default INGEST_MAX_RECORDS)")
+    ingest_cmd.add_argument("--page-size", type=int, default=None)
+    ingest_cmd.add_argument("--max-pages", type=int, default=None, help="per stream")
+    ingest_cmd.set_defaults(handler=_ingest)
+
+    sources_cmd = commands.add_parser("sources", help="external source health (separate from the API /health)")
+    sources_cmd.add_argument("action", choices=["check"])
+    sources_cmd.add_argument("domains", nargs="*", help="news | market | company (default: all)")
+    sources_cmd.set_defaults(handler=_sources)
 
     dlq_cmd = commands.add_parser("dlq", help="list dead letters (reads without committing)")
     dlq_cmd.add_argument("--limit", type=int, default=50)

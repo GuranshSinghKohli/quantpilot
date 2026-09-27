@@ -201,6 +201,30 @@ services:
     # Unexpected errors exit without committing offsets; restart → redelivery.
     restart: on-failure
 
+  # One-shot source ingestion (`make ingest-news|ingest-market|ingest-company`,
+  # `make sources-check`). Own profile, so `pipeline-up` never starts it and the
+  # lake writer never sees provider keys. Keys come from the shell or the
+  # git-ignored repo-root .env; empty means "not configured".
+  ingest:
+    profiles: ["ingest"]
+    image: quantpilot-pipeline:dev
+    environment:
+      DATABASE_URL: postgresql://quantpilot:quantpilot@postgres:5432/quantpilot
+      DB_AUTO_MIGRATE: "false"
+      ENVIRONMENT: development
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      NEWS_API_KEY: ${NEWS_API_KEY:-}
+      MARKET_API_KEY: ${MARKET_API_KEY:-}
+      SEC_EDGAR_USER_AGENT: ${SEC_EDGAR_USER_AGENT:-}
+      NEWS_BASE_URL: ${NEWS_BASE_URL:-https://api.massive.com}
+      MARKET_BASE_URL: ${MARKET_BASE_URL:-https://api.massive.com}
+      COMPANY_BASE_URL: ${COMPANY_BASE_URL:-https://www.sec.gov}
+      NEWS_TICKERS: ${NEWS_TICKERS:-AAPL,MSFT,NVDA}
+      MARKET_SYMBOLS: ${MARKET_SYMBOLS:-AAPL,MSFT,NVDA}
+      COMPANY_SYMBOLS: ${COMPANY_SYMBOLS:-AAPL,MSFT,NVDA}
+    command: ["python", "-m", "app.pipeline", "sources", "check"]
+    restart: "no"
+
 volumes:
   quantpilot_pg:
   quantpilot_minio:

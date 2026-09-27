@@ -70,6 +70,8 @@ class SourceAdapter(Protocol):
     def to_record(self, item: RawItem) -> NewsRecord | MarketRecord | CompanyRecord: ...
 ```
 
+**Superseded in Step 2.5** (see `docs/PHASE2_5_PLAN.md`): news and market come from Massive (documented API, free key) instead of yfinance, and the adapter interface is `streams()`/`normalize()` feeding the Step 2.4 publisher. The original proposal follows.
+
 Phase 2 sources are **real and keyless**:
 
 | Adapter | Source | External ID | Volume per run |
@@ -384,7 +386,7 @@ make pipeline-test                # kafka + s3 + spark + pipeline tiers against 
 | **2.2** | Migration `0005` + models + repositories (ingestion sources/runs/records, processing_jobs, market_bars, news_articles, lineage columns); run-tracking service | integration tier on Postgres; `alembic check` on SQLite + Postgres; round-trip |
 | **2.3** | Lake: interface, `LocalObjectStore`, `S3ObjectStore`; compose `minio` + `minio-ready` + `minio-init`; `make lake-up` / `lake-check` / `test-s3` | unit + `s3` tier ✅ |
 | **2.4** | Kafka: compose `kafka` + `kafka-init`; producer, consumer loop, DLQ publisher; lake-writer service; `make kafka-up` (as built: `docs/PHASE2_4_PLAN.md`; message key is `event_id`, not `dedup_key`) | `kafka` tier (redelivery, malformed → DLQ, DLQ-failure no-commit) ✅ |
-| **2.5** | Source adapters (yfinance market, yfinance news, SEC companies) + `ingest` CLI + run tracking | unit (fixtures); live smoke on real data → raw objects in MinIO |
+| **2.5** | Source adapters + `ingest` CLI + run tracking. As built: Massive news + Massive daily bars (replacing yfinance, see `docs/PHASE2_5_PLAN.md` §2 and ADR-021) and SEC companies | unit + mocked-provider e2e through Kafka/MinIO; live SEC run → raw objects in MinIO ✅ |
 | **2.6** | Spark image + generic job (market, news, company) + rejects + manifests + `processing_jobs` | `spark` tier; `make process` on the live raw data |
 | **2.7** | Loader + lineage CLI + `make runs/dlq/lineage` | integration + `pipeline` tier; duplicate run → identical counts |
 | **2.8** | `make pipeline` end to end on real data; CI pipeline job | full verification (below) |

@@ -102,7 +102,7 @@ def test_tampered_content_is_a_hash_mismatch():
 
 
 def test_inconsistent_identities_are_envelope_invalid():
-    ev = decode_event(_doc(dedup_key="market:OTHER:1d:2026-09-01:yfinance.market_daily"), LIMIT)
+    ev = decode_event(_doc(dedup_key="market:OTHER:1d:2026-09-01:massive.market_daily"), LIMIT)
     with pytest.raises(PermanentError) as info:
         check_event(ev, now=_now)
     assert info.value.reason == FailureReason.ENVELOPE_INVALID

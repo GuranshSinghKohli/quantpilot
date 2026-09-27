@@ -67,8 +67,12 @@ def test_sasl_requires_credentials_and_keeps_password_secret(monkeypatch):
     assert prod["enable.idempotence"] is True and prod["acks"] == "all"
 
 
-def test_ingest_symbols_are_parsed(monkeypatch):
-    assert _settings(monkeypatch, INGEST_SYMBOLS=" aapl, msft ,,nvda ").ingest_symbols == ["AAPL", "MSFT", "NVDA"]
+def test_symbol_lists_are_normalized_and_validated(monkeypatch):
+    s = _settings(monkeypatch, MARKET_SYMBOLS=" aapl, msft ,,nvda,AAPL ")
+    assert Settings.symbol_list(s.MARKET_SYMBOLS) == ["AAPL", "MSFT", "NVDA"]
+    assert Settings.symbol_list(_settings(monkeypatch, NEWS_TICKERS="").NEWS_TICKERS) == []
+    with pytest.raises(ValidationError, match="invalid symbols"):
+        _settings(monkeypatch, COMPANY_SYMBOLS="AAPL,not a symbol")
 
 
 def test_retry_policy_comes_from_settings(monkeypatch):

@@ -2,7 +2,8 @@
 
 Only transient failures are retried. Permanent failures propagate on the first
 attempt. After ``max_attempts`` the last error is wrapped in ``RetryExhausted``
-so callers can dead-letter it with the retry count.
+so callers can dead-letter it with the retry count. An error carrying a numeric
+``retry_after`` waits at least that long before the next attempt.
 """
 
 from __future__ import annotations
@@ -122,6 +123,11 @@ def call_with_retry(
                 )
                 raise RetryExhausted(operation, attempt, exc) from exc
             wait = policy.delay(attempt, rand)
+            # A server-provided wait (HTTP Retry-After) is a floor, not a suggestion.
+            # Callers bound it before raising (see sources.http).
+            retry_after = getattr(exc, "retry_after", None)
+            if isinstance(retry_after, (int, float)) and retry_after > wait:
+                wait = float(retry_after)
             log_event(
                 logger,
                 logging.WARNING,
@@ -130,6 +136,7 @@ def call_with_retry(
                 attempt=attempt,
                 max_attempts=policy.max_attempts,
                 delay_seconds=round(wait, 3),
+                retry_after=retry_after,
                 error_type=type(exc).__name__,
                 error=str(exc)[:500],
             )

@@ -70,7 +70,7 @@ Copy `backend/.env.example` to `backend/.env` for local development.
 
 ## Ingestion pipeline (Phase 2, in progress)
 
-Read by `python -m app.pipeline …`. The API does not need them. The lake is live as of Step 2.3 and Kafka as of Step 2.4 (see `docs/PHASE2_4_PLAN.md`).
+Read by `python -m app.pipeline …`. The API does not need any of them and starts without provider credentials. The lake is live as of Step 2.3, Kafka as of Step 2.4 (`docs/PHASE2_4_PLAN.md`), and the external source adapters as of Step 2.5 (`docs/PHASE2_5_PLAN.md`).
 
 | Variable | Required / Optional | Description | Example value |
 |----------|-------------------|-------------|---------------|
@@ -94,10 +94,35 @@ Read by `python -m app.pipeline …`. The API does not need them. The lake is li
 | `KAFKA_DELIVERY_TIMEOUT_MS` | Optional | Producer delivery timeout per attempt (default `30000`) | `30000` |
 | `KAFKA_POLL_TIMEOUT_SECONDS` | Optional | Lake-writer poll timeout (default `1.0`) | `1.0` |
 | `KAFKA_PORT` | Optional | Host port for the compose broker (default `9092`) | `9092` |
-| `INGEST_SYMBOLS` | Optional | Symbols for market/news adapters (default `AAPL,MSFT,NVDA`) | `AAPL,MSFT` |
 | `PIPELINE_RETRY_MAX_ATTEMPTS` / `PIPELINE_RETRY_BASE_SECONDS` / `PIPELINE_RETRY_MAX_SECONDS` | Optional | Bounded exponential backoff with full jitter (defaults `5` / `0.5` / `30`) | `5` |
 
-Test-only: `TEST_KAFKA_BOOTSTRAP` enables the `kafka` tier (`make test-kafka`; per-test `test.<id>.*` topics and groups, deleted afterwards). `TEST_S3_ENDPOINT`, `TEST_S3_ACCESS_KEY_ID`, `TEST_S3_SECRET_ACCESS_KEY` enable the `s3` tier (`make test-s3`), which creates and deletes its own `quantpilot-test-*` buckets. The test suite always pins the lake to `backend/tests/_test_lake/`, Kafka to the unroutable `127.0.0.1:9`, and topic/group names to `test.unconfigured.*`.
+### External sources (Step 2.5)
+
+"Required when enabled" means `python -m app.pipeline ingest <domain>` (and `make ingest-<domain>`) refuses to start without it and names the variable; nothing else needs it. Keys are secrets: they are sent only in the `Authorization` header and never logged. Put them in the git-ignored `backend/.env` for host runs, or the git-ignored repo-root `.env` / your shell for `make ingest-*` (compose interpolation). Never commit them.
+
+| Variable | Required / Optional | Description | Example value |
+|----------|-------------------|-------------|---------------|
+| `NEWS_API_KEY` | Required when news is ingested | Massive API key (free Stocks Basic plan is enough) | — |
+| `MARKET_API_KEY` | Required when market data is ingested | Massive API key; may be the same key as `NEWS_API_KEY` | — |
+| `SEC_EDGAR_USER_AGENT` | Required when companies are ingested (and for the API's SEC tools) | Must contain a real contact email (SEC fair-access policy); `example.com` is rejected by the ingestor | `QuantPilot research you@yourdomain.com` |
+| `NEWS_PROVIDER` / `MARKET_PROVIDER` / `COMPANY_PROVIDER` | Optional | Registry entry to use; only `massive` / `massive` / `sec` exist | `massive` |
+| `NEWS_BASE_URL` / `MARKET_BASE_URL` / `COMPANY_BASE_URL` | Optional | Provider base URL (defaults `https://api.massive.com`, same, `https://www.sec.gov`). Must be https except loopback, `host.docker.internal` or a single-label compose host (local mocks) | `https://api.massive.com` |
+| `NEWS_TICKERS` / `MARKET_SYMBOLS` / `COMPANY_SYMBOLS` | Optional | Default universe per domain (all default `AAPL,MSFT,NVDA`; validated symbols). Empty `NEWS_TICKERS` = market-wide news | `AAPL,MSFT` |
+| `NEWS_REQUESTS_PER_MINUTE` / `MARKET_REQUESTS_PER_MINUTE` / `COMPANY_REQUESTS_PER_MINUTE` | Optional | Client-side throttle (defaults `5` = Massive free plan, `5`, `600` = SEC's 10/s) | `5` |
+| `SOURCE_TIMEOUT_SECONDS` | Optional | Per-request timeout (default `20`) | `20` |
+| `SOURCE_MAX_RETRY_AFTER_SECONDS` | Optional | Longest HTTP 429 `Retry-After` the ingestor will wait; longer stops the run (default `120`) | `120` |
+| `INGEST_LOOKBACK_DAYS` | Optional | Window when no start is given (default `7`) | `7` |
+| `INGEST_MAX_WINDOW_DAYS` | Optional | Largest allowed window (default `366`) | `366` |
+| `INGEST_MAX_RECORDS` / `INGEST_PAGE_SIZE` / `INGEST_MAX_PAGES` | Optional | Per-run record cap across all streams (default `1000`, max `50000`), page size (default `100`, max `1000`), pages per stream (default `20`) | `1000` |
+
+`make ingest-*` also accepts `NEWS_START`, `NEWS_END`, `MARKET_START`, `MARKET_END` (`YYYY-MM-DD` or ISO 8601 with offset), `COMPANY_ALL=1`, `MAX_RECORDS`, `PAGE_SIZE` and `MAX_PAGES`, passed as CLI flags.
+
+| Environment | What to set |
+|---|---|
+| Local development | `SEC_EDGAR_USER_AGENT` for `make ingest-company`; a free Massive key in `NEWS_API_KEY`/`MARKET_API_KEY` for news/market. Everything else has defaults |
+| Production (target) | The same keys from a secret manager (not `.env`), `https` base URLs (enforced), throttle values matching the paid plan |
+
+Test-only: `TEST_KAFKA_BOOTSTRAP` enables the `kafka` tier (`make test-kafka`; per-test `test.<id>.*` topics and groups, deleted afterwards). `TEST_S3_ENDPOINT`, `TEST_S3_ACCESS_KEY_ID`, `TEST_S3_SECRET_ACCESS_KEY` enable the `s3` tier (`make test-s3`), which creates and deletes its own `quantpilot-test-*` buckets. The test suite always pins the lake to `backend/tests/_test_lake/`, Kafka to the unroutable `127.0.0.1:9`, and topic/group names to `test.unconfigured.*`. It also blanks `NEWS_API_KEY`/`MARKET_API_KEY` and points every source base URL at `http://127.0.0.1:9`, so no test can reach a real provider; adapter tests use an httpx `MockTransport`. `make test-kafka` also sets the `TEST_S3_*` variables so the mocked-provider end-to-end tests run against MinIO.
 
 ## Frontend (Vercel / local)
 
