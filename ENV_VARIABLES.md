@@ -147,6 +147,16 @@ Canonical loading (`make load-news|load-market|load-company|load-all`) adds no e
 
 `--allow-synthetic` exists for tests and is refused unless the database name contains `test`.
 
+Pipeline hardening (Step 2.8) adds no required variables. Optional:
+
+| Variable | Required / Optional | Description | Example value |
+|----------|-------------------|-------------|---------------|
+| `PIPELINE_STALE_RUN_SECONDS` | Optional | Ingestion run `RUNNING` longer than this is reported by `make pipeline-check` (never auto-failed) | `3600` |
+| `PIPELINE_STALE_JOB_SECONDS` | Optional | Same for processing jobs | `3600` |
+| `PIPELINE_STALE_LOAD_SECONDS` | Optional | Same for `CANONICAL_LOAD_RUNNING` | `3600` |
+
+`GET /metrics` needs no config. `make metrics-up` starts an optional Prometheus (`compose --profile observability`) that scrapes the API. The API starts if Prometheus is down.
+
 Test-only: `TEST_KAFKA_BOOTSTRAP` enables the `kafka` tier (`make test-kafka`; per-test `test.<id>.*` topics and groups, deleted afterwards). `TEST_S3_ENDPOINT`, `TEST_S3_ACCESS_KEY_ID`, `TEST_S3_SECRET_ACCESS_KEY` enable the `s3` tier (`make test-s3`), which creates and deletes its own `quantpilot-test-*` buckets. The test suite always pins the lake to `backend/tests/_test_lake/`, Kafka to the unroutable `127.0.0.1:9`, and topic/group names to `test.unconfigured.*`. It also blanks `NEWS_API_KEY`/`MARKET_API_KEY` and points every source base URL at `http://127.0.0.1:9`, so no test can reach a real provider; adapter tests use an httpx `MockTransport`. `make test-kafka` also sets the `TEST_S3_*` variables so the mocked-provider end-to-end tests run against MinIO. The `spark` tier needs pyspark + Java 17 and runs in the `spark-test` image (`make test-spark`, which sets `TEST_S3_*` for MinIO); `SPARK_TEST_DATABASE_URL` / `SPARK_TEST_KAFKA_BOOTSTRAP` pass `TEST_DATABASE_URL` / `TEST_KAFKA_BOOTSTRAP` into that container to run every tier there.
 
 ## Frontend (Vercel / local)

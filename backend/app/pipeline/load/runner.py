@@ -26,10 +26,12 @@ from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
+from app.core.pipeline_context import pipeline_bind
 from app.core.structured_logging import get_logger, log_event
 from app.domain.enums import CanonicalLoadStatus, IngestionRecordStatus, ProcessingJobStatus
 from app.domain.ingestion_models import ProcessingJob
 from app.pipeline.lake import ObjectStore
+from app.pipeline.metrics import Metrics
 from app.pipeline.lake.keys import load_report_key, processed_prefix
 from app.pipeline.load.domains import LOADERS, DomainLoader
 from app.pipeline.load.errors import LoadConfigError, LoadValidationError, ReconciliationError, RowProblem
@@ -127,6 +129,7 @@ class CanonicalLoadRunner:
         batch_size: int = DEFAULT_BATCH_SIZE,
         allow_synthetic: bool = False,
         after_commit: Optional[Callable[[int], None]] = None,
+        metrics: Optional[Metrics] = None,
     ) -> None:
         if batch_size < 1:
             raise LoadConfigError("batch size must be at least 1")
@@ -135,6 +138,7 @@ class CanonicalLoadRunner:
         self.batch_size = batch_size
         self.allow_synthetic = allow_synthetic
         self._after_commit = after_commit  # test hook: called with the batch number after each commit
+        self.metrics = metrics or Metrics()
 
     def run(self, job_id: uuid.UUID, *, since: Optional[date] = None, until: Optional[date] = None) -> LoadResult:
         with self._sessions() as db:
@@ -147,8 +151,10 @@ class CanonicalLoadRunner:
             if self.allow_synthetic and not synthetic_allowed(db):
                 raise LoadConfigError("--allow-synthetic is only accepted on a test database (name contains 'test')")
         loader = LOADERS[domain]
-        with output_lock(self._sessions, processed_prefix(domain)):
-            return self._attempt(job_id, loader, since, until)
+        with pipeline_bind(component="loader", operation="load", domain=domain,
+                           processing_job_id=str(job_id), correlation_id=str(job_id)):
+            with output_lock(self._sessions, processed_prefix(domain)):
+                return self._attempt(job_id, loader, since, until)
 
     def _attempt(self, job_id: uuid.UUID, loader: DomainLoader, since, until) -> LoadResult:
         attempt_id, clock = uuid.uuid4(), time.monotonic()
@@ -305,6 +311,7 @@ class CanonicalLoadRunner:
                   "pipeline.load.finished", job_id=str(job_id), attempt_id=str(attempt_id), domain=loader.domain,
                   status=status.value, counts=counts.as_dict(), partitions=len(state["partitions"]),
                   files=state["files"], duration_ms=duration_ms, timings_ms=state["timings"], report_uri=report_uri)
+        self._observe(loader.domain, status, counts, duration_ms)
         return LoadResult(job_id, attempt_id, loader.domain, status, counts, state["partitions"], state["files"],
                           report_uri, duration_ms, state["timings"], state["failures"], error)
 
@@ -323,9 +330,20 @@ class CanonicalLoadRunner:
                              counts=self._job_counts(state["counts"]), partitions=state["partitions"],
                              error=error, report_uri=report_uri)
             db.commit()
+        duration_ms = int((time.monotonic() - clock) * 1000)
+        self._observe(loader.domain, CanonicalLoadStatus.FAILED, state["counts"], duration_ms)
         log_event(_log, logging.ERROR, "pipeline.load.failed", job_id=str(job_id), attempt_id=str(attempt_id),
                   domain=loader.domain, error=error[:2000], counts=state["counts"].as_dict(),
-                  duration_ms=int((time.monotonic() - clock) * 1000), report_uri=report_uri)
+                  duration_ms=duration_ms, report_uri=report_uri)
+
+    def _observe(self, domain: str, status: CanonicalLoadStatus, counts: LoadCounts, duration_ms: int) -> None:
+        self.metrics.inc("canonical_loads_total", domain=domain, status=status.value)
+        self.metrics.inc("canonical_rows_inserted", counts.inserted, domain=domain)
+        self.metrics.inc("canonical_rows_updated", counts.updated, domain=domain)
+        self.metrics.inc("canonical_rows_stale", counts.stale, domain=domain)
+        self.metrics.inc("canonical_rows_duplicate", counts.duplicates, domain=domain)
+        self.metrics.inc("canonical_rows_failed", counts.failed, domain=domain)
+        self.metrics.observe("canonical_load_duration_seconds", duration_ms / 1000, domain=domain)
 
     @staticmethod
     def _job_counts(counts: LoadCounts) -> Dict[str, int]:

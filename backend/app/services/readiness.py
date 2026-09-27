@@ -43,7 +43,7 @@ def probe_redis() -> str:
         return "error"
 
 
-def readiness_payload() -> Dict[str, object]:
+def readiness_payload(*, include_pipeline: bool = True) -> Dict[str, object]:
     database = probe_database()
     db_revision, migrations_current = probe_migrations()
     redis = probe_redis()
@@ -55,7 +55,7 @@ def readiness_payload() -> Dict[str, object]:
         and redis in {"ok", "memory"}
         and not draining
     )
-    return {
+    payload = {
         "status": "ok" if ready else "degraded",
         "application": application,
         "database": database,
@@ -65,3 +65,13 @@ def readiness_payload() -> Dict[str, object]:
         "draining": draining,
         "request_id": get_request_id(),
     }
+    if include_pipeline:
+        try:
+            from app.pipeline.ops.probes import probe_kafka, probe_lake
+
+            payload["kafka"] = probe_kafka()
+            payload["lake"] = probe_lake()
+        except Exception:
+            payload["kafka"] = "unavailable"
+            payload["lake"] = "unavailable"
+    return payload

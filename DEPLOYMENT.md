@@ -128,6 +128,20 @@ Replace the placeholder demo URL in `README.md` with your real Vercel URL.
 
 ---
 
+## Pipeline backup and recovery (Step 2.8)
+
+Distinguish environments. Tests never dump or restore the developer SQLite file.
+
+| Environment | Postgres | Lake | How to rebuild canonical |
+|---|---|---|---|
+| **development** | Host SQLite `backend/data/quantpilot.db` (copy while API is stopped) or compose Postgres `pg_dump -Fc` (this repo has used `~/quantpilot-backups/`) | MinIO volume `quantpilot_minio` or `backend/data/lake` | Load the latest COMPLETED job per domain (`make load-all`). Raw objects are write-once and are not deleted |
+| **test** | Disposable `quantpilot_test` / tmp SQLite. Do not backup | Throwaway `quantpilot-test-*` buckets | Recreate fixtures |
+| **production** (when deployed) | Daily `pg_dump` of `DATABASE_URL`, 7–14 days (Phase 12) | Versioned S3 bucket; restore objects or replay from raw | `alembic upgrade head` on a new instance, restore the dump, or truncate canonical tables and `retry-load` / `load --latest` from surviving manifests |
+
+A failed processing job is left `FAILED`; re-run `reprocess-job` only after confirming the driver is gone and the manifest's raw keys still exist. A stuck `CANONICAL_LOAD_RUNNING` is reported by `make pipeline-check` and recovered with `retry-load` (the loader is idempotent). Do not auto-replay the DLQ.
+
+See `docs/PHASE2_8_PLAN.md` §§5, 9, 10.
+
 ## Part 3 — Production smoke test
 
 On your **live Vercel URL**:

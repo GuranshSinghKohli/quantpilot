@@ -297,7 +297,7 @@ def test_429_honours_retry_after_then_succeeds(source_env, domain):
     result = run(source_env, domain)
     assert result.status == R.COMPLETED and result.published == 1
     assert 9.0 in source_env.clock.sleeps
-    assert source_env.metrics.value("source_rate_limited_total", provider=SOURCES[result.source].provider) == 1
+    assert source_env.metrics.value("source_rate_limit_total", provider=SOURCES[result.source].provider) == 1
 
 
 @pytest.mark.parametrize("domain", ALL)

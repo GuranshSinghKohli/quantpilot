@@ -226,7 +226,7 @@ class SourceClient:
         detail = f"HTTP {status}: {_provider_message(response)}".strip()
         kwargs = dict(provider=self.provider, status=status)
         if status == 429:
-            self.metrics.inc("source_rate_limited_total", provider=self.provider)
+            self.metrics.inc("source_rate_limit_total", provider=self.provider)
             retry_after = parse_retry_after(response.headers.get("retry-after"))
             if retry_after is not None and retry_after > self.max_retry_after_s:
                 raise PermanentSourceError(
@@ -246,7 +246,9 @@ class SourceClient:
 
     def _record(self, operation: str, status, latency: float, headers: Optional[httpx.Headers]) -> None:
         self.metrics.inc("source_requests_total", provider=self.provider, status=status)
-        self.metrics.observe("source_request_latency_seconds", latency, provider=self.provider)
+        self.metrics.observe("source_request_duration_seconds", latency, provider=self.provider)
+        if not (isinstance(status, int) and 200 <= status < 300) and status != "ok":
+            self.metrics.inc("source_request_failures_total", provider=self.provider, status=str(status))
         log_event(
             _log,
             logging.INFO,

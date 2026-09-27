@@ -155,4 +155,4 @@ def test_request_metrics_are_recorded(mock):
     c.get_json("/x", operation="x")
     assert c.metrics.value("source_requests_total", provider="mock", status=429) == 1
     assert c.metrics.value("source_requests_total", provider="mock", status=200) == 1
-    assert c.metrics.value("source_rate_limited_total", provider="mock") == 1
+    assert c.metrics.value("source_rate_limit_total", provider="mock") == 1

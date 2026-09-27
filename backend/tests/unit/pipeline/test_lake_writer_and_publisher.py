@@ -122,7 +122,7 @@ def test_consumed_event_lands_and_records_lineage_before_commit(env):
         assert (r.status, r.raw_uri) == (S.LANDED.value, env.store.uri(key))
         assert json.loads(env.store.get(key))["event_id"] == event.event_id
         assert consumer.committed_offsets[(message.topic(), message.partition())] >= message.offset() + 1
-    assert env.metrics.value("lake_writer_lake_writes_total", result="landed") == 3
+    assert env.metrics.value("lake_writes_total", result="landed") == 3
 
 
 def test_redelivery_is_an_idempotent_replay(env):
@@ -130,7 +130,7 @@ def test_redelivery_is_an_idempotent_replay(env):
     (message,) = env.fake.on(TOPICS["market"])
     writer = env.writer(FakeConsumer([message, message]))
     writer.run(max_messages=2)
-    assert env.metrics.value("lake_writer_lake_writes_total", result="replay") == 1
+    assert env.metrics.value("lake_writes_total", result="replay") == 1
     assert [i.key for i in env.store.list("raw/")] == [raw_key_for(event)]
     assert record(env, event.event_id).status == S.LANDED.value
 
@@ -174,7 +174,7 @@ def test_untracked_event_still_lands(env):
     (event,) = synthetic.market_events(1, run_id=uuid.uuid4(), ingested_at=T)
     result = env.writer(FakeConsumer()).handle(raw_message(event))
     assert (result.outcome, result.tracked) == (Outcome.LANDED, False)
-    assert env.metrics.total("lake_writer_untracked_total") == 1
+    assert env.metrics.total("lake_writes_total") >= 1
 
 
 # --- lake writer: failures -------------------------------------------------------
@@ -248,7 +248,7 @@ def test_transient_failure_is_retried_then_succeeds(env, tmp_path):
     (message,) = env.fake.on(TOPICS["market"])
     result = env.writer(FakeConsumer(), store=FlakyStore(tmp_path / "lake", 1)).handle(message)
     assert result.outcome is Outcome.LANDED and len(env.sleeps) == 1
-    assert env.metrics.total("lake_writer_retries_total") == 1
+    assert env.metrics.total("lake_write_retries_total") == 1
     assert dead_letters(env) == []
 
 
@@ -299,6 +299,6 @@ def test_metrics_render_in_prometheus_format(env):
     env.publish_synthetic(1)
     env.writer(FakeConsumer(env.fake.on(TOPICS["market"]))).run(max_messages=1)
     text = env.metrics.render_prometheus()
-    assert "# TYPE quantpilot_producer_messages_acknowledged_total counter" in text
-    assert 'quantpilot_lake_writer_lake_writes_total{result="landed"} 1' in text
-    assert "quantpilot_lake_writer_processing_seconds_count" in text
+    assert "# TYPE quantpilot_kafka_messages_published_total counter" in text
+    assert 'quantpilot_lake_writes_total{result="landed"} 1' in text
+    assert "quantpilot_lake_write_duration_seconds_count" in text

@@ -35,7 +35,7 @@ def test_ack_returns_kafka_assigned_position():
     assert (delivery.topic, delivery.key, delivery.attempts) == ("test.t", "k1", 1)
     assert (delivery.partition, delivery.offset) == (fake.produced[0].partition(), 0)
     assert fake.produced[0].key() == b"k1" and fake.produced[0].headers() == [("h", b"1")]
-    assert metrics.total("producer_messages_acknowledged_total") == 1 and sleeps == []
+    assert metrics.total("kafka_messages_published_total") == 1 and sleeps == []
 
 
 def test_retriable_failure_is_retried_with_backoff():

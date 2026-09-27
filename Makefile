@@ -29,7 +29,9 @@ LAKE_ENV = LAKE_BACKEND=s3 LAKE_ENDPOINT_URL=http://localhost:$(MINIO_PORT) \
         kafka-up kafka-down kafka-check pipeline-up pipeline-down pipeline-logs publish-synthetic dlq test-kafka \
         ingest-news ingest-market ingest-company sources-check \
         spark-build spark-news spark-market spark-company spark-all test-spark \
-        load-news load-market load-company load-all
+        load-news load-market load-company load-all \
+        pipeline-status pipeline-check pipeline-reconcile pipeline-quality \
+        retry-load reprocess-job retry-ingestion metrics-up metrics
 
 help:
 	@echo "up                compose stack (postgres, redis, migrate, backend, frontend)"
@@ -71,6 +73,15 @@ help:
 	@echo "load-market       same for market bars"
 	@echo "load-company      same for SEC companies"
 	@echo "load-all          latest COMPLETED job of each domain  [LOAD_SINCE= LOAD_UNTIL=]"
+	@echo "pipeline-status   latest runs/jobs/loads, failures, Kafka lag, DLQ summary"
+	@echo "pipeline-check    report stale RUNNING jobs (does not mark them failed)"
+	@echo "pipeline-reconcile  scoped lineage/count/state check  [DOMAIN= JOB= SINCE= UNTIL=]"
+	@echo "pipeline-quality  per-domain ingested → canonical counts  [DOMAIN=]"
+	@echo "retry-load        load JOB= after verifying the manifest"
+	@echo "reprocess-job     re-process JOB= from the manifest's raw keys"
+	@echo "retry-ingestion   new ingest from FAILED/PARTIAL RUN="
+	@echo "metrics           GET $(API_URL)/metrics"
+	@echo "metrics-up        optional Prometheus scraping the API (compose profile observability)"
 
 up:
 	$(COMPOSE) up --build
@@ -210,3 +221,36 @@ load-news load-market load-company:
 
 load-all:
 	$(LOAD) --domain all --latest $(LOAD_OPTS)
+
+OPS = $(PIPELINE) run --rm --no-deps lake-writer python -m app.pipeline
+
+pipeline-status:
+	$(OPS) status
+
+pipeline-check:
+	$(OPS) check
+
+pipeline-reconcile:
+	$(OPS) reconcile $(call opt,--domain,$(DOMAIN)) $(call opt,--job,$(JOB)) \
+		$(call opt,--since,$(SINCE)) $(call opt,--until,$(UNTIL))
+
+pipeline-quality:
+	$(OPS) quality $(call opt,--domain,$(DOMAIN))
+
+retry-load:
+	@test -n "$(JOB)" || (echo 'usage: make retry-load JOB=<processing job id>' && exit 1)
+	$(OPS) retry-load $(JOB)
+
+reprocess-job:
+	@test -n "$(JOB)" || (echo 'usage: make reprocess-job JOB=<processing job id>' && exit 1)
+	$(PIPELINE) --profile spark run --rm --no-deps spark python -m app.pipeline reprocess-job $(JOB)
+
+retry-ingestion:
+	@test -n "$(RUN)" || (echo 'usage: make retry-ingestion RUN=<ingestion run id>' && exit 1)
+	$(INGEST) retry-ingestion $(RUN)
+
+metrics:
+	@curl -fsS $(API_URL)/metrics; echo
+
+metrics-up:
+	$(COMPOSE) --profile observability up -d prometheus

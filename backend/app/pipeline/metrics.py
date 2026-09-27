@@ -1,8 +1,13 @@
-"""In-process pipeline metrics with Prometheus naming.
+"""In-process pipeline metrics with Prometheus naming and a hard label policy.
 
-No client library: counters, gauges and summaries (count/sum/max) keyed by
-name + labels. ``snapshot()`` is logged; ``render_prometheus()`` produces the
-text exposition format for a future /metrics endpoint or push gateway.
+Counters, gauges and summaries (count/sum) keyed by name + labels.
+``snapshot()`` is logged; ``render_prometheus()`` is the text exposition
+format for ``GET /metrics``. No client library: the process starts even if
+nothing scrapes it.
+
+Labels are a closed set (see ``ALLOWED_LABELS``). High-cardinality keys such
+as event_id, job_id, URL, ticker or CIK are rejected. A name may have at most
+``max_series`` series so a bug cannot explode Prometheus.
 """
 
 from __future__ import annotations
@@ -13,8 +18,35 @@ from typing import Any, Dict, List, Tuple
 
 Labels = Tuple[Tuple[str, str], ...]
 
+ALLOWED_LABELS = frozenset({
+    "domain", "source", "operation", "status", "component",
+    "topic", "partition", "result", "kind", "provider", "reason",
+    "method", "route",
+})
+
+FORBIDDEN_LABELS = frozenset({
+    "event_id", "job_id", "request_id", "offset", "url", "ticker", "cik",
+    "name", "title", "error", "user_id", "raw_uri", "article", "payload",
+    "correlation_id", "investigation_id",
+})
+
+DEFAULT_MAX_SERIES = 64
+
+
+class MetricLabelError(ValueError):
+    """A label key is not in the allowlist (or is explicitly forbidden)."""
+
+
+class MetricCardinalityError(ValueError):
+    """A metric grew past the per-name series cap."""
+
 
 def _labels(labels: Dict[str, Any]) -> Labels:
+    bad = [k for k in labels if k in FORBIDDEN_LABELS or k not in ALLOWED_LABELS]
+    if bad:
+        raise MetricLabelError(
+            f"illegal Prometheus label(s) {sorted(bad)}; allowed {sorted(ALLOWED_LABELS)}"
+        )
     return tuple(sorted((k, str(v)) for k, v in labels.items()))
 
 
@@ -26,27 +58,49 @@ def _fmt(name: str, labels: Labels) -> str:
 
 
 class Metrics:
-    def __init__(self, namespace: str = "quantpilot") -> None:
+    def __init__(self, namespace: str = "quantpilot", max_series: int = DEFAULT_MAX_SERIES) -> None:
         self.namespace = namespace
+        self.max_series = max_series
         self._lock = threading.Lock()
         self._counters: Dict[Tuple[str, Labels], float] = defaultdict(float)
         self._gauges: Dict[Tuple[str, Labels], float] = {}
         self._summaries: Dict[Tuple[str, Labels], List[float]] = {}
+        self._series_count: Dict[str, int] = defaultdict(int)
 
     def _name(self, name: str) -> str:
         return f"{self.namespace}_{name}"
 
+    def _admit(self, name: str, labels: Labels, store: Dict) -> None:
+        if (name, labels) in store:
+            return
+        used = self._series_count[name]
+        if used >= self.max_series:
+            raise MetricCardinalityError(
+                f"{name} already has {used} series (cap {self.max_series}); "
+                "refusing a new label set"
+            )
+        self._series_count[name] = used + 1
+
     def inc(self, name: str, amount: float = 1, **labels: Any) -> None:
+        key_labels = _labels(labels)
+        full = self._name(name)
         with self._lock:
-            self._counters[(self._name(name), _labels(labels))] += amount
+            self._admit(full, key_labels, self._counters)
+            self._counters[(full, key_labels)] += amount
 
     def set(self, name: str, value: float, **labels: Any) -> None:
+        key_labels = _labels(labels)
+        full = self._name(name)
         with self._lock:
-            self._gauges[(self._name(name), _labels(labels))] = value
+            self._admit(full, key_labels, self._gauges)
+            self._gauges[(full, key_labels)] = value
 
     def observe(self, name: str, value: float, **labels: Any) -> None:
+        key_labels = _labels(labels)
+        full = self._name(name)
         with self._lock:
-            key = (self._name(name), _labels(labels))
+            self._admit(full, key_labels, self._summaries)
+            key = (full, key_labels)
             count, total, peak = self._summaries.get(key, [0, 0.0, 0.0])
             self._summaries[key] = [count + 1, total + value, max(peak, value)]
 
@@ -64,6 +118,14 @@ class Metrics:
         full = self._name(name)
         with self._lock:
             return sum(v for (n, _), v in self._counters.items() if n == full)
+
+    def label_keys(self) -> List[str]:
+        keys = set()
+        with self._lock:
+            for series in (self._counters, self._gauges, self._summaries):
+                for (_, labels) in series:
+                    keys.update(k for k, _ in labels)
+        return sorted(keys)
 
     def snapshot(self) -> Dict[str, Any]:
         with self._lock:
@@ -94,3 +156,20 @@ class Metrics:
                 lines.append(f"{_fmt(name + '_count', labels)} {count:g}")
                 lines.append(f"{_fmt(name + '_sum', labels)} {total:g}")
         return "\n".join(lines) + ("\n" if lines else "")
+
+    def merge_from(self, other: "Metrics") -> None:
+        """Copy series from another registry (used to join HTTP + DB gauges)."""
+        with other._lock:
+            counters = list(other._counters.items())
+            gauges = list(other._gauges.items())
+            summaries = list(other._summaries.items())
+        with self._lock:
+            for (name, labels), value in counters:
+                self._admit(name, labels, self._counters)
+                self._counters[(name, labels)] += value
+            for (name, labels), value in gauges:
+                self._admit(name, labels, self._gauges)
+                self._gauges[(name, labels)] = value
+            for (name, labels), triple in summaries:
+                self._admit(name, labels, self._summaries)
+                self._summaries[(name, labels)] = list(triple)

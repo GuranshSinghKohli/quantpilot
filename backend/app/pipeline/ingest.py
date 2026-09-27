@@ -24,8 +24,10 @@ from typing import Callable, Dict, List, Optional, Set
 
 from pydantic import ValidationError
 
+from app.core.pipeline_context import pipeline_bind
 from app.core.structured_logging import get_logger, log_event
 from app.domain.enums import IngestionRunStatus
+from app.domain.ingestion_models import IngestionRun
 from app.pipeline.contracts import build_event
 from app.pipeline.dlq import dead_letter, deterministic_reject_id
 from app.pipeline.errors import PermanentError, PipelineError, RetryExhausted
@@ -114,6 +116,11 @@ class IngestionRunner:
         seen: Set[str] = set()
         self._rejected_to_dlq = 0
         remaining = request.max_records
+        with pipeline_bind(component="ingestor", operation="ingest", domain=self.adapter.spec.domain.value,
+                           source=source, run_id=str(tracker.run_id), correlation_id=str(tracker.run_id)):
+            return self._run(request, tracker, source, streams, errors, seen, remaining)
+
+    def _run(self, request, tracker, source, streams, errors, seen, remaining) -> IngestResult:
         try:
             for stream in self.adapter.streams(request):
                 if remaining <= 0:
@@ -153,6 +160,7 @@ class IngestionRunner:
 
         status = tracker.finish(fatal_error="; ".join(errors)[:4000] or None)
         c = tracker.counters
+        self._observe(source, status, c, tracker)
         outcome = IngestResult(
             run_id=str(tracker.run_id), source=source, provider=self.adapter.provider, status=status,
             received=c.received, valid=c.valid, invalid=c.invalid, published=c.published,
@@ -171,7 +179,7 @@ class IngestionRunner:
         now = self._now()
         c = tracker.counters
         c.received += len(items)
-        self.metrics.inc("source_records_fetched_total", len(items), source=source)
+        self.metrics.inc("ingestion_records_total", len(items), source=source)
         events = []
         for item in items:
             try:
@@ -183,13 +191,13 @@ class IngestionRunner:
                                              validation_details(exc)) from exc
             except PermanentError as exc:
                 c.invalid += 1
-                self.metrics.inc("source_records_invalid_total", source=source)
+                self.metrics.inc("ingestion_records_failed_total", source=source)
                 self._reject(tracker, item, exc, now, errors)
                 continue
             if event.event_id in seen:
                 c.valid += 1
                 c.duplicate += 1
-                self.metrics.inc("source_records_duplicate_total", source=source)
+                self.metrics.inc("ingestion_records_duplicate_total", source=source)
                 continue
             seen.add(event.event_id)
             events.append(event)
@@ -212,8 +220,22 @@ class IngestionRunner:
         try:
             self.dlq.publish(letter)
             self._rejected_to_dlq += 1
+            self.metrics.inc("kafka_dlq_messages_total", component="ingestor", reason=error.reason.value)
         except PipelineError as exc:
             # Still counted invalid; the run records that the reject was not preserved.
             log_event(_log, logging.ERROR, "pipeline.dlq.publish_failed", component="ingestor", source=source,
                       ref=item.ref, error=str(exc)[:300])
             errors.append(f"reject {item.ref} could not be dead-lettered: {str(exc)[:200]}")
+
+    def _observe(self, source: str, status: IngestionRunStatus, c, tracker: RunTracker) -> None:
+        self.metrics.inc("ingestion_runs_total", source=source, status=status.value)
+        if c.published:
+            self.metrics.inc("ingestion_records_published_total", c.published, source=source)
+        if c.publish_failed:
+            self.metrics.inc("ingestion_records_failed_total", c.publish_failed, source=source)
+        if tracker.run_id is None:
+            return
+        with self._sessions() as db:
+            run = db.get(IngestionRun, tracker.run_id)
+            if run is not None and run.duration_ms:
+                self.metrics.observe("ingestion_duration_seconds", run.duration_ms / 1000, source=source)

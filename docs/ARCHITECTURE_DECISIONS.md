@@ -331,3 +331,26 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - Automatic ticker reassignment is not attempted.
 - Measured throughput (PHASE2_7_PLAN §11): about 900 rows/s for market bars and 1,000 rows/s for companies on this laptop.
 
+## ADR-024 — Pipeline observability without a second control plane
+
+**Status: Accepted, shipped in Phase 2 Step 2.8.**
+
+**Problem.** After Steps 2.1–2.7 the data path works, but an operator cannot answer "what arrived, where did it go, what is stuck" without reading tables by hand. Adding a dashboard, a second lineage store, or auto-failing jobs would hide the existing state machines.
+
+**Decision.**
+- Reuse `app/pipeline/metrics.py`. Enforce a closed label set and a 64-series cap. Expose `GET /metrics` on the existing API. Prometheus is an optional compose profile; the API does not depend on it.
+- Keep `/health` as process-alive plus the existing cheap DB/Redis flags. `/ready` still fails only on DB/migrations/draining, and *reports* Kafka and the lake.
+- `correlation_id` stays the event-envelope field (default `run_id`). Job-level Spark/load logs bind it (or the job id when there is no single event).
+- CLI: `status`, `check` (stale RUNNING, report only), `reconcile` (scoped), `quality`, `dlq --summary`, guarded `retry-load` / `reprocess-job` / `retry-ingestion`.
+- Retention is documented, not automated. Raw lake objects are never deleted by this step.
+
+**Rejected.**
+- Grafana, alertmanager, a new tracing product.
+- Auto-failing stale jobs or auto-replaying the DLQ.
+- High-cardinality Prometheus labels (`event_id`, ticker, URL, job_id).
+- Making Massive/SEC part of `/ready`.
+
+**Cost.**
+- One-shot CLI jobs only expose process-local counters for that process. `/metrics` on the API is HTTP metrics plus DB gauges.
+- Kafka/lake down is visible on `/ready` but does not fail it.
+

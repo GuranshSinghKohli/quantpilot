@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from typing import Any, Dict
 
+from app.core.pipeline_context import pipeline_fields
 from app.core.settings import BACKEND_DIR, get_settings
 from app.security.request_context import correlation_fields
 from app.security.secrets import redact_mapping
@@ -74,7 +75,7 @@ def get_logger(name: str) -> logging.Logger:
 
 
 def log_event(logger: logging.Logger, level: int, message: str, **extra: Any) -> None:
-    merged = {**correlation_fields(), **extra}
+    merged = {**correlation_fields(), **pipeline_fields(), **extra}
     record = logger.makeRecord(logger.name, level, "(observability)", 0, message, (), None)
     record.extra_data = redact_mapping(merged)
     logger.handle(record)

@@ -25,6 +25,9 @@ class ReadyResponse(BaseModel):
     redis: str
     draining: bool = False
     request_id: str = ""
+    # Informational only: a down pipeline must not fail readiness (the API works without it).
+    kafka: Optional[str] = None
+    lake: Optional[str] = None
 
 
 class StockResponse(BaseModel):

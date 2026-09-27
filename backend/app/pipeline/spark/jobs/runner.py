@@ -24,6 +24,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol
 
 from sqlalchemy.orm import Session
 
+from app.core.pipeline_context import pipeline_bind
 from app.core.structured_logging import get_logger, log_event
 from app.domain.enums import IngestionRecordStatus, ProcessingJobStatus, ProcessingMode
 from app.domain.ingestion_models import ProcessingJob
@@ -164,15 +165,17 @@ class ProcessingJobRunner:
                 code_version=self.code_version, engine_version=self._engine_version(),
             )
             db.commit()
-        log_event(_log, logging.INFO, "pipeline.spark.job_started", job_id=str(job_id), domain=plan.domain,
-                  input=plan.describe(), output_prefix=plan.output_prefix)
-        state: Dict[str, Any] = {"counts": ProcessingCounts(input_objects=len(plan.keys)), "manifest_uri": None,
-                                 "app_id": None, "partitions": []}
-        try:
-            return self._run(plan, job_id, job_name, started, clock, state)
-        except BaseException as exc:
-            self._fail(plan, job_id, job_name, started, clock, state, exc)
-            raise
+        with pipeline_bind(component="spark", operation="process", domain=plan.domain,
+                           processing_job_id=str(job_id), correlation_id=str(job_id)):
+            log_event(_log, logging.INFO, "pipeline.spark.job_started", job_id=str(job_id), domain=plan.domain,
+                      input=plan.describe(), output_prefix=plan.output_prefix)
+            state: Dict[str, Any] = {"counts": ProcessingCounts(input_objects=len(plan.keys)), "manifest_uri": None,
+                                     "app_id": None, "partitions": []}
+            try:
+                return self._run(plan, job_id, job_name, started, clock, state)
+            except BaseException as exc:
+                self._fail(plan, job_id, job_name, started, clock, state, exc)
+                raise
 
     def _run(self, plan, job_id, job_name, started, clock, state) -> JobResult:
         job = JobInfo(job_id, plan.domain, started, plan.output_prefix)
@@ -213,7 +216,7 @@ class ProcessingJobRunner:
             )
             db.commit()
         duration_ms = int((time.monotonic() - clock) * 1000)
-        self._observe(plan.domain, ProcessingJobStatus.COMPLETED, counts, duration_ms, result.rejects_by_code)
+        self._observe(plan.domain, ProcessingJobStatus.COMPLETED, counts, duration_ms)
         log_event(_log, logging.INFO, "pipeline.spark.job_finished", job_id=str(job_id), domain=plan.domain,
                   status="COMPLETED", spark_app_id=result.app_id, duration_ms=duration_ms, counts=counts.as_dict(),
                   rejects_by_code=result.rejects_by_code, output_partitions=len(partitions), output_files=len(files),
@@ -243,7 +246,7 @@ class ProcessingJobRunner:
             )
             db.commit()
         duration_ms = int((time.monotonic() - clock) * 1000)
-        self._observe(plan.domain, ProcessingJobStatus.FAILED, counts, duration_ms, {})
+        self._observe(plan.domain, ProcessingJobStatus.FAILED, counts, duration_ms)
         log_event(_log, logging.ERROR, "pipeline.spark.job_failed", job_id=str(job_id), domain=plan.domain,
                   spark_app_id=state["app_id"], duration_ms=duration_ms, error=error)
 
@@ -261,12 +264,12 @@ class ProcessingJobRunner:
                 "duplicates_removed": counts.duplicates_removed, "output_rows": counts.output_rows,
                 "output_partitions": partitions}
 
-    def _observe(self, domain: str, status: ProcessingJobStatus, counts: ProcessingCounts, duration_ms: int,
-                 by_code: Dict[str, int]) -> None:
+    def _observe(self, domain: str, status: ProcessingJobStatus, counts: ProcessingCounts, duration_ms: int) -> None:
         self.metrics.inc("processing_jobs_total", domain=domain, status=status.value)
-        self.metrics.observe("processing_job_duration_seconds", duration_ms / 1000, domain=domain)
-        for kind in ("input_objects", "valid_rows", "rejected_rows", "duplicate_rows", "already_processed_rows",
-                     "superseded_rows", "output_rows", "new_rows"):
-            self.metrics.inc("processing_rows_total", getattr(counts, kind), domain=domain, kind=kind)
-        for code, n in by_code.items():
-            self.metrics.inc("processing_rejects_total", n, domain=domain, code=code)
+        self.metrics.observe("processing_duration_seconds", duration_ms / 1000, domain=domain)
+        self.metrics.inc("processing_input_rows", counts.input_objects, domain=domain)
+        self.metrics.inc("processing_output_rows", counts.output_rows, domain=domain)
+        self.metrics.inc("processing_rejected_rows", counts.rejected_rows, domain=domain)
+        self.metrics.inc("processing_duplicate_rows", counts.duplicate_rows, domain=domain)
+        if status.value == "FAILED":
+            self.metrics.inc("processing_failures_total", domain=domain)

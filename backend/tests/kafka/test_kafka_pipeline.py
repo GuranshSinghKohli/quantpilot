@@ -134,7 +134,7 @@ def test_topics_are_created_deterministically_and_verified(kafka_settings, admin
 
 def test_publish_consume_land_record_commit(env):
     tracker, events, summary = env.publish_synthetic(6)
-    assert summary.published == 6 and env.metrics.total("producer_messages_acknowledged_total") == 6
+    assert summary.published == 6 and env.metrics.total("kafka_messages_published_total") == 6
 
     on_topic = read_topic(env, market_topic(env), 6)
     assert sorted(m.key().decode() for m in on_topic) == sorted(e.event_id for e in events)
@@ -149,7 +149,7 @@ def test_publish_consume_land_record_commit(env):
         assert (r.status, r.raw_uri) == (S.LANDED.value, env.store.uri(raw_key_for(event)))
         assert env.store.get(raw_key_for(event)) == encode_event(event, MAX_BYTES)
     assert_fully_committed(env, market_topic(env))  # everything processed is committed, nothing more
-    assert writer.metrics.value("lake_writer_lake_writes_total", result="landed") == 6
+    assert writer.metrics.value("lake_writes_total", result="landed") == 6
 
 
 # --- the crash-before-commit replay ----------------------------------------------
@@ -173,7 +173,7 @@ def test_crash_after_lake_write_before_offset_commit_replays_safely(env):
     assert record(env, event.event_id).status == S.LANDED.value
 
     writer = run_writer(env, 1)  # new consumer, same group: the message comes back
-    assert writer.metrics.value("lake_writer_lake_writes_total", result="replay") == 1
+    assert writer.metrics.value("lake_writes_total", result="replay") == 1
     assert [i.key for i in env.store.list("raw/")] == [raw_key_for(event)]
     r = record(env, event.event_id)
     assert (r.status, r.raw_uri) == (S.LANDED.value, env.store.uri(raw_key_for(event)))
@@ -188,8 +188,8 @@ def test_duplicate_delivery_writes_one_object(env):
     env.producer.publish(OutboundMessage(market_topic(env), event.event_id, encode_event(event, MAX_BYTES),
                                          event_headers(event)))
     writer = run_writer(env, 2)
-    assert writer.metrics.value("lake_writer_lake_writes_total", result="landed") == 1
-    assert writer.metrics.value("lake_writer_lake_writes_total", result="replay") == 1
+    assert writer.metrics.value("lake_writes_total", result="landed") == 1
+    assert writer.metrics.value("lake_writes_total", result="replay") == 1
     assert len(list(env.store.list("raw/"))) == 1
 
 
@@ -226,7 +226,7 @@ def test_transient_failures_retry_and_exhaustion_dead_letters(env, tmp_path):
     _, (event,), _ = env.publish_synthetic(1)
     writer = run_writer(env, 1, store=FlakyStore(tmp_path / "lake", failures=1))
     assert record(env, event.event_id).status == S.LANDED.value
-    assert writer.metrics.total("lake_writer_retries_total") == 1
+    assert writer.metrics.total("lake_write_retries_total") == 1
 
     _, events, _ = env.publish_synthetic(2)  # one new event (the first is a duplicate claim)
     new = [e for e in events if e.event_id != event.event_id]

@@ -300,6 +300,20 @@ services:
     command: ["pytest", "tests/spark", "-q", "-p", "no:cacheprovider"]
     restart: "no"
 
+  prometheus:
+    profiles: ["observability"]
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: "no"
+
 volumes:
   quantpilot_pg:
   quantpilot_minio:

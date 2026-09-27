@@ -25,11 +25,15 @@ export const CURRENT_STACK: { layer: string; tech: string }[] = [
     tech: "Manifest-driven canonical loader (pyarrow): processed Parquet → validated, idempotent upserts into Postgres",
   },
   { layer: "Ship", tech: "Docker Compose, GitHub Actions, Pytest (SQLite + Postgres tiers)" },
+  {
+    layer: "Observe",
+    tech: "GET /metrics (Prometheus text), optional Prometheus scrape, pipeline-status/check/reconcile CLI",
+  },
 ];
 
 export const TARGET_STACK: { layer: string; tech: string }[] = [
   { layer: "Stream", tech: "Managed Kafka (RF ≥ 3), more stream consumers" },
   { layer: "Lake", tech: "AWS S3, Spark cluster, Airflow" },
   { layer: "Graph", tech: "Neo4j + pgvector" },
-  { layer: "Infra", tech: "Terraform, AWS, OTel / Prometheus / Grafana" },
+  { layer: "Infra", tech: "Terraform, AWS, OTel / Grafana" },
 ];

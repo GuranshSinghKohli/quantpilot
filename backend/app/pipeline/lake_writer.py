@@ -22,6 +22,7 @@ from typing import Callable, Dict, Optional
 
 from sqlalchemy.orm import Session
 
+from app.core.pipeline_context import pipeline_bind
 from app.core.structured_logging import get_logger, log_event
 from app.domain.enums import IngestionRecordStatus
 from app.pipeline.dlq import dead_letter, deterministic_dlq_id, failure_reason
@@ -123,7 +124,7 @@ class LakeWriter:
                 if error is not None:
                     if error.code() == KafkaError._PARTITION_EOF:
                         continue
-                    self.metrics.inc("lake_writer_consumer_errors_total", code=error.name())
+                    self.metrics.inc("kafka_processing_failures_total", reason="consumer")
                     log_event(_log, logging.WARNING, "pipeline.lake_writer.consumer_error",
                               code=error.name(), error=error.str(), fatal=error.fatal())
                     if error.fatal():
@@ -146,14 +147,14 @@ class LakeWriter:
                       error_type=type(exc).__name__, error=str(exc)[:200])
             return
         for (topic, partition), value in lag.items():
-            self.metrics.set("lake_writer_consumer_lag", value, topic=topic, partition=partition)
+            self.metrics.set("kafka_consumer_lag", value, topic=topic, partition=str(partition))
 
     # --- one message ---------------------------------------------------------------
 
     def handle(self, message) -> HandleResult:
         started, first_failed_at = time.monotonic(), datetime.now(timezone.utc)
         topic = message.topic()
-        self.metrics.inc("lake_writer_messages_consumed_total", topic=topic)
+        self.metrics.inc("kafka_messages_consumed_total", topic=topic)
         attempts = 0
 
         def attempt() -> HandleResult:
@@ -167,12 +168,12 @@ class LakeWriter:
                                      classify=_retryable, sleep=self._sleep)
         except (PermanentError, RetryExhausted) as exc:
             reason = failure_reason(exc).value
-            self.metrics.inc("lake_writer_failures_total", reason=reason)
+            self.metrics.inc("kafka_processing_failures_total", reason=reason)
             result = self._dead_letter(message, exc, first_failed_at)
         finally:
             if attempts > 1:
-                self.metrics.inc("lake_writer_retries_total", attempts - 1)
-        self.metrics.observe("lake_writer_processing_seconds", time.monotonic() - started, topic=topic)
+                self.metrics.inc("lake_write_retries_total", attempts - 1)
+        self.metrics.observe("lake_write_duration_seconds", time.monotonic() - started, topic=topic)
         if self._before_commit is not None:
             self._before_commit(message, result)
         self.commit(message)
@@ -186,6 +187,12 @@ class LakeWriter:
         event = decode_event(value, self.max_bytes)
         self._decoded = event
         check_event(event)
+        with pipeline_bind(component=self.COMPONENT, operation="land", domain=event.domain,
+                           source=event.source, run_id=str(event.run_id),
+                           correlation_id=event.correlation_id or str(event.run_id)):
+            return self._land(message, event, topic, partition, offset)
+
+    def _land(self, message, event, topic, partition, offset) -> HandleResult:
         key = (message.key() or b"").decode("utf-8", errors="replace")
         if key != event.event_id:
             raise PermanentError(FailureReason.ENVELOPE_INVALID, f"message key {key[:80]!r} is not the event_id")
@@ -223,12 +230,15 @@ class LakeWriter:
                 repo.record_landing(db, event.event_id, raw_uri=put.uri, topic=topic, partition=partition, offset=offset)
                 db.commit()
         else:
-            self.metrics.inc("lake_writer_untracked_total", topic=topic)
             log_event(_log, logging.WARNING, "pipeline.lake_writer.untracked_event", event_id=event.event_id,
                       topic=topic, partition=partition, offset=offset, raw_uri=put.uri)
 
         outcome = Outcome.LANDED if put.created else Outcome.REPLAY
-        self.metrics.inc("lake_writer_lake_writes_total", result=outcome.value)
+        self.metrics.inc("lake_writes_total", result=outcome.value)
+        if put.created:
+            self.metrics.inc("lake_bytes_written", put.size)
+        else:
+            self.metrics.inc("lake_duplicate_writes_total")
         log_event(_log, logging.INFO if put.created else logging.DEBUG, f"pipeline.lake_writer.{outcome.value}",
                   event_id=event.event_id, topic=topic, partition=partition, offset=offset, raw_uri=put.uri,
                   sha256=put.sha256, tracked=tracked)
@@ -242,6 +252,7 @@ class LakeWriter:
         except StoredBytesCorrupt as exc:
             raise PermanentError(FailureReason.INTEGRITY_CONFLICT, str(exc)) from exc
         except Exception as exc:
+            self.metrics.inc("lake_write_failures_total", reason="put")
             if type(exc).__name__ == "ClientError" and not is_transient(exc):
                 raise PermanentError(FailureReason.STORAGE_REJECTED, str(exc)[:500]) from exc
             raise
@@ -258,7 +269,7 @@ class LakeWriter:
             original_key=message.key(), dlq_id=dlq_id,
         )
         delivery = self.dlq.publish(letter)  # raises unless acknowledged → offset stays uncommitted
-        self.metrics.inc("lake_writer_dlq_total", reason=reason)
+        self.metrics.inc("kafka_dlq_messages_total", component=self.COMPONENT, reason=reason)
         log_event(_log, logging.WARNING, "pipeline.dlq.published", component=self.COMPONENT, dlq_id=str(dlq_id),
                   reason=reason, topic=topic, partition=partition, offset=offset, event_id=event_id,
                   retry_count=letter.retry_count, error_type=letter.error_type,
@@ -292,7 +303,7 @@ class LakeWriter:
             self.consumer.commit(message=message, asynchronous=False)
         except KafkaException as exc:
             # The work is durable; an uncommitted offset only means a harmless replay later.
-            self.metrics.inc("lake_writer_commit_failures_total", topic=message.topic())
+            self.metrics.inc("kafka_processing_failures_total", reason="commit")
             log_event(_log, logging.WARNING, "pipeline.lake_writer.commit_failed", topic=message.topic(),
                       partition=message.partition(), offset=message.offset(), error=str(exc)[:300])
 

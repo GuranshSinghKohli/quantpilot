@@ -373,37 +373,124 @@ def _load(args: argparse.Namespace) -> int:
 
 def _dlq(args: argparse.Namespace) -> int:
     import json
+
+    from app.pipeline.ops.dlq import dlq_summary, inspect_dlq
+
+    if args.summary:
+        print(json.dumps(dlq_summary(limit=args.limit), indent=2, default=str))
+        return 0
+    report = inspect_dlq(limit=args.limit, show_payload=args.show_payload)
+    print(json.dumps(report, indent=2, default=str))
+    return 0 if report.get("available", True) else 1
+
+
+def _status(args: argparse.Namespace) -> int:
+    import json
+
+    from app.pipeline.ops.status import pipeline_status
+
+    sessions = _require_migrated_db()
+    with sessions() as db:
+        report = pipeline_status(db, include_kafka=not args.skip_kafka, include_dlq=not args.skip_dlq)
+    print(json.dumps(report, indent=2, default=str))
+    return 0
+
+
+def _check(args: argparse.Namespace) -> int:
+    import json
+
+    from app.pipeline.ops.check import stale_report
+
+    sessions = _require_migrated_db()
+    with sessions() as db:
+        report = stale_report(db)
+    print(json.dumps(report, indent=2, default=str))
+    return 1 if report["stale"] else 0
+
+
+def _reconcile(args: argparse.Namespace) -> int:
+    import json
+    import uuid
+    from datetime import date
+
+    from app.pipeline.lake import build_object_store
+    from app.pipeline.ops.reconcile import reconcile
+
+    sessions = _require_migrated_db()
+    job_id = uuid.UUID(args.job) if args.job else None
+    since = date.fromisoformat(args.since) if args.since else None
+    until = date.fromisoformat(args.until) if args.until else None
+    store = build_object_store()
+    with sessions() as db:
+        report = reconcile(db, store, domain=args.domain, job_id=job_id, since=since, until=until)
+    print(json.dumps(report, indent=2, default=str))
+    return 0 if report["ok"] else 1
+
+
+def _quality(args: argparse.Namespace) -> int:
+    import json
+
+    from app.pipeline.ops.quality import quality_summary
+
+    sessions = _require_migrated_db()
+    with sessions() as db:
+        report = quality_summary(db, domain=args.domain)
+    print(json.dumps(report, indent=2, default=str))
+    return 0
+
+
+def _retry_load(args: argparse.Namespace) -> int:
+    import json
     import uuid
 
-    from confluent_kafka import OFFSET_BEGINNING, Consumer, TopicPartition
+    from app.pipeline.lake import build_object_store
+    from app.pipeline.load.errors import LoadConfigError
+    from app.pipeline.ops.recover import retry_load
 
-    from app.core.settings import get_settings
-    from app.pipeline.kafka.config import consumer_config
-    from app.pipeline.serde import decode_dead_letter
-
-    settings = get_settings()
-    topic = settings.KAFKA_TOPIC_DLQ
-    # Throwaway group id and assign(): reads from the beginning, never commits.
-    consumer = Consumer(consumer_config(settings, f"quantpilot.dlq-reader.{uuid.uuid4().hex[:8]}"))
+    sessions = _require_migrated_db()
     try:
-        partitions = consumer.list_topics(topic, timeout=10).topics[topic].partitions
-        consumer.assign([TopicPartition(topic, p, OFFSET_BEGINNING) for p in partitions])
-        letters, empty_polls = [], 0
-        while len(letters) < args.limit and empty_polls < 3:
-            message = consumer.poll(1.0)
-            if message is None:
-                empty_polls += 1
-                continue
-            if message.error():
-                continue
-            letter = decode_dead_letter(message.value())
-            item = letter.model_dump(mode="json", exclude=set() if args.show_payload else {"original_value"})
-            item["dlq_offset"] = message.offset()
-            letters.append(item)
-    finally:
-        consumer.close()
-    print(json.dumps({"topic": topic, "count": len(letters), "dead_letters": letters}, indent=2))
-    return 0
+        result = retry_load(build_object_store(), sessions, uuid.UUID(args.job_id))
+    except (LoadConfigError, ValueError) as exc:
+        print(f"retry-load: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(result.as_dict(), indent=2, default=str))
+    return 0 if result.status.value == "CANONICAL_LOAD_COMPLETE" else 1
+
+
+def _reprocess_job(args: argparse.Namespace) -> int:
+    import json
+    import uuid
+
+    from app.pipeline.lake import build_object_store
+    from app.pipeline.load.errors import LoadConfigError
+    from app.pipeline.ops.recover import reprocess_job
+
+    sessions = _require_migrated_db()
+    try:
+        result = reprocess_job(build_object_store(), sessions, uuid.UUID(args.job_id))
+    except (LoadConfigError, ValueError) as exc:
+        print(f"reprocess-job: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(result.as_dict(), indent=2, default=str))
+    return 0 if result.status.value == "COMPLETED" else 1
+
+
+def _retry_ingestion(args: argparse.Namespace) -> int:
+    import json
+    import uuid
+
+    from app.pipeline.load.errors import LoadConfigError
+    from app.pipeline.ops.recover import retry_ingestion
+    from app.pipeline.sources.registry import ConfigurationError
+
+    sessions = _require_migrated_db()
+    try:
+        result = retry_ingestion(sessions, uuid.UUID(args.run_id))
+    except (LoadConfigError, ConfigurationError, ValueError) as exc:
+        print(f"retry-ingestion: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(result, indent=2, default=str))
+    return 0 if result.get("status") == "COMPLETED" else 1
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -472,10 +559,42 @@ def main(argv: Optional[List[str]] = None) -> int:
                           help="load SYNTHETIC sources (refused unless the database name contains 'test')")
     load_cmd.set_defaults(handler=_load)
 
-    dlq_cmd = commands.add_parser("dlq", help="list dead letters (reads without committing)")
+    dlq_cmd = commands.add_parser("dlq", help="list dead letters (reads without committing; never replays)")
     dlq_cmd.add_argument("--limit", type=int, default=50)
     dlq_cmd.add_argument("--show-payload", action="store_true")
+    dlq_cmd.add_argument("--summary", action="store_true", help="counts by component/reason; no payloads")
     dlq_cmd.set_defaults(handler=_dlq)
+
+    status_cmd = commands.add_parser("status", help="latest runs/jobs/loads, failures, lag, DLQ summary")
+    status_cmd.add_argument("--skip-kafka", action="store_true")
+    status_cmd.add_argument("--skip-dlq", action="store_true")
+    status_cmd.set_defaults(handler=_status)
+
+    check_cmd = commands.add_parser("check", help="report stale RUNNING jobs (does not mark them failed)")
+    check_cmd.set_defaults(handler=_check)
+
+    recon_cmd = commands.add_parser("reconcile", help="scoped lineage/count/state invariants")
+    recon_cmd.add_argument("--domain", choices=["news", "market", "company"], default=None)
+    recon_cmd.add_argument("--job", default=None, help="processing job id")
+    recon_cmd.add_argument("--since", default=None)
+    recon_cmd.add_argument("--until", default=None)
+    recon_cmd.set_defaults(handler=_reconcile)
+
+    quality_cmd = commands.add_parser("quality", help="per-domain count chain (ingested → canonical)")
+    quality_cmd.add_argument("--domain", choices=["news", "market", "company"], default=None)
+    quality_cmd.set_defaults(handler=_quality)
+
+    retry_load_cmd = commands.add_parser("retry-load", help="load a COMPLETED job after verifying its manifest")
+    retry_load_cmd.add_argument("job_id")
+    retry_load_cmd.set_defaults(handler=_retry_load)
+
+    reprocess_cmd = commands.add_parser("reprocess-job", help="re-process the raw keys listed on a job's manifest")
+    reprocess_cmd.add_argument("job_id")
+    reprocess_cmd.set_defaults(handler=_reprocess_job)
+
+    retry_ing_cmd = commands.add_parser("retry-ingestion", help="new ingest from a FAILED/PARTIAL run's stored window")
+    retry_ing_cmd.add_argument("run_id")
+    retry_ing_cmd.set_defaults(handler=_retry_ingestion)
 
     args = parser.parse_args(argv)
     return args.handler(args)

@@ -4,7 +4,7 @@ import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.config import MAX_REQUEST_BODY_BYTES, get_allowed_origins
 from app.core.settings import get_settings
@@ -21,6 +21,7 @@ from app.runtime import is_draining, set_draining
 from app.security.request_context import new_request_id, set_request_id
 from app.mcp_client import close_mcp_session
 from app.services import redis_store
+from app.observability.http_metrics import HTTP_METRICS, observe_request
 from app.services.readiness import readiness_payload
 from app.routers import (
     alerts,
@@ -142,6 +143,7 @@ async def log_requests(request: Request, call_next):
         )
         raise
     duration_ms = int((time.perf_counter() - start) * 1000)
+    observe_request(request.url.path, request.method, response.status_code, duration_ms / 1000)
     response.headers["X-Request-Id"] = request_id
     if request.url.path.startswith("/api"):
         log_event(
@@ -159,7 +161,7 @@ async def log_requests(request: Request, call_next):
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     obs = get_observability_status()
-    ready = readiness_payload()
+    ready = readiness_payload(include_pipeline=False)
     return HealthResponse(
         status="ok",
         langsmith=bool(obs.get("langsmith")),
@@ -177,3 +179,19 @@ async def health() -> HealthResponse:
 async def ready() -> ReadyResponse:
     payload = readiness_payload()
     return ReadyResponse(**payload)
+
+
+@app.get("/metrics", response_class=PlainTextResponse, include_in_schema=False)
+async def metrics() -> PlainTextResponse:
+    """Prometheus text exposition. Never required for the API to function."""
+    try:
+        from app.db.session import SessionLocal
+        from app.pipeline.ops.export import pipeline_gauges
+
+        body = HTTP_METRICS.render_prometheus() + pipeline_gauges(SessionLocal).render_prometheus()
+    except Exception:
+        try:
+            body = HTTP_METRICS.render_prometheus()
+        except Exception:
+            body = "# metrics unavailable\n"
+    return PlainTextResponse(body, media_type="text/plain; version=0.0.4; charset=utf-8")

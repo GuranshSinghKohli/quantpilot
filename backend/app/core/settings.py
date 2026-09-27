@@ -196,6 +196,10 @@ class Settings(BaseSettings):
     PIPELINE_RETRY_MAX_ATTEMPTS: int = Field(5, ge=1, le=20)
     PIPELINE_RETRY_BASE_SECONDS: float = Field(0.5, gt=0)
     PIPELINE_RETRY_MAX_SECONDS: float = Field(30.0, gt=0)
+    # Stuck RUNNING / CANONICAL_LOAD_RUNNING older than this is reported, never auto-failed.
+    PIPELINE_STALE_RUN_SECONDS: int = Field(3600, ge=60, le=86400)
+    PIPELINE_STALE_JOB_SECONDS: int = Field(3600, ge=60, le=86400)
+    PIPELINE_STALE_LOAD_SECONDS: int = Field(3600, ge=60, le=86400)
 
     # Observability (all optional)
     LANGSMITH_TRACING: bool = False

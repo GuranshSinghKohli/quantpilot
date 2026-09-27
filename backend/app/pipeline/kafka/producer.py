@@ -128,15 +128,15 @@ class EventProducer:
                         RetryExhausted(f"kafka.produce:{message.topic}", attempt, report) if report.retriable else report
                     )
                     results[index] = PublishFailure(message, error, attempt)
-                    self.metrics.inc("producer_failures_total", topic=message.topic, reason=report.code)
+                    self.metrics.inc("kafka_publish_failures_total", topic=message.topic, reason=report.code)
                     log_event(_log, logging.ERROR, "pipeline.produce.failed", topic=message.topic,
                               key=message.key, attempts=attempt, error_code=report.code, error=str(report)[:300])
                 else:
                     topic, partition, offset = report
                     latency = time.monotonic() - started
                     results[index] = Delivery(topic, partition, offset, message.key, attempt, latency)
-                    self.metrics.inc("producer_messages_acknowledged_total", topic=topic)
-                    self.metrics.observe("producer_publish_latency_seconds", latency, topic=topic)
+                    self.metrics.inc("kafka_messages_published_total", topic=topic)
+                    self.metrics.observe("kafka_publish_duration_seconds", latency, topic=topic)
             if retry:
                 wait = self.policy.delay(attempt)
                 self.metrics.inc("producer_retries_total", len(retry))
