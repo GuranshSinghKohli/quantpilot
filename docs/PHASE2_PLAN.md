@@ -119,7 +119,7 @@ s3://quantpilot-lake/raw/news/year=2026/month=09/day=27/<event_id>.json
 s3://quantpilot-lake/raw/market/year=2026/month=09/day=27/<event_id>.json
 s3://quantpilot-lake/raw/company/year=2026/month=09/day=27/<event_id>.json
 s3://quantpilot-lake/processed/<domain>/year=/month=/day=/part-*.parquet   # partitioned by record date
-s3://quantpilot-lake/rejects/<domain>/job_id=<uuid>/part-*.parquet          # Spark-level rejects
+s3://quantpilot-lake/rejects/<domain>/year=/month=/day=/<event_id>.json     # Spark-level rejects (as built in 2.6; was job_id=<uuid>/part-*.parquet)
 s3://quantpilot-lake/_manifests/processing/<job_id>.json
 ```
 
@@ -233,6 +233,15 @@ The rule "same record + same content hash → no duplicate canonical row" is the
   6. Emit metrics (`input_rows`, `rejected`, `duplicates_removed`, `output_rows`, `output_partitions`, `duration_ms`) to the `processing_jobs` row, `_manifests/processing/<job_id>.json`, and a `pipeline.spark.job_finished` log event.
 - **Lineage columns on every processed row:** `event_id`, `raw_uri`, `run_id`, `source`, `source_ingested_at`, `processing_job_id`.
 - **Honest scope:** today's volume fits in one Python process. Spark is here because this phase explicitly calls for a scalable batch layer, and the job is structured so the same code handles years of history. Measured row counts and durations get documented next to the job, as ADR-011 requires; no performance claims are made without measurement.
+
+**As built (Step 2.6)** — details in `docs/PHASE2_6_PLAN.md` and ADR-022. Differences from the proposal above:
+- Input is an explicit object list planned through `ObjectStore.list` per ingestion day (or a prefix / key list), never a directory scan; `--start/--end` replaces `since`.
+- Rejects are one write-once JSON object per raw object at `rejects/<domain>/year=/month=/day=/<event_id>.json` (not Parquet per job), so a rerun never duplicates or overwrites them.
+- Company is processed too, partitioned by ingestion date (one reference snapshot per day).
+- Dedup also drops exact `event_id` duplicates and keeps the existing row when an `event_id` is already processed, so reruns keep the original `processing_job_id`.
+- Lineage columns: `source_ingested_at` is named `ingested_at`; `raw_key`, `content_hash`, `dedup_key`, `correlation_id` and `original_json` are added.
+- `processing_jobs` gains `until`, `input_prefix`, `input_objects`, `spark_app_id` (migration `0006`); one job per output prefix via a Postgres advisory lock.
+- PySpark 4.1.3 / Hadoop 3.4.2 / AWS SDK v2 bundle 2.29.52 / Java 17; tests use `local[2]`.
 
 ## 9. PostgreSQL loading strategy
 
@@ -387,7 +396,7 @@ make pipeline-test                # kafka + s3 + spark + pipeline tiers against 
 | **2.3** | Lake: interface, `LocalObjectStore`, `S3ObjectStore`; compose `minio` + `minio-ready` + `minio-init`; `make lake-up` / `lake-check` / `test-s3` | unit + `s3` tier ✅ |
 | **2.4** | Kafka: compose `kafka` + `kafka-init`; producer, consumer loop, DLQ publisher; lake-writer service; `make kafka-up` (as built: `docs/PHASE2_4_PLAN.md`; message key is `event_id`, not `dedup_key`) | `kafka` tier (redelivery, malformed → DLQ, DLQ-failure no-commit) ✅ |
 | **2.5** | Source adapters + `ingest` CLI + run tracking. As built: Massive news + Massive daily bars (replacing yfinance, see `docs/PHASE2_5_PLAN.md` §2 and ADR-021) and SEC companies | unit + mocked-provider e2e through Kafka/MinIO; live SEC run → raw objects in MinIO ✅ |
-| **2.6** | Spark image + generic job (market, news, company) + rejects + manifests + `processing_jobs` | `spark` tier; `make process` on the live raw data |
+| **2.6** | Spark image + generic job (market, news, company) + rejects + manifests + `processing_jobs`. As built: `make spark-*`, see `docs/PHASE2_6_PLAN.md` and ADR-022 | `spark` tier (+ MinIO via S3A); `make spark-all` twice on the live raw data → identical rows ✅ |
 | **2.7** | Loader + lineage CLI + `make runs/dlq/lineage` | integration + `pipeline` tier; duplicate run → identical counts |
 | **2.8** | `make pipeline` end to end on real data; CI pipeline job | full verification (below) |
 | **2.9** | Docs: README, this file as-built, ADR-009/010/011 amendments + new ADR-020 (effectively-once pipeline), `ENV_VARIABLES.md`, `backend/app/README.md`, `stack.ts` | frontend tsc + lint |

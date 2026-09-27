@@ -1,8 +1,8 @@
 """Deterministic object keys for the lake.
 
     raw/<domain>/year=YYYY/month=MM/day=DD/<event_id>.json        ingestion date (UTC)
-    processed/<domain>/year=YYYY/month=MM/day=DD/part-*.parquet   record date
-    rejects/<domain>/job_id=<uuid>/part-*.parquet
+    processed/<domain>/year=YYYY/month=MM/day=DD/part-*.parquet   record date (Spark writes)
+    rejects/<domain>/year=YYYY/month=MM/day=DD/<event_id>.json    the raw object's partition
     _manifests/processing/<job_id>.json
 
 A key is ``/``-separated segments of ``[A-Za-z0-9._=-]``. Segments may not
@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import date, datetime, timezone
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 from app.domain.enums import IngestionDomain
 from app.pipeline.lake.base import InvalidKey
@@ -23,6 +23,8 @@ from app.pipeline.lake.base import InvalidKey
 MAX_KEY_BYTES = 1024
 _SEGMENT = re.compile(r"[A-Za-z0-9_=\-][A-Za-z0-9._=\-]*")
 _EVENT_ID = re.compile(r"[0-9a-f]{64}")
+RAW_KEY_PATTERN = r"raw/([a-z]+)/year=(\d{4})/month=(\d{2})/day=(\d{2})/([0-9a-f]{64})\.json"
+_RAW_KEY = re.compile(RAW_KEY_PATTERN)
 
 RAW = "raw"
 PROCESSED = "processed"
@@ -89,8 +91,28 @@ def processed_prefix(domain: Union[IngestionDomain, str], day: Optional[date] = 
     return base if day is None else f"{base}{partition(day)}/"
 
 
-def rejects_prefix(domain: Union[IngestionDomain, str], job_id: uuid.UUID) -> str:
-    return f"{REJECTS}/{_domain(domain)}/job_id={uuid.UUID(str(job_id))}/"
+def rejects_prefix(domain: Union[IngestionDomain, str], day: Optional[date] = None) -> str:
+    base = f"{REJECTS}/{_domain(domain)}/"
+    return base if day is None else f"{base}{partition(day)}/"
+
+
+def reject_key(domain: Union[IngestionDomain, str], day: date, event_id: str) -> str:
+    """One reject object per raw object, in the raw object's ingestion-date partition."""
+    if not _EVENT_ID.fullmatch(event_id or ""):
+        raise InvalidKey(f"event_id must be 64 lowercase hex characters, got {event_id!r}")
+    return f"{rejects_prefix(domain, day)}{event_id}.json"
+
+
+def parse_raw_key(key: str) -> Tuple[str, date, str]:
+    """(domain, ingestion date, event_id) of a raw object key; ``InvalidKey`` otherwise."""
+    match = _RAW_KEY.fullmatch(key or "")
+    if not match:
+        raise InvalidKey(f"not a raw object key: {key!r}")
+    domain, year, month, day, event_id = match.groups()
+    try:
+        return _domain(domain), date(int(year), int(month), int(day)), event_id
+    except ValueError:
+        raise InvalidKey(f"invalid partition date in {key!r}") from None
 
 
 def manifest_key(job_id: uuid.UUID) -> str:

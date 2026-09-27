@@ -122,7 +122,25 @@ Read by `python -m app.pipeline …`. The API does not need any of them and star
 | Local development | `SEC_EDGAR_USER_AGENT` for `make ingest-company`; a free Massive key in `NEWS_API_KEY`/`MARKET_API_KEY` for news/market. Everything else has defaults |
 | Production (target) | The same keys from a secret manager (not `.env`), `https` base URLs (enforced), throttle values matching the paid plan |
 
-Test-only: `TEST_KAFKA_BOOTSTRAP` enables the `kafka` tier (`make test-kafka`; per-test `test.<id>.*` topics and groups, deleted afterwards). `TEST_S3_ENDPOINT`, `TEST_S3_ACCESS_KEY_ID`, `TEST_S3_SECRET_ACCESS_KEY` enable the `s3` tier (`make test-s3`), which creates and deletes its own `quantpilot-test-*` buckets. The test suite always pins the lake to `backend/tests/_test_lake/`, Kafka to the unroutable `127.0.0.1:9`, and topic/group names to `test.unconfigured.*`. It also blanks `NEWS_API_KEY`/`MARKET_API_KEY` and points every source base URL at `http://127.0.0.1:9`, so no test can reach a real provider; adapter tests use an httpx `MockTransport`. `make test-kafka` also sets the `TEST_S3_*` variables so the mocked-provider end-to-end tests run against MinIO.
+### Spark processing (Step 2.6)
+
+Read only by `python -m app.pipeline process` (the `spark` compose service / `make spark-*`); the API never reads them. S3A takes credentials from the standard `AWS_*` variables (MinIO's in compose); they are never put into the Spark configuration.
+
+| Variable | Required / Optional | Description | Example value |
+|----------|-------------------|-------------|---------------|
+| `SPARK_MASTER` | Optional | `local[*]` (default), `local[N]`, `local`; `spark://`, `k8s://`, `yarn` are accepted but untested | `local[*]` |
+| `SPARK_APP_NAME` | Optional | Spark application name (default `quantpilot-processing`) | `quantpilot-processing` |
+| `SPARK_SHUFFLE_PARTITIONS` | Optional | `spark.sql.shuffle.partitions` (default `8`, 1–2000) | `8` |
+| `SPARK_LOG_LEVEL` | Optional | `ERROR`, `WARN` (default), `INFO`, `DEBUG` | `WARN` |
+| `SPARK_DRIVER_MEMORY` | Optional | Driver memory, e.g. `2g` (default) | `2g` |
+| `SPARK_MAX_RECORDS_PER_FILE` | Optional | Split a partition's Parquet file past this many rows (default `1000000`) | `1000000` |
+| `PROCESS_MAX_WINDOW_DAYS` | Optional | Largest `--start/--end` window (default `366`) | `366` |
+| `PROCESS_MAX_INPUT_OBJECTS` | Optional | Refuse a job selecting more raw objects (default `100000`) | `100000` |
+| `CODE_VERSION` | Optional | Recorded on `processing_jobs` and manifests; `make spark-*` sets the git short SHA | `e80ae48` |
+
+`make spark-*` also accepts `PROCESS_START`, `PROCESS_END` (raw ingestion dates, `YYYY-MM-DD`), `PROCESS_PREFIX`, `PROCESS_OBJECTS` (comma-separated raw keys) and `PROCESS_OUTPUT_PREFIX`, passed as CLI flags.
+
+Test-only: `TEST_KAFKA_BOOTSTRAP` enables the `kafka` tier (`make test-kafka`; per-test `test.<id>.*` topics and groups, deleted afterwards). `TEST_S3_ENDPOINT`, `TEST_S3_ACCESS_KEY_ID`, `TEST_S3_SECRET_ACCESS_KEY` enable the `s3` tier (`make test-s3`), which creates and deletes its own `quantpilot-test-*` buckets. The test suite always pins the lake to `backend/tests/_test_lake/`, Kafka to the unroutable `127.0.0.1:9`, and topic/group names to `test.unconfigured.*`. It also blanks `NEWS_API_KEY`/`MARKET_API_KEY` and points every source base URL at `http://127.0.0.1:9`, so no test can reach a real provider; adapter tests use an httpx `MockTransport`. `make test-kafka` also sets the `TEST_S3_*` variables so the mocked-provider end-to-end tests run against MinIO. The `spark` tier needs pyspark + Java 17 and runs in the `spark-test` image (`make test-spark`, which sets `TEST_S3_*` for MinIO); `SPARK_TEST_DATABASE_URL` / `SPARK_TEST_KAFKA_BOOTSTRAP` pass `TEST_DATABASE_URL` / `TEST_KAFKA_BOOTSTRAP` into that container to run every tier there.
 
 ## Frontend (Vercel / local)
 

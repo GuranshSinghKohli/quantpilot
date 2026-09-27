@@ -225,6 +225,63 @@ services:
     command: ["python", "-m", "app.pipeline", "sources", "check"]
     restart: "no"
 
+  # One-shot Spark processing (`make spark-news|spark-market|spark-company|spark-all`):
+  # raw lake objects in MinIO → processed Parquet + rejects + manifest, tracked in
+  # processing_jobs. PySpark local[*] inside this container; S3A reads the AWS_*
+  # variables (never the Spark conf). No provider keys, no Kafka.
+  spark:
+    profiles: ["spark"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: spark
+      args:
+        REQUIREMENTS: requirements-pipeline.txt
+    image: quantpilot-spark:dev
+    environment:
+      DATABASE_URL: postgresql://quantpilot:quantpilot@postgres:5432/quantpilot
+      DB_AUTO_MIGRATE: "false"
+      ENVIRONMENT: development
+      LAKE_BACKEND: s3
+      LAKE_BUCKET: ${LAKE_BUCKET:-quantpilot-lake}
+      LAKE_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-quantpilot}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-quantpilot-dev-only}
+      SPARK_MASTER: ${SPARK_MASTER:-local[*]}
+      SPARK_DRIVER_MEMORY: ${SPARK_DRIVER_MEMORY:-2g}
+      SPARK_SHUFFLE_PARTITIONS: ${SPARK_SHUFFLE_PARTITIONS:-8}
+      CODE_VERSION: ${CODE_VERSION:-}
+    command: ["python", "-m", "app.pipeline", "process", "--help"]
+    restart: "no"
+
+  # Spark test tier (`make test-spark`): the repo is mounted (backend + the root
+  # evals/ and mcp_server/ packages the full suite imports), so no rebuild per edit.
+  # MinIO tests use throwaway quantpilot-test-* buckets; the Postgres tier uses
+  # TEST_DATABASE_URL when given (never the compose dev database).
+  spark-test:
+    profiles: ["spark"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: spark-test
+      args:
+        REQUIREMENTS: requirements-pipeline.txt
+    image: quantpilot-spark-test:dev
+    environment:
+      ENVIRONMENT: test
+      PYTHONDONTWRITEBYTECODE: "1"
+      TEST_S3_ENDPOINT: http://minio:9000
+      TEST_S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-quantpilot}
+      TEST_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-quantpilot-dev-only}
+      TEST_DATABASE_URL: ${SPARK_TEST_DATABASE_URL:-}
+      TEST_KAFKA_BOOTSTRAP: ${SPARK_TEST_KAFKA_BOOTSTRAP:-}
+    volumes:
+      - .:/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["pytest", "tests/spark", "-q", "-p", "no:cacheprovider"]
+    restart: "no"
+
 volumes:
   quantpilot_pg:
   quantpilot_minio:

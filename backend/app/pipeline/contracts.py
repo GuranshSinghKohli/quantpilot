@@ -101,6 +101,7 @@ SOURCES: Dict[str, SourceSpec] = {
 # --- field types -----------------------------------------------------------------
 
 _SYMBOL = re.compile(r"\^?[A-Z0-9][A-Z0-9.\-=]{0,15}")
+SYMBOL_PATTERN = _SYMBOL.pattern  # also compiled as a Java regex by Spark processing
 _SIX_DP = Decimal("0.000001")
 _PRICE_LIMIT = Decimal("1e14")  # DECIMAL(20,6) holds 14 integer digits
 

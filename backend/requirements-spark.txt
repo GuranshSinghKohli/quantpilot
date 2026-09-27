@@ -1,0 +1,5 @@
+# Spark processing (Phase 2.6). Only the `spark` image installs this; the API and
+# pipeline images do not. Needs a Java 17 runtime. PySpark 4.1.3 bundles Hadoop
+# 3.4.2, which fixes the S3A jar versions baked into the image (see Dockerfile).
+-r requirements-pipeline.txt
+pyspark==4.1.3

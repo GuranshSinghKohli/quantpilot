@@ -27,7 +27,8 @@ LAKE_ENV = LAKE_BACKEND=s3 LAKE_ENDPOINT_URL=http://localhost:$(MINIO_PORT) \
 .PHONY: help up dev down db migrate revision api test test-unit test-integration typecheck ready \
         lake-up lake-down lake-init lake-check test-s3 \
         kafka-up kafka-down kafka-check pipeline-up pipeline-down pipeline-logs publish-synthetic dlq test-kafka \
-        ingest-news ingest-market ingest-company sources-check
+        ingest-news ingest-market ingest-company sources-check \
+        spark-build spark-news spark-market spark-company spark-all test-spark
 
 help:
 	@echo "up                compose stack (postgres, redis, migrate, backend, frontend)"
@@ -59,6 +60,12 @@ help:
 	@echo "ingest-market     Massive bars   [MARKET_SYMBOLS= MARKET_START= MARKET_END= MAX_RECORDS=]"
 	@echo "ingest-company    SEC companies  [COMPANY_SYMBOLS= | COMPANY_ALL=1 MAX_RECORDS=]"
 	@echo "sources-check     provider health: configured / reachable / auth (not part of API /health)"
+	@echo "spark-build       build the spark + spark-test images (PySpark, Java 17, pinned S3A jars)"
+	@echo "spark-news        raw → processed Parquet  [PROCESS_START= PROCESS_END= | PROCESS_PREFIX= | PROCESS_OBJECTS= ; PROCESS_OUTPUT_PREFIX=]"
+	@echo "spark-market      same for market bars"
+	@echo "spark-company     same for SEC company rows"
+	@echo "spark-all         news, market, company  [PROCESS_START= PROCESS_END=]"
+	@echo "test-spark        spark tier (real PySpark; MinIO via S3A) in the spark-test image"
 
 up:
 	$(COMPOSE) up --build
@@ -162,3 +169,24 @@ ingest-company:
 
 sources-check:
 	$(INGEST) sources check
+
+# Spark processing runs in the one-shot `spark` service (needs `make pipeline-up`).
+# Input: PROCESS_START/PROCESS_END (raw ingestion dates, default today UTC), or
+# PROCESS_PREFIX, or PROCESS_OBJECTS (comma-separated raw keys). One of them only.
+SPARK = $(PIPELINE) --profile spark run --rm --no-deps -e CODE_VERSION=$(CODE_VERSION) spark python -m app.pipeline
+CODE_VERSION ?= $(shell git rev-parse --short HEAD 2>/dev/null)
+PROCESS_OPTS = $(call opt,--start,$(PROCESS_START)) $(call opt,--end,$(PROCESS_END)) \
+               $(call opt,--prefix,$(PROCESS_PREFIX)) $(call opt,--objects,$(PROCESS_OBJECTS)) \
+               $(call opt,--output-prefix,$(PROCESS_OUTPUT_PREFIX))
+
+spark-build:
+	$(PIPELINE) --profile spark build spark spark-test
+
+spark-news spark-market spark-company:
+	$(SPARK) process $(subst spark-,,$@) $(PROCESS_OPTS)
+
+spark-all:
+	$(SPARK) process all $(call opt,--start,$(PROCESS_START)) $(call opt,--end,$(PROCESS_END))
+
+test-spark:
+	$(PIPELINE) --profile spark run --rm --no-deps spark-test

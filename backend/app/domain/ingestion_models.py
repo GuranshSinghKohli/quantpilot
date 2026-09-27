@@ -1,4 +1,4 @@
-"""Ingestion pipeline tables (migration 0005).
+"""Ingestion pipeline tables (migration 0005; processing_jobs input columns 0006).
 
 Tracking: ingestion_sources → ingestion_runs → ingestion_records (one row per
 ingested event version) and processing_jobs (one row per Spark run).
@@ -118,6 +118,12 @@ class ProcessingJob(Base):
     domain: Mapped[str] = mapped_column(String(16), nullable=False)
     mode: Mapped[str] = mapped_column(String(16), nullable=False)
     since: Mapped[Optional[date]] = mapped_column(Date)
+    # Input selection (0006): raw ingestion-date window [since, until], a raw key
+    # prefix, or an explicit object list; the manifest lists the objects themselves.
+    until: Mapped[Optional[date]] = mapped_column(Date)
+    input_prefix: Mapped[Optional[str]] = mapped_column(String(1024))
+    input_objects: Mapped[int] = _counter()
+    spark_app_id: Mapped[Optional[str]] = mapped_column(String(128))
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     input_rows: Mapped[int] = _counter()
     rejected_rows: Mapped[int] = _counter()

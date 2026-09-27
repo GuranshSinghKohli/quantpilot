@@ -268,6 +268,9 @@ def start_processing_job(
     domain: str,
     mode: str,
     since=None,
+    until=None,
+    input_prefix: Optional[str] = None,
+    input_objects: int = 0,
     code_version: Optional[str] = None,
     engine_version: Optional[str] = None,
 ) -> ProcessingJob:
@@ -277,6 +280,9 @@ def start_processing_job(
         domain=domain,
         mode=mode,
         since=since,
+        until=until,
+        input_prefix=input_prefix,
+        input_objects=input_objects,
         status=ProcessingJobStatus.RUNNING.value,
         code_version=code_version,
         engine_version=engine_version,
@@ -296,9 +302,12 @@ def finish_processing_job(
     output_uri: Optional[str] = None,
     manifest_uri: Optional[str] = None,
     error: Optional[str] = None,
+    spark_app_id: Optional[str] = None,
 ) -> ProcessingJob:
     finished = _now()
     job.status = status.value
+    if spark_app_id is not None:
+        job.spark_app_id = spark_app_id
     job.input_rows = int(metrics.get("input_rows", 0))
     job.rejected_rows = int(metrics.get("rejected_rows", 0))
     job.duplicates_removed = int(metrics.get("duplicates_removed", 0))
@@ -363,6 +372,7 @@ def lineage(db: Session, event_id: str) -> Optional[Dict[str, Any]]:
             "status": job.status,
             "code_version": job.code_version,
             "engine_version": job.engine_version,
+            "spark_app_id": job.spark_app_id,
             "output_uri": job.output_uri,
             "manifest_uri": job.manifest_uri,
         },

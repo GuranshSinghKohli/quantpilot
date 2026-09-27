@@ -50,6 +50,7 @@ _KAFKA_NAME = re.compile(r"[A-Za-z0-9._-]{1,249}")
 _HOST_PORT = re.compile(r"(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+):\d{1,5}")
 _S3_BUCKET = re.compile(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")
 _SYMBOL = re.compile(r"\^?[A-Z0-9][A-Z0-9.\-=]{0,15}")  # same rule as pipeline contracts
+_SPARK_MASTER = re.compile(r"local(\[(\*|[1-9][0-9]{0,3})\])?|(spark|k8s)://[A-Za-z0-9.:\-\[\]/]+|yarn")
 
 
 class Settings(BaseSettings):
@@ -178,6 +179,19 @@ class Settings(BaseSettings):
     INGEST_PAGE_SIZE: int = Field(100, ge=1, le=1000)
     INGEST_MAX_PAGES: int = Field(20, ge=1, le=500)
 
+    # Ingestion pipeline: Spark processing (raw lake → processed Parquet). Only
+    # `python -m app.pipeline process` reads these; nothing starts Spark on import.
+    SPARK_MASTER: str = "local[*]"
+    SPARK_APP_NAME: str = "quantpilot-processing"
+    SPARK_SHUFFLE_PARTITIONS: int = Field(8, ge=1, le=2000)
+    SPARK_LOG_LEVEL: Literal["ERROR", "WARN", "INFO", "DEBUG"] = "WARN"
+    SPARK_DRIVER_MEMORY: str = "2g"
+    SPARK_MAX_RECORDS_PER_FILE: int = Field(1_000_000, ge=1)
+    PROCESS_MAX_WINDOW_DAYS: int = Field(366, ge=1, le=3660)
+    PROCESS_MAX_INPUT_OBJECTS: int = Field(100_000, ge=1, le=10_000_000)
+    # Recorded on processing_jobs.code_version (e.g. the git sha); empty = unknown.
+    CODE_VERSION: str = Field("", max_length=64)
+
     # Ingestion pipeline: retries
     PIPELINE_RETRY_MAX_ATTEMPTS: int = Field(5, ge=1, le=20)
     PIPELINE_RETRY_BASE_SECONDS: float = Field(0.5, gt=0)
@@ -299,6 +313,27 @@ class Settings(BaseSettings):
         if bad:
             raise ValueError(f"invalid symbols: {bad}")
         return ",".join(dict.fromkeys(symbols))
+
+    @field_validator("SPARK_MASTER")
+    @classmethod
+    def _spark_master(cls, value: str) -> str:
+        if not _SPARK_MASTER.fullmatch(value):
+            raise ValueError(f"SPARK_MASTER must be local, local[N|*] or a scheme://host URL, got {value!r}")
+        return value
+
+    @field_validator("SPARK_APP_NAME")
+    @classmethod
+    def _spark_app_name(cls, value: str) -> str:
+        if not _KAFKA_NAME.fullmatch(value):
+            raise ValueError(f"invalid SPARK_APP_NAME: {value!r}")
+        return value
+
+    @field_validator("SPARK_DRIVER_MEMORY")
+    @classmethod
+    def _spark_memory(cls, value: str) -> str:
+        if not re.fullmatch(r"\d+[kmgt]", value.lower()):
+            raise ValueError(f"SPARK_DRIVER_MEMORY must look like 512m or 2g, got {value!r}")
+        return value.lower()
 
     @model_validator(mode="after")
     def _retry_bounds(self) -> "Settings":

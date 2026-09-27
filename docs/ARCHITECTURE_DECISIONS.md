@@ -258,3 +258,30 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - The free plan has 2 years of history and end-of-day data only.
 - Massive bars carry no currency and (with `adjusted=false`) no adjusted close; both are left `None`.
 
+## ADR-022 — PySpark batch processing: raw lake → processed Parquet
+
+**Status: Accepted, shipped in Phase 2 Step 2.6.**
+
+**Problem.** Raw objects are one JSON event per object, write-once, partitioned by arrival date. Research and canonical loading need typed, validated, deduplicated data partitioned by record date, with every rejected record accounted for and every row traceable to its raw object. Reruns must not create duplicates, and raw must never change.
+
+**Decision.**
+- PySpark **4.1.3** in `local[*]` inside a dedicated `spark` image (Java 17; `hadoop-aws` 3.4.2 + AWS SDK v2 bundle, checksum-pinned). The API never imports Spark; the CLI (`python -m app.pipeline process`) and the spark test tier are the only entry points.
+- Input is an explicit list of raw keys planned through `ObjectStore.list` per ingestion day (or a prefix / key list), capped. Spark reads those URIs with an explicit all-string wire schema (PERMISSIVE), so a bad value gets a named check instead of an inferred type or a silent null.
+- An ordered list of documented checks assigns each row its first failure. Failures become write-once reject objects (`rejects/<domain>/…/<event_id>.json`); `input_objects = valid + rejected` is enforced.
+- Dedup: exact `event_id` duplicates → one row; an `event_id` already processed keeps the existing row; newest `ingested_at` per contract `dedup_key` wins. Existing rows of the affected partitions are merged in, `localCheckpoint`-ed and written back with dynamic partition overwrite, so reruns are logical no-ops.
+- One tracker: `processing_jobs` (migration `0006` adds input window end, prefix, object count and Spark app id), a write-once manifest per job, and `ingestion_records` → `processed` for rows the job added. A failure is recorded `FAILED` and re-raised. One job per output prefix (Postgres advisory lock).
+- Credentials never enter the Spark conf; S3A reads the standard `AWS_*` variables.
+
+**Rejected.**
+- Spark 3.5 (Hadoop 3.3 S3A on the end-of-life AWS SDK v1).
+- Schema inference, Python UDFs, reading `raw/` as a directory.
+- Reject Parquet per job (a rerun would duplicate rejects); overwriting rejects.
+- Delta/Iceberg, Structured Streaming, a Spark cluster and Airflow in this step.
+- Reading raw through the Python `ObjectStore` (all bytes through the driver).
+
+**Cost.**
+- 8–43 s per job on this laptop for 5 objects, almost all fixed overhead (S3A copy-based commits per partition, a dozen small actions).
+- Merge-on-read rewrites each affected partition in full.
+- News versions whose `published_at` moved between days are not collapsed across partitions.
+- Output is deterministic logically, not byte-for-byte: Parquet file names contain a write UUID.
+

@@ -261,6 +261,65 @@ def _sources(args: argparse.Namespace) -> int:
     return 1 if any(r["configured"] and not r["healthy"] for r in reports) else 0
 
 
+def _process(args: argparse.Namespace) -> int:
+    import json
+    from datetime import date
+
+    from app.core.settings import get_settings
+    from app.domain.enums import ProcessingJobStatus
+    from app.pipeline.lake import build_object_store
+    from app.pipeline.metrics import Metrics
+    from app.pipeline.spark.config import ProcessingConfigError, SparkConfig
+    from app.pipeline.spark.jobs.engine import SparkEngine
+    from app.pipeline.spark.jobs.runner import ProcessingJobRunner
+    from app.pipeline.spark.plan import DOMAINS, ProcessingRequest, plan_inputs
+
+    settings = get_settings()
+    domains = list(DOMAINS) if args.domain == "all" else [args.domain]
+    try:
+        if len(domains) > 1 and (args.prefix or args.objects or args.objects_file or args.output_prefix):
+            raise ProcessingConfigError("--prefix, --objects and --output-prefix apply to a single domain")
+        objects = [k.strip() for k in (args.objects or "").split(",") if k.strip()]
+        if args.objects_file:
+            with open(args.objects_file, encoding="utf-8") as handle:
+                objects += [line.strip() for line in handle if line.strip() and not line.startswith("#")]
+        start = date.fromisoformat(args.start) if args.start else None
+        end = date.fromisoformat(args.end) if args.end else None
+        store = build_object_store(settings)
+        plans = [
+            plan_inputs(store, ProcessingRequest(domain, start=start, end=end, prefix=args.prefix,
+                                                 objects=tuple(objects), output_prefix=args.output_prefix),
+                        max_window_days=settings.PROCESS_MAX_WINDOW_DAYS, max_objects=settings.PROCESS_MAX_INPUT_OBJECTS)
+            for domain in domains
+        ]
+        engine = SparkEngine(store, SparkConfig.from_settings(settings))
+    except (ProcessingConfigError, ValueError, OSError) as exc:
+        print(f"process {args.domain}: {exc}", file=sys.stderr)
+        return 2
+    sessions = _require_migrated_db()
+    metrics = Metrics()
+    runner = ProcessingJobRunner(store=store, session_factory=sessions, engine=engine, metrics=metrics,
+                                 code_version=settings.CODE_VERSION)
+    results, ok = [], True
+    try:
+        for plan in plans:
+            try:
+                result = runner.run(plan)
+                results.append(result.as_dict())
+                ok = ok and result.status == ProcessingJobStatus.COMPLETED
+            except ProcessingConfigError as exc:
+                results.append({"domain": plan.domain, "status": "FAILED", "error": str(exc)})
+                ok = False
+                break
+            except Exception as exc:  # the job row is already FAILED; report and continue with the next domain
+                results.append({"domain": plan.domain, "status": "FAILED", "error": f"{type(exc).__name__}: {exc}"[:2000]})
+                ok = False
+    finally:
+        engine.close()
+    print(json.dumps({"jobs": results, "metrics": metrics.snapshot()}, indent=2, default=str))
+    return 0 if ok else 1
+
+
 def _dlq(args: argparse.Namespace) -> int:
     import json
     import uuid
@@ -337,6 +396,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     sources_cmd.add_argument("action", choices=["check"])
     sources_cmd.add_argument("domains", nargs="*", help="news | market | company (default: all)")
     sources_cmd.set_defaults(handler=_sources)
+
+    process_cmd = commands.add_parser("process", help="Spark: raw lake objects → processed Parquet (+ rejects, manifest, processing_jobs)")
+    process_cmd.add_argument("domain", choices=["news", "market", "company", "all"])
+    process_cmd.add_argument("--start", default=None, help="first raw ingestion date YYYY-MM-DD (default: --end or today UTC)")
+    process_cmd.add_argument("--end", default=None, help="last raw ingestion date YYYY-MM-DD (default: today UTC)")
+    process_cmd.add_argument("--prefix", default=None, help="raw key prefix instead of a window, e.g. raw/news/year=2026/month=09/")
+    process_cmd.add_argument("--objects", default=None, help="comma-separated raw object keys instead of a window")
+    process_cmd.add_argument("--objects-file", default=None, help="file with one raw object key per line")
+    process_cmd.add_argument("--output-prefix", default=None, help="processed/... folder (default processed/<domain>/)")
+    process_cmd.set_defaults(handler=_process)
 
     dlq_cmd = commands.add_parser("dlq", help="list dead letters (reads without committing)")
     dlq_cmd.add_argument("--limit", type=int, default=50)
