@@ -11,8 +11,8 @@ Decisions referenced as ADR-xxx live in `ARCHITECTURE_DECISIONS.md`. Baseline fa
 | 2 | 3 | Source registry + raw landing | MinIO/S3, ingestion workers |
 | 3 | 4 | Event backbone | Kafka (+ DLQ) |
 | 4 | 5 | Batch data platform | Airflow, Spark, Parquet |
-| 5 | 6 | Entities + relationships (Postgres SoR) | — |
-| 6 | 7 | Intelligence graph | Neo4j (projection) |
+| 5 | 6 | Entities + relationships (Postgres SoR) | Phase 3.1 started: aliases + resolver + evidenced writes |
+| 6 | 7 | Intelligence graph | Phase 3.1 started: optional Neo4j projection |
 | 7 | 8–9 | Market event impact analytics | — |
 | 8 | 10 | Async research jobs | Worker tier (Postgres queue → Kafka) |
 | 9 | 11 | Spec agents + RAG | pgvector (replaces ChromaDB) |

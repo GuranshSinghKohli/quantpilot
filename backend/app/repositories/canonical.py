@@ -24,6 +24,7 @@ from app.domain.identity import normalize_url, url_hash
 from app.domain.ingestion_models import MarketBar, NewsArticle
 from app.domain.ingestion_schemas import CompanyListingIn, MarketBarIn, NewsArticleIn, _Row
 from app.domain.models import Company, Entity, Source
+from app.graph.normalize import normalize_name, source_system_for_company
 from app.repositories._upsert import chunks, dialect_insert, newer_than_existing
 
 _BATCH = 500
@@ -307,6 +308,7 @@ def _write_companies(db: Session, rows: List[CompanyListingIn], *, isolate: bool
         )
     )
     outcomes = []
+    pending_sync = []
     for row in rows:
         company = existing.get(row.cik)
         before = _company_version(company)
@@ -315,6 +317,8 @@ def _write_companies(db: Session, rows: List[CompanyListingIn], *, isolate: bool
                 with db.begin_nested():
                     changed = _write_company(db, row, company, before, taken)
                     db.flush()
+                    if changed:
+                        _sync_loaded_company(db, row, company)
             except IntegrityError as exc:
                 outcomes.append((row, "failed", str(exc.orig)[:500]))
                 if company is not None:
@@ -322,6 +326,8 @@ def _write_companies(db: Session, rows: List[CompanyListingIn], *, isolate: bool
                 continue
         else:
             changed = _write_company(db, row, company, before, taken)
+            if changed:
+                pending_sync.append((row, company))
         if changed:
             kind = "inserted" if company is None else "updated"
         elif before is not None and before[1] == row.event_id:
@@ -331,6 +337,8 @@ def _write_companies(db: Session, rows: List[CompanyListingIn], *, isolate: bool
         outcomes.append((row, kind, None))
     if not isolate:
         db.flush()
+        for row, company in pending_sync:
+            _sync_loaded_company(db, row, company)
     return outcomes
 
 
@@ -356,7 +364,14 @@ def _write_company(db: Session, row: CompanyListingIn, company, before: Optional
     if company is None:
         name = row.name if row.name not in taken else f"{row.name} (CIK {row.cik})"[:255]
         taken.add(name)
-        entity = Entity(id=uuid.uuid4(), entity_type=EntityType.COMPANY.value, canonical_name=name)
+        entity = Entity(
+            id=uuid.uuid4(),
+            entity_type=EntityType.COMPANY.value,
+            canonical_name=name,
+            normalized_name=normalize_name(name),
+            source_system=source_system_for_company(row.source),
+            source_key=row.cik,
+        )
         db.add(Company(entity=entity, cik=row.cik, **fields))
         return True
     if before is not None and row.version <= before:
@@ -364,3 +379,17 @@ def _write_company(db: Session, row: CompanyListingIn, company, before: Optional
     for key, value in fields.items():
         setattr(company, key, value)
     return True
+
+
+def _sync_loaded_company(db: Session, row: CompanyListingIn, company: Optional[Company]) -> None:
+    if company is None:
+        company = db.scalars(select(Company).where(Company.cik == row.cik)).first()
+    if company is None:
+        return
+    entity = company.entity
+    entity.normalized_name = normalize_name(entity.canonical_name)
+    entity.source_system = entity.source_system or source_system_for_company(row.source)
+    entity.source_key = entity.source_key or row.cik
+    from app.graph.aliases import sync_company_aliases
+
+    sync_company_aliases(db, entity, legal_name=row.name, tickers=list(row.tickers))

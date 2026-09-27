@@ -28,6 +28,7 @@ class ReadyResponse(BaseModel):
     # Informational only: a down pipeline must not fail readiness (the API works without it).
     kafka: Optional[str] = None
     lake: Optional[str] = None
+    neo4j: Optional[str] = None
 
 
 class StockResponse(BaseModel):

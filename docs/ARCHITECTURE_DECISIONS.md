@@ -63,11 +63,11 @@ Baseline facts come from `CURRENT_STATE.md`.
 
 ## ADR-007 — Neo4j is a projection, not the source of truth
 
-**Decision (future phase).** Postgres `relationships` plus `relationship_evidence` remain canonical. Neo4j is rebuilt or incrementally synced from Postgres (via Kafka `relationship.upserted` events once Kafka exists). Graph queries serve traversal questions ("second-degree suppliers of X exposed to technology Y").
+**Decision (Phase 3.1, shipped).** Postgres `entities`, `entity_aliases`, `relationships`, and `relationship_evidence` remain canonical. Neo4j is an optional, idempotent projection (`python -m app.graph project`) keyed on `entity_id` / `relationship_id`. Kafka `relationship.upserted` is still future. Graph queries serve traversal questions; depth 1 is answered from Postgres.
 
 **Why.** Every relationship must trace to evidence and support retraction. Doing that transactionally is simpler in Postgres. A projection can always be rebuilt; a primary graph store can't be rebuilt from anything.
 
-**Introduced when.** Traversals deeper than two hops are needed and can't be served acceptably by recursive SQL.
+**Amended (Phase 3.1).** Compose profile `graph` runs Neo4j 5 community. The API starts if Neo4j is down. `/ready` reports `neo4j` and does not fail on it. See `docs/PHASE3_1_PLAN.md`, `docs/GRAPH_SCHEMA.md`, ADR-025.
 
 ## ADR-008 — pgvector replaces ChromaDB, later
 
@@ -353,4 +353,23 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 **Cost.**
 - One-shot CLI jobs only expose process-local counters for that process. `/metrics` on the API is HTTP metrics plus DB gauges.
 - Kafka/lake down is visible on `/ready` but does not fail it.
+
+## ADR-025 — Entity graph: Postgres first, Neo4j derived
+
+**Status: Accepted, shipped in Phase 3.1.**
+
+**Problem.** Phase 2 loaded canonical companies. Intelligence needs directed, evidenced relationships and a traversable graph without inventing edges from co-mention or making Neo4j the system of record.
+
+**Decision.**
+- Reuse `entities` / `relationships` / `relationship_evidence`. Add `entity_aliases`, identity columns, `provenance_kind`, and `graph_projections` (migration `0008`).
+- Resolution is exact (CIK, source key, normalized name, ticker). Ambiguity is returned. No fuzzy merge.
+- New relationships go through `RelationshipCandidate` → one service that requires `source_id` + `evidence_id`. INFERRED is never treated as fact.
+- Neo4j is optional. Projector MERGEs on `entity_id` / `relationship_id`. Postgres commit is independent of Neo4j.
+- Read API is parameterized and bounded. No client Cypher.
+
+**Rejected.**
+- Parallel `graph_entities` / `graph_relationships` tables.
+- LLM / article extraction in this phase.
+- Making Neo4j required for `/ready` or API startup.
+
 

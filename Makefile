@@ -31,7 +31,8 @@ LAKE_ENV = LAKE_BACKEND=s3 LAKE_ENDPOINT_URL=http://localhost:$(MINIO_PORT) \
         spark-build spark-news spark-market spark-company spark-all test-spark \
         load-news load-market load-company load-all \
         pipeline-status pipeline-check pipeline-reconcile pipeline-quality \
-        retry-load reprocess-job retry-ingestion metrics-up metrics
+        retry-load reprocess-job retry-ingestion metrics-up metrics \
+        graph-up graph-down graph-status graph-project graph-check graph-seed test-neo4j
 
 help:
 	@echo "up                compose stack (postgres, redis, migrate, backend, frontend)"
@@ -82,6 +83,13 @@ help:
 	@echo "retry-ingestion   new ingest from FAILED/PARTIAL RUN="
 	@echo "metrics           GET $(API_URL)/metrics"
 	@echo "metrics-up        optional Prometheus scraping the API (compose profile observability)"
+	@echo "graph-up          Neo4j (compose profile graph) then graph-status"
+	@echo "graph-down        stop Neo4j (volume kept)"
+	@echo "graph-status      Postgres vs Neo4j counts, last projection, schema"
+	@echo "graph-project     idempotent Postgres → Neo4j upsert"
+	@echo "graph-check       pending/failed projections (does not mutate)"
+	@echo "graph-seed        deterministic evidenced relationship fixtures"
+	@echo "test-neo4j        Neo4j tier (skip unless TEST_NEO4J_URI is set)"
 
 up:
 	$(COMPOSE) up --build
@@ -254,3 +262,34 @@ metrics:
 
 metrics-up:
 	$(COMPOSE) --profile observability up -d prometheus
+
+NEO4J_PASSWORD ?= quantpilot-dev-only
+NEO4J_BOLT_PORT ?= 7687
+TEST_NEO4J_URI ?= bolt://localhost:$(NEO4J_BOLT_PORT)
+
+graph-up:
+	NEO4J_PASSWORD=$(NEO4J_PASSWORD) NEO4J_BOLT_PORT=$(NEO4J_BOLT_PORT) \
+		$(COMPOSE) --profile graph up -d --wait neo4j
+	$(MAKE) graph-status
+
+graph-down:
+	$(COMPOSE) --profile graph stop neo4j
+
+graph-status:
+	cd backend && NEO4J_URI=bolt://localhost:$(NEO4J_BOLT_PORT) NEO4J_PASSWORD=$(NEO4J_PASSWORD) \
+		../$(PY) -m app.graph status
+
+graph-project:
+	cd backend && NEO4J_URI=bolt://localhost:$(NEO4J_BOLT_PORT) NEO4J_PASSWORD=$(NEO4J_PASSWORD) \
+		../$(PY) -m app.graph project
+
+graph-check:
+	cd backend && NEO4J_URI=bolt://localhost:$(NEO4J_BOLT_PORT) NEO4J_PASSWORD=$(NEO4J_PASSWORD) \
+		../$(PY) -m app.graph check
+
+graph-seed:
+	cd backend && ../$(PY) -m app.graph seed-fixtures
+
+test-neo4j:
+	cd backend && TEST_NEO4J_URI=$(TEST_NEO4J_URI) NEO4J_URI=$(TEST_NEO4J_URI) \
+		NEO4J_PASSWORD=$(NEO4J_PASSWORD) ../$(PY) -m pytest tests/neo4j -q

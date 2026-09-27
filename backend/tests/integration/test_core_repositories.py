@@ -128,14 +128,14 @@ def test_relationship_status_follows_evidence(db):
 
 
 def test_database_rejects_self_relationship_and_unknown_type(db):
-    entity = Entity(id=uuid.uuid4(), entity_type="company", canonical_name="Solo Inc")
+    entity = Entity(id=uuid.uuid4(), entity_type="company", canonical_name="Solo Inc", normalized_name="solo inc")
     db.add(entity)
     db.flush()
     base = {"status": "asserted", "first_seen_at": NOW, "last_seen_at": NOW}
     with pytest.raises(IntegrityError):
         with db.begin_nested():
             db.execute(insert(Relationship).values(id=uuid.uuid4(), subject_entity_id=entity.id, object_entity_id=entity.id, relationship_type="SUPPLIES", **base))
-    other = Entity(id=uuid.uuid4(), entity_type="company", canonical_name="Other Inc")
+    other = Entity(id=uuid.uuid4(), entity_type="company", canonical_name="Other Inc", normalized_name="other inc")
     db.add(other)
     db.flush()
     with pytest.raises(IntegrityError):

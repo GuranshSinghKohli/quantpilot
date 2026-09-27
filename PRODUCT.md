@@ -24,7 +24,7 @@ Important claims must be traceable to evidence. Conflicting evidence is surfaced
 
 ## Operating Context
 
-Next.js / TypeScript frontend talking to FastAPI. Current working path still uses LangGraph research, the Evidence Ledger, company memory, yfinance, and SEC EDGAR. Phase 2 has shipped a local data path beside it (compose profiles, not yet feeding research): source adapters → single-node Kafka → MinIO raw lake → PySpark `local[*]` → processed Parquet → manifest-driven canonical loader → Postgres (`companies`, `market_bars`, `news_articles`), with `/metrics` and CLI status/reconcile/recovery. Target architecture (build incrementally) adds research over the canonical tables, managed Kafka, AWS S3, a Spark cluster, Airflow, Neo4j, pgvector, Terraform, and AWS.
+Next.js / TypeScript frontend talking to FastAPI. Current working path still uses LangGraph research, the Evidence Ledger, company memory, yfinance, and SEC EDGAR. Phase 2 has shipped a local data path beside it (compose profiles, not yet feeding research): source adapters → single-node Kafka → MinIO raw lake → PySpark `local[*]` → processed Parquet → manifest-driven canonical loader → Postgres (`companies`, `market_bars`, `news_articles`), with `/metrics` and CLI status/reconcile/recovery. Phase 3.1 adds entity aliases, conservative resolution, evidenced relationships, and an optional Neo4j projection of those Postgres tables. Target architecture (build incrementally) adds research over the graph, managed Kafka, AWS S3, a Spark cluster, Airflow, pgvector, Terraform, and AWS.
 
 Removed from this product: personal portfolio / holdings, broker sync, daily briefings, investment ideas, investment memos, and price-alert trading rules.
 

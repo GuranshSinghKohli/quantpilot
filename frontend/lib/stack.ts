@@ -24,6 +24,10 @@ export const CURRENT_STACK: { layer: string; tech: string }[] = [
     layer: "Load",
     tech: "Manifest-driven canonical loader (pyarrow): processed Parquet → validated, idempotent upserts into Postgres",
   },
+  {
+    layer: "Graph",
+    tech: "Postgres entities/relationships/aliases (SoT) → optional Neo4j 5 projection (compose profile graph)",
+  },
   { layer: "Ship", tech: "Docker Compose, GitHub Actions, Pytest (SQLite + Postgres tiers)" },
   {
     layer: "Observe",
@@ -34,6 +38,6 @@ export const CURRENT_STACK: { layer: string; tech: string }[] = [
 export const TARGET_STACK: { layer: string; tech: string }[] = [
   { layer: "Stream", tech: "Managed Kafka (RF ≥ 3), more stream consumers" },
   { layer: "Lake", tech: "AWS S3, Spark cluster, Airflow" },
-  { layer: "Graph", tech: "Neo4j + pgvector" },
+  { layer: "Graph", tech: "pgvector (Neo4j projection is current; RAG is not)" },
   { layer: "Infra", tech: "Terraform, AWS, OTel / Grafana" },
 ];

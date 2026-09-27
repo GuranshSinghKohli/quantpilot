@@ -27,7 +27,7 @@ ALLOWED_LABELS = frozenset({
 FORBIDDEN_LABELS = frozenset({
     "event_id", "job_id", "request_id", "offset", "url", "ticker", "cik",
     "name", "title", "error", "user_id", "raw_uri", "article", "payload",
-    "correlation_id", "investigation_id",
+    "correlation_id", "investigation_id", "entity_id", "relationship_id",
 })
 
 DEFAULT_MAX_SERIES = 64

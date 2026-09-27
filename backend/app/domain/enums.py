@@ -14,6 +14,8 @@ class EntityType(StrEnum):
     TECHNOLOGY = "technology"
     ORGANIZATION = "organization"
     PERSON = "person"
+    PRODUCT = "product"
+    EVENT = "event"
 
 
 class SourceType(StrEnum):
@@ -63,6 +65,7 @@ class RelationshipType(StrEnum):
     DEVELOPS = "DEVELOPS"
     OWNS = "OWNS"
     CUSTOMERS_OF = "CUSTOMERS_OF"
+    CUSTOMER_OF = "CUSTOMER_OF"
     DEPENDS_ON = "DEPENDS_ON"
 
 
@@ -71,6 +74,30 @@ class RelationshipStatus(StrEnum):
     SUPPORTED = "supported"
     DISPUTED = "disputed"
     RETRACTED = "retracted"
+
+
+class ProvenanceKind(StrEnum):
+    """How an edge was established. INFERRED is never treated as fact."""
+
+    OBSERVED = "OBSERVED"
+    VERIFIED = "VERIFIED"
+    INFERRED = "INFERRED"
+
+
+class AliasType(StrEnum):
+    LEGAL_NAME = "LEGAL_NAME"
+    DISPLAY_NAME = "DISPLAY_NAME"
+    TICKER = "TICKER"
+    FORMER_NAME = "FORMER_NAME"
+    PRODUCT_ALIAS = "PRODUCT_ALIAS"
+    TECHNOLOGY_ALIAS = "TECHNOLOGY_ALIAS"
+    SOURCE_ALIAS = "SOURCE_ALIAS"
+
+
+class ResolutionStatus(StrEnum):
+    RESOLVED = "RESOLVED"
+    UNRESOLVED = "UNRESOLVED"
+    AMBIGUOUS = "AMBIGUOUS"
 
 
 class WindowLabel(StrEnum):

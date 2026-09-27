@@ -157,6 +157,19 @@ Pipeline hardening (Step 2.8) adds no required variables. Optional:
 
 `GET /metrics` needs no config. `make metrics-up` starts an optional Prometheus (`compose --profile observability`) that scrapes the API. The API starts if Prometheus is down.
 
+## Graph (Phase 3.1)
+
+Optional. The API starts if Neo4j is unset or down. Postgres remains the source of truth.
+
+| Variable | Required / Optional | Description | Example value |
+|----------|-------------------|-------------|---------------|
+| `NEO4J_URI` | Optional | Empty = disabled. `bolt://` or `neo4j://` | `bolt://localhost:7687` |
+| `NEO4J_USER` | Optional | Default `neo4j` | `neo4j` |
+| `NEO4J_PASSWORD` | Optional | `SecretStr`; never logged | compose default `quantpilot-dev-only` |
+| `NEO4J_DATABASE` | Optional | Default `neo4j` | `neo4j` |
+
+`make graph-up` starts compose profile `graph`. `TEST_NEO4J_URI` enables `make test-neo4j`.
+
 Test-only: `TEST_KAFKA_BOOTSTRAP` enables the `kafka` tier (`make test-kafka`; per-test `test.<id>.*` topics and groups, deleted afterwards). `TEST_S3_ENDPOINT`, `TEST_S3_ACCESS_KEY_ID`, `TEST_S3_SECRET_ACCESS_KEY` enable the `s3` tier (`make test-s3`), which creates and deletes its own `quantpilot-test-*` buckets. The test suite always pins the lake to `backend/tests/_test_lake/`, Kafka to the unroutable `127.0.0.1:9`, and topic/group names to `test.unconfigured.*`. It also blanks `NEWS_API_KEY`/`MARKET_API_KEY` and points every source base URL at `http://127.0.0.1:9`, so no test can reach a real provider; adapter tests use an httpx `MockTransport`. `make test-kafka` also sets the `TEST_S3_*` variables so the mocked-provider end-to-end tests run against MinIO. The `spark` tier needs pyspark + Java 17 and runs in the `spark-test` image (`make test-spark`, which sets `TEST_S3_*` for MinIO); `SPARK_TEST_DATABASE_URL` / `SPARK_TEST_KAFKA_BOOTSTRAP` pass `TEST_DATABASE_URL` / `TEST_KAFKA_BOOTSTRAP` into that container to run every tier there.
 
 ## Frontend (Vercel / local)

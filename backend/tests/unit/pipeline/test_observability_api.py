@@ -23,6 +23,7 @@ def test_health_is_ok_without_kafka_or_lake(monkeypatch):
     res = client.get("/health")
     assert res.status_code == 200
     assert res.json()["status"] == "ok"
+    assert "neo4j" not in res.json()
     assert called == []
 
 
@@ -31,9 +32,10 @@ def test_ready_reports_pipeline_without_requiring_it():
     assert res.status_code == 200
     body = res.json()
     assert body["database"] in {"ok", "error"}
-    assert "kafka" in body and "lake" in body
+    assert "kafka" in body and "lake" in body and "neo4j" in body
     assert body["kafka"] in {"ok", "unavailable", "unconfigured"}
     assert body["lake"] in {"ok", "unavailable"}
+    assert body["neo4j"] in {"ok", "unavailable", "unconfigured"}
     # A down Kafka broker must not by itself make readiness fail.
     if body["database"] == "ok" and body["migrations_current"] and body["redis"] in {"ok", "memory"}:
         assert body["status"] == "ok"

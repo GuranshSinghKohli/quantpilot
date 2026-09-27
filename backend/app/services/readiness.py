@@ -43,7 +43,7 @@ def probe_redis() -> str:
         return "error"
 
 
-def readiness_payload(*, include_pipeline: bool = True) -> Dict[str, object]:
+def readiness_payload(*, include_pipeline: bool = True, include_graph: bool = True) -> Dict[str, object]:
     database = probe_database()
     db_revision, migrations_current = probe_migrations()
     redis = probe_redis()
@@ -74,4 +74,11 @@ def readiness_payload(*, include_pipeline: bool = True) -> Dict[str, object]:
         except Exception:
             payload["kafka"] = "unavailable"
             payload["lake"] = "unavailable"
+    if include_graph:
+        try:
+            from app.graph.store import probe_neo4j
+
+            payload["neo4j"] = probe_neo4j()
+        except Exception:
+            payload["neo4j"] = "unavailable"
     return payload

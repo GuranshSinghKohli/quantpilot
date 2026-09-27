@@ -27,6 +27,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -34,12 +35,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.models import Base
 from app.domain.enums import (
     AgentRunStatus,
+    AliasType,
     ClaimKind,
     EntityType,
     EventEntityRole,
     EventStatus,
     EventType,
     EvidenceStance,
+    ProvenanceKind,
     RelationshipStatus,
     RelationshipType,
     ReportStatus,
@@ -93,18 +96,33 @@ class Entity(Base):
     __tablename__ = "entities"
     __table_args__ = (
         UniqueConstraint("entity_type", "canonical_name", name="uq_entities_type_name"),
+        Index(
+            "uq_entities_source_identity",
+            "source_system",
+            "source_key",
+            unique=True,
+            sqlite_where=text("source_system IS NOT NULL AND source_key IS NOT NULL"),
+            postgresql_where=text("source_system IS NOT NULL AND source_key IS NOT NULL"),
+        ),
+        Index("ix_entities_normalized_name", "normalized_name"),
         _one_of("entity_type", EntityType, "ck_entities_entity_type"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     entity_type: Mapped[str] = mapped_column(String(32), nullable=False)
     canonical_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_system: Mapped[Optional[str]] = mapped_column(String(64))
+    source_key: Mapped[Optional[str]] = mapped_column(String(128))
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = _updated_at()
 
     company: Mapped[Optional["Company"]] = relationship(back_populates="entity", uselist=False)
     technology: Mapped[Optional["Technology"]] = relationship(
         back_populates="entity", uselist=False
+    )
+    aliases: Mapped[List["EntityAlias"]] = relationship(
+        back_populates="entity", cascade="all, delete-orphan"
     )
 
 
@@ -154,6 +172,41 @@ class Technology(Base):
     updated_at: Mapped[datetime] = _updated_at()
 
     entity: Mapped[Entity] = relationship(back_populates="technology")
+
+
+class EntityAlias(Base):
+    """Non-identity names and tickers. Never used as the primary key."""
+
+    __tablename__ = "entity_aliases"
+    __table_args__ = (
+        UniqueConstraint(
+            "entity_id",
+            "alias_type",
+            "normalized_alias",
+            name="uq_entity_aliases_entity_type_norm",
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_entity_aliases_confidence",
+        ),
+        _one_of("alias_type", AliasType, "ck_entity_aliases_type"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    entity_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    alias: Mapped[str] = mapped_column(String(255), nullable=False)
+    normalized_alias: Mapped[str] = mapped_column(String(255), nullable=False)
+    alias_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("sources.id", ondelete="SET NULL")
+    )
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()
+
+    entity: Mapped[Entity] = relationship(back_populates="aliases")
 
 
 class Source(Base):
@@ -263,8 +316,13 @@ class Relationship(Base):
             "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
             name="ck_relationships_confidence",
         ),
+        CheckConstraint(
+            "valid_from IS NULL OR valid_to IS NULL OR valid_from <= valid_to",
+            name="ck_relationships_valid_range",
+        ),
         _one_of("relationship_type", RelationshipType, "ck_relationships_type"),
         _one_of("status", RelationshipStatus, "ck_relationships_status"),
+        _one_of("provenance_kind", ProvenanceKind, "ck_relationships_provenance"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -277,6 +335,9 @@ class Relationship(Base):
     )
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, default=RelationshipStatus.ASSERTED.value
+    )
+    provenance_kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=ProvenanceKind.OBSERVED.value
     )
     confidence: Mapped[Optional[float]] = mapped_column(Float)
     valid_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
@@ -306,6 +367,27 @@ class RelationshipEvidence(Base):
 
     edge: Mapped[Relationship] = relationship(back_populates="evidence_links")
     evidence: Mapped[EvidenceRecord] = relationship()
+
+
+class GraphProjection(Base):
+    """Last projection attempt for one Postgres entity or relationship. Not a second SoT."""
+
+    __tablename__ = "graph_projections"
+    __table_args__ = (
+        UniqueConstraint("record_kind", "record_id", name="uq_graph_projections_record"),
+        CheckConstraint("record_kind IN ('entity', 'relationship')", name="ck_graph_projections_kind"),
+        CheckConstraint("status IN ('success', 'failed')", name="ck_graph_projections_status"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    record_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    record_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    projected_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error: Mapped[Optional[str]] = mapped_column(Text)
+    projected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()
 
 
 class MarketEventWindow(Base):

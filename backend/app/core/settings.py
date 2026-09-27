@@ -201,6 +201,12 @@ class Settings(BaseSettings):
     PIPELINE_STALE_JOB_SECONDS: int = Field(3600, ge=60, le=86400)
     PIPELINE_STALE_LOAD_SECONDS: int = Field(3600, ge=60, le=86400)
 
+    # Derived intelligence graph (optional). The API starts without Neo4j.
+    NEO4J_URI: str = ""
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: SecretStr = SecretStr("")
+    NEO4J_DATABASE: str = "neo4j"
+
     # Observability (all optional)
     LANGSMITH_TRACING: bool = False
     LANGSMITH_API_KEY: SecretStr = SecretStr("")
@@ -323,6 +329,22 @@ class Settings(BaseSettings):
     def _spark_master(cls, value: str) -> str:
         if not _SPARK_MASTER.fullmatch(value):
             raise ValueError(f"SPARK_MASTER must be local, local[N|*] or a scheme://host URL, got {value!r}")
+        return value
+
+    @field_validator("NEO4J_URI")
+    @classmethod
+    def _neo4j_uri(cls, value: str) -> str:
+        if not value:
+            return ""
+        if not value.startswith(("bolt://", "bolt+s://", "neo4j://", "neo4j+s://")):
+            raise ValueError("NEO4J_URI must be empty or a bolt:// / neo4j:// URL")
+        return value.rstrip("/")
+
+    @field_validator("NEO4J_DATABASE")
+    @classmethod
+    def _neo4j_database(cls, value: str) -> str:
+        if not _KAFKA_NAME.fullmatch(value):
+            raise ValueError(f"invalid NEO4J_DATABASE: {value!r}")
         return value
 
     @field_validator("SPARK_APP_NAME")

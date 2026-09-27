@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 from app.domain.enums import EntityType
 from app.domain.models import Company, Entity, Technology
 from app.domain.schemas import CompanyIn, TechnologyIn
+from app.graph.aliases import sync_company_aliases
+from app.graph.normalize import normalize_name
 
 
 def _find_company(db: Session, data: CompanyIn) -> Optional[Company]:
@@ -48,6 +50,9 @@ def get_or_create_company(db: Session, data: CompanyIn) -> Tuple[Company, bool]:
                 id=uuid.uuid4(),
                 entity_type=EntityType.COMPANY.value,
                 canonical_name=data.legal_name,
+                normalized_name=normalize_name(data.legal_name),
+                source_system="sec" if data.cik else None,
+                source_key=data.cik,
             )
             company = Company(
                 entity=entity,
@@ -58,6 +63,9 @@ def get_or_create_company(db: Session, data: CompanyIn) -> Tuple[Company, bool]:
                 website=data.website,
             )
             db.add(company)
+            db.flush()
+            tickers = [data.ticker] if data.ticker else []
+            sync_company_aliases(db, entity, legal_name=data.legal_name, tickers=tickers)
             db.flush()
         return company, True
     except IntegrityError:
@@ -78,6 +86,9 @@ def get_or_create_technology(db: Session, data: TechnologyIn) -> Tuple[Technolog
                 id=uuid.uuid4(),
                 entity_type=EntityType.TECHNOLOGY.value,
                 canonical_name=data.name,
+                normalized_name=normalize_name(data.name),
+                source_system="internal",
+                source_key=f"technology:{data.slug}",
             )
             technology = Technology(
                 entity=entity,

@@ -17,6 +17,7 @@ _FIELDS: ContextVar[Dict[str, Any]] = ContextVar("pipeline_fields", default={})
 _KEYS = (
     "component", "operation", "domain", "source", "run_id",
     "processing_job_id", "correlation_id", "status",
+    "entity_type", "relationship_type",
 )
 
 

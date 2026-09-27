@@ -28,6 +28,7 @@ from app.routers import (
     analysis,
     auth,
     dashboard,
+    entities,
     filings,
     investigations,
     memory,
@@ -94,6 +95,7 @@ app.include_router(investigations.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
 app.include_router(observability.router, prefix="/api")
+app.include_router(entities.router, prefix="/api")
 
 
 @app.middleware("http")
@@ -161,7 +163,7 @@ async def log_requests(request: Request, call_next):
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     obs = get_observability_status()
-    ready = readiness_payload(include_pipeline=False)
+    ready = readiness_payload(include_pipeline=False, include_graph=False)
     return HealthResponse(
         status="ok",
         langsmith=bool(obs.get("langsmith")),
@@ -188,7 +190,19 @@ async def metrics() -> PlainTextResponse:
         from app.db.session import SessionLocal
         from app.pipeline.ops.export import pipeline_gauges
 
-        body = HTTP_METRICS.render_prometheus() + pipeline_gauges(SessionLocal).render_prometheus()
+        from app.graph.metrics import GRAPH_METRICS
+        from app.graph.projector import pending_counts
+
+        gauges = pipeline_gauges(SessionLocal)
+        db = SessionLocal()
+        try:
+            pending_counts(db)
+            gauges.merge_from(GRAPH_METRICS)
+        except Exception:
+            pass
+        finally:
+            db.close()
+        body = HTTP_METRICS.render_prometheus() + gauges.render_prometheus()
     except Exception:
         try:
             body = HTTP_METRICS.render_prometheus()

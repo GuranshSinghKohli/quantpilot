@@ -9,7 +9,7 @@ from typing import Iterable, Tuple
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.domain.enums import EvidenceStance, RelationshipStatus
+from app.domain.enums import EvidenceStance, ProvenanceKind, RelationshipStatus
 from app.domain.models import Relationship, RelationshipEvidence
 from app.domain.schemas import RelationshipEvidenceIn, RelationshipIn
 from app.repositories._upsert import insert_ignore
@@ -48,6 +48,7 @@ def upsert_relationship(db: Session, data: RelationshipIn) -> Tuple[Relationship
             "relationship_type": data.relationship_type.value,
             "object_entity_id": data.object_entity_id,
             "status": RelationshipStatus.ASSERTED.value,
+            "provenance_kind": ProvenanceKind.OBSERVED.value,
             "confidence": data.confidence,
             "valid_from": data.valid_from,
             "valid_to": data.valid_to,
