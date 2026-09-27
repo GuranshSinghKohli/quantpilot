@@ -10,6 +10,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
+# Pipeline services build with REQUIREMENTS=requirements-pipeline.txt (adds
+# boto3 + confluent-kafka) on top of the layer above, which the API image shares.
+ARG REQUIREMENTS=requirements.txt
+COPY backend/requirements-pipeline.txt /app/backend/requirements-pipeline.txt
+RUN if [ "$REQUIREMENTS" != "requirements.txt" ]; then pip install --no-cache-dir -r "/app/backend/$REQUIREMENTS"; fi
+
 COPY backend /app/backend
 COPY mcp_server /app/mcp_server
 

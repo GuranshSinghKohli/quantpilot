@@ -112,6 +112,8 @@ s3://quantpilot-lake/
 - Every consumer is idempotent (ADR-013). Delivery is at-least-once.
 - Schemas are versioned (`schema_version` field; JSON Schema first, Avro/Schema Registry only if needed).
 
+**Amended (Phase 2 Step 2.4, shipped).** The first Kafka use is the ingestion backbone, not the research job queue. Topics are `quantpilot.{news,market,company}.raw` (key `event_id`) and `quantpilot.ingestion.dlq` (key `dlq_id`), created from `Settings` by `python -m app.pipeline kafka init`. Messages carry the full typed record (well under 1 MB); the claim-check pattern above is deferred until filings/full documents are ingested. See ADR-020 and `docs/PHASE2_4_PLAN.md`.
+
 **Before Kafka exists,** the job queue is a Postgres table (`research_jobs`, polled with `SELECT … FOR UPDATE SKIP LOCKED`). This keeps the API contract identical so Kafka can be swapped in behind it.
 
 ## ADR-011 — Airflow vs Spark vs workers
@@ -212,3 +214,20 @@ The existing ledger taxonomy (FACT / INTERPRETATION / CAUSAL_EXPLANATION / RISK 
 ## ADR-019 — Python runtime
 
 Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3.9-only workarounds over time (the minimal MCP JSON-RPC client can be replaced by the official SDK later, not in Phase 1).
+
+## ADR-020 — Effectively-once ingestion over at-least-once Kafka
+
+**Status: Accepted, shipped in Phase 2 Step 2.4.**
+
+**Problem.** Ingestion events cross three systems (Kafka, the object store, Postgres) that share no transaction. Kafka transactions only cover Kafka→Kafka, so end-to-end exactly-once delivery is not available.
+
+**Decision.** At-least-once transport, made safe by idempotency at every sink:
+- **Producer:** librdkafka idempotent producer (`acks=all`), key = `event_id`. An event counts as delivered only on an error-free delivery report; `ingestion_records` moves to `published` with the Kafka partition/offset at that point, never on `produce()`.
+- **Lake writer:** dedicated consumer group, manual commits. Offsets are committed only after the raw object is written (write-once `put_if_absent`) and `ingestion_records` is `landed`. A redelivery finds the identical object and is a replay. Different bytes under the same key, or the same event at a different key, is an `integrity_conflict` dead letter; nothing is overwritten.
+- **DLQ:** only permanent failures or exhausted retries. It is published and acknowledged before the offset commit; if the DLQ is unavailable, nothing is committed. `dlq_id` is deterministic per failed delivery, so a redelivered failure is recognisable as a copy.
+- **Statuses** only move forward (Step 2.2), so replays never regress an event.
+
+**Rejected.** Transactional outbox (not needed while the tracking row is written before the publish and retried on RETRY claims). Exactly-once claims. Auto-commit consumers.
+
+**Cost.** Duplicate messages are possible in Kafka and in the DLQ, so consumers must stay idempotent. A crash-looping lake writer (unexpected error) stalls its partition rather than dropping data.
+

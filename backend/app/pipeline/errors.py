@@ -15,6 +15,8 @@ class FailureReason(StrEnum):
     HASH_MISMATCH = "hash_mismatch"
     OVERSIZE = "oversize"
     RETRIES_EXHAUSTED = "retries_exhausted"
+    INTEGRITY_CONFLICT = "integrity_conflict"  # same key/event, different stored bytes or location
+    STORAGE_REJECTED = "storage_rejected"  # object store refused the write (auth, bad request)
 
 
 class PipelineError(Exception):

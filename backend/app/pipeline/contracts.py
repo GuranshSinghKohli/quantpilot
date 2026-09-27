@@ -57,6 +57,9 @@ class SourceSpec:
     source_type: DataSourceType
     provider: str
     description: str
+    # Deterministic test data for exercising the pipeline. Never real data;
+    # later steps must keep it out of canonical tables.
+    synthetic: bool = False
 
 
 SOURCES: Dict[str, SourceSpec] = {
@@ -82,6 +85,14 @@ SOURCES: Dict[str, SourceSpec] = {
             DataSourceType.REFERENCE_DATA,
             "sec_edgar",
             "SEC company_tickers_exchange.json: CIK, name, tickers, exchange",
+        ),
+        SourceSpec(
+            "synthetic.market",
+            Domain.MARKET,
+            DataSourceType.MARKET_DATA,
+            "synthetic",
+            "SYNTHETIC deterministic daily bars for pipeline tests and demos; not market data",
+            synthetic=True,
         ),
     )
 }
@@ -335,6 +346,8 @@ class _EventBase(_Contract):
     occurred_at: Optional[UtcDatetime] = None
     ingested_at: UtcDatetime
     original: Dict[str, JsonValue]
+    # Trace id shared by everything one trigger produced (defaults to run_id).
+    correlation_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
 
 
 class NewsEvent(_EventBase):
@@ -364,6 +377,7 @@ def build_event(
     run_id: uuid.UUID,
     original: Dict[str, Any],
     ingested_at: Optional[datetime] = None,
+    correlation_id: Optional[str] = None,
 ) -> Union[NewsEvent, MarketEvent, CompanyEvent]:
     """Wrap a record in its envelope with every derived identity filled in."""
     spec = SOURCES[record.source]
@@ -382,6 +396,7 @@ def build_event(
         ingested_at=ingested_at or record.ingested_at,
         record=record,
         original=original,
+        correlation_id=correlation_id or str(run_id),
     )
 
 

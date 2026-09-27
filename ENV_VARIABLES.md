@@ -70,7 +70,7 @@ Copy `backend/.env.example` to `backend/.env` for local development.
 
 ## Ingestion pipeline (Phase 2, in progress)
 
-Read by `python -m app.pipeline …`. The API does not need them. Kafka is configured but not yet used; the lake is live as of Step 2.3.
+Read by `python -m app.pipeline …`. The API does not need them. The lake is live as of Step 2.3 and Kafka as of Step 2.4 (see `docs/PHASE2_4_PLAN.md`).
 
 | Variable | Required / Optional | Description | Example value |
 |----------|-------------------|-------------|---------------|
@@ -86,10 +86,18 @@ Read by `python -m app.pipeline …`. The API does not need them. Kafka is confi
 | `KAFKA_TOPIC_NEWS_RAW` / `KAFKA_TOPIC_MARKET_RAW` / `KAFKA_TOPIC_COMPANY_RAW` / `KAFKA_TOPIC_DLQ` | Optional | Topic names (defaults `quantpilot.{news,market,company}.raw`, `quantpilot.ingestion.dlq`); must be distinct | `quantpilot.news.raw` |
 | `KAFKA_CONSUMER_GROUP_LAKE` | Optional | Lake-writer consumer group (default `quantpilot.lake-writer`) | `quantpilot.lake-writer` |
 | `KAFKA_MAX_MESSAGE_BYTES` | Optional | Max encoded event size (default `1000000`) | `1000000` |
+| `KAFKA_CLIENT_ID` | Optional | Client id on every connection (default `quantpilot`) | `quantpilot` |
+| `KAFKA_SECURITY_PROTOCOL` | Optional | `PLAINTEXT` (default, local only), `SSL`, `SASL_PLAINTEXT`, `SASL_SSL` | `SASL_SSL` |
+| `KAFKA_SASL_MECHANISM` / `KAFKA_SASL_USERNAME` / `KAFKA_SASL_PASSWORD` | For `SASL_*` | Required together with a SASL protocol; the password is a secret and is never logged | — |
+| `KAFKA_REPLICATION_FACTOR` | Optional | Replication factor used by `kafka init` (default `1`, single local broker) | `3` |
+| `KAFKA_RAW_RETENTION_HOURS` / `KAFKA_DLQ_RETENTION_HOURS` | Optional | Topic retention (defaults `168` / `720`) | `168` |
+| `KAFKA_DELIVERY_TIMEOUT_MS` | Optional | Producer delivery timeout per attempt (default `30000`) | `30000` |
+| `KAFKA_POLL_TIMEOUT_SECONDS` | Optional | Lake-writer poll timeout (default `1.0`) | `1.0` |
+| `KAFKA_PORT` | Optional | Host port for the compose broker (default `9092`) | `9092` |
 | `INGEST_SYMBOLS` | Optional | Symbols for market/news adapters (default `AAPL,MSFT,NVDA`) | `AAPL,MSFT` |
 | `PIPELINE_RETRY_MAX_ATTEMPTS` / `PIPELINE_RETRY_BASE_SECONDS` / `PIPELINE_RETRY_MAX_SECONDS` | Optional | Bounded exponential backoff with full jitter (defaults `5` / `0.5` / `30`) | `5` |
 
-Test-only: `TEST_S3_ENDPOINT`, `TEST_S3_ACCESS_KEY_ID`, `TEST_S3_SECRET_ACCESS_KEY` enable the `s3` tier (`make test-s3`), which creates and deletes its own `quantpilot-test-*` buckets. The test suite always pins the lake to `backend/tests/_test_lake/`.
+Test-only: `TEST_KAFKA_BOOTSTRAP` enables the `kafka` tier (`make test-kafka`; per-test `test.<id>.*` topics and groups, deleted afterwards). `TEST_S3_ENDPOINT`, `TEST_S3_ACCESS_KEY_ID`, `TEST_S3_SECRET_ACCESS_KEY` enable the `s3` tier (`make test-s3`), which creates and deletes its own `quantpilot-test-*` buckets. The test suite always pins the lake to `backend/tests/_test_lake/`, Kafka to the unroutable `127.0.0.1:9`, and topic/group names to `test.unconfigured.*`.
 
 ## Frontend (Vercel / local)
 

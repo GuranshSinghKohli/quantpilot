@@ -46,6 +46,7 @@ else:
 _DEFAULT_SQLITE = f"sqlite:///{(BACKEND_DIR / 'data' / 'quantpilot.db').as_posix()}"
 _DEV_JWT_SECRET = "dev-only-change-me-quantpilot"
 _KAFKA_NAME = re.compile(r"[A-Za-z0-9._-]{1,249}")
+_HOST_PORT = re.compile(r"(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+):\d{1,5}")
 _S3_BUCKET = re.compile(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")
 
 
@@ -132,6 +133,16 @@ class Settings(BaseSettings):
     KAFKA_TOPIC_DLQ: str = "quantpilot.ingestion.dlq"
     KAFKA_CONSUMER_GROUP_LAKE: str = "quantpilot.lake-writer"
     KAFKA_MAX_MESSAGE_BYTES: int = Field(1_000_000, ge=1024)
+    KAFKA_CLIENT_ID: str = "quantpilot"
+    KAFKA_SECURITY_PROTOCOL: Literal["PLAINTEXT", "SSL", "SASL_PLAINTEXT", "SASL_SSL"] = "PLAINTEXT"
+    KAFKA_SASL_MECHANISM: Literal["PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512"] = "SCRAM-SHA-512"
+    KAFKA_SASL_USERNAME: str = ""
+    KAFKA_SASL_PASSWORD: SecretStr = SecretStr("")
+    KAFKA_REPLICATION_FACTOR: int = Field(1, ge=1, le=5)
+    KAFKA_RAW_RETENTION_HOURS: int = Field(168, ge=1)
+    KAFKA_DLQ_RETENTION_HOURS: int = Field(720, ge=1)
+    KAFKA_DELIVERY_TIMEOUT_MS: int = Field(30_000, ge=1_000, le=600_000)
+    KAFKA_POLL_TIMEOUT_SECONDS: float = Field(1.0, gt=0, le=30)
 
     # Ingestion pipeline: data lake (S3 API; MinIO locally)
     LAKE_BACKEND: Literal["s3", "local"] = "s3"
@@ -211,6 +222,21 @@ class Settings(BaseSettings):
             raise ValueError(f"invalid Kafka topic/group name: {value!r}")
         return value
 
+    @field_validator("KAFKA_BOOTSTRAP_SERVERS")
+    @classmethod
+    def _bootstrap(cls, value: str) -> str:
+        servers = [part.strip() for part in value.split(",") if part.strip()]
+        if not servers or not all(_HOST_PORT.fullmatch(server) for server in servers):
+            raise ValueError(f"KAFKA_BOOTSTRAP_SERVERS must be host:port[,host:port...], got {value!r}")
+        return ",".join(servers)
+
+    @field_validator("KAFKA_CLIENT_ID")
+    @classmethod
+    def _client_id(cls, value: str) -> str:
+        if not _KAFKA_NAME.fullmatch(value):
+            raise ValueError(f"invalid KAFKA_CLIENT_ID: {value!r}")
+        return value
+
     @field_validator("LAKE_BUCKET")
     @classmethod
     def _bucket_name(cls, value: str) -> str:
@@ -237,6 +263,10 @@ class Settings(BaseSettings):
         ]
         if len(set(topics)) != len(topics):
             raise ValueError("Kafka raw and DLQ topics must be distinct")
+        if self.KAFKA_SECURITY_PROTOCOL.startswith("SASL_") and not (
+            self.KAFKA_SASL_USERNAME and self.KAFKA_SASL_PASSWORD.get_secret_value()
+        ):
+            raise ValueError("KAFKA_SASL_USERNAME and KAFKA_SASL_PASSWORD are required for SASL protocols")
         return self
 
     @property

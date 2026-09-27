@@ -221,6 +221,31 @@ def record_deliveries(db: Session, deliveries: Iterable[Tuple[str, int, int]]) -
     return result.rowcount or 0
 
 
+def record_landing(
+    db: Session, event_id: str, *, raw_uri: str, topic: str, partition: int, offset: int
+) -> int:
+    """Mark an event landed in the raw lake with the Kafka position it was consumed
+    from. Forward-only; the position is filled in only where the producer's
+    delivery report has not already set it. Returns rows moved (0 or 1)."""
+    table = IngestionRecord.__table__
+    allowed = [s.value for s in RECORD_TRANSITIONS[IngestionRecordStatus.LANDED]]
+    result = db.execute(
+        update(IngestionRecord)
+        .where(IngestionRecord.event_id == event_id, IngestionRecord.status.in_(allowed))
+        .values(
+            status=IngestionRecordStatus.LANDED.value,
+            status_reason=None,
+            raw_uri=raw_uri,
+            kafka_topic=func.coalesce(table.c.kafka_topic, topic),
+            kafka_partition=func.coalesce(table.c.kafka_partition, partition),
+            kafka_offset=func.coalesce(table.c.kafka_offset, offset),
+            updated_at=_now(),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    return result.rowcount or 0
+
+
 def get_record(db: Session, event_id: str) -> Optional[IngestionRecord]:
     return db.scalars(select(IngestionRecord).where(IngestionRecord.event_id == event_id)).first()
 

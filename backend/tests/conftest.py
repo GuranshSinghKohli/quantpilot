@@ -26,6 +26,15 @@ os.environ["LAKE_LOCAL_ROOT"] = _TEST_LAKE.as_posix()
 os.environ["LAKE_BUCKET"] = "quantpilot-test-unconfigured"
 os.environ["LAKE_ENDPOINT_URL"] = ""
 
+# And for Kafka: an unroutable broker and test-only names. The kafka tier
+# (tests/kafka/) builds its own Settings with per-test topics and groups.
+os.environ["KAFKA_BOOTSTRAP_SERVERS"] = "127.0.0.1:9"
+os.environ["KAFKA_TOPIC_NEWS_RAW"] = "test.unconfigured.news.raw"
+os.environ["KAFKA_TOPIC_MARKET_RAW"] = "test.unconfigured.market.raw"
+os.environ["KAFKA_TOPIC_COMPANY_RAW"] = "test.unconfigured.company.raw"
+os.environ["KAFKA_TOPIC_DLQ"] = "test.unconfigured.ingestion.dlq"
+os.environ["KAFKA_CONSUMER_GROUP_LAKE"] = "test.unconfigured.lake-writer"
+
 os.environ.setdefault("INVESTIGATIONS_SWEEP_ENABLED", "false")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 

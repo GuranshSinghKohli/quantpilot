@@ -383,7 +383,7 @@ make pipeline-test                # kafka + s3 + spark + pipeline tiers against 
 | **2.1** | `app/pipeline/` skeleton: `contracts.py` (IngestionEvent, News/Market/Company records, DeadLetter), identities/hashing, serde, validation, `retry.py`; pipeline settings in `Settings`; JSON Schema export | unit tier; full SQLite suite; `alembic check` unchanged |
 | **2.2** | Migration `0005` + models + repositories (ingestion sources/runs/records, processing_jobs, market_bars, news_articles, lineage columns); run-tracking service | integration tier on Postgres; `alembic check` on SQLite + Postgres; round-trip |
 | **2.3** | Lake: interface, `LocalObjectStore`, `S3ObjectStore`; compose `minio` + `minio-ready` + `minio-init`; `make lake-up` / `lake-check` / `test-s3` | unit + `s3` tier ✅ |
-| **2.4** | Kafka: compose `kafka` + `kafka-init`; producer, consumer loop, DLQ publisher; lake-writer service; `make kafka-up` | `kafka` tier (redelivery, malformed → DLQ, DLQ-failure no-commit) |
+| **2.4** | Kafka: compose `kafka` + `kafka-init`; producer, consumer loop, DLQ publisher; lake-writer service; `make kafka-up` (as built: `docs/PHASE2_4_PLAN.md`; message key is `event_id`, not `dedup_key`) | `kafka` tier (redelivery, malformed → DLQ, DLQ-failure no-commit) ✅ |
 | **2.5** | Source adapters (yfinance market, yfinance news, SEC companies) + `ingest` CLI + run tracking | unit (fixtures); live smoke on real data → raw objects in MinIO |
 | **2.6** | Spark image + generic job (market, news, company) + rejects + manifests + `processing_jobs` | `spark` tier; `make process` on the live raw data |
 | **2.7** | Loader + lineage CLI + `make runs/dlq/lineage` | integration + `pipeline` tier; duplicate run → identical counts |

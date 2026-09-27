@@ -53,7 +53,9 @@ Full diagram: **[ARCHITECTURE.md](./ARCHITECTURE.md)** · Current state, decisio
 | Auth | JWT + bcrypt | Persist research history |
 | Quality | Pytest, GitHub Actions, Docker | Tests, CI, local/prod images |
 
-**Spec next (not shipped yet):** Kafka, S3 / Spark / Airflow, Neo4j, pgvector, Terraform, AWS, OpenTelemetry / Prometheus / Grafana. Do not treat these as current.
+**Ingestion pipeline (Phase 2, in progress; compose profile `pipeline`):** Kafka 4.3 (KRaft, single node) as the event transport, a lake writer consuming into a write-once raw lake on MinIO/S3, and run/event tracking with lineage in Postgres. Only deterministic SYNTHETIC events flow through it so far. Real source adapters (Step 2.5), PySpark (2.6) and canonical loading (2.7) are not built yet. See [docs/PHASE2_PLAN.md](./docs/PHASE2_PLAN.md) and [docs/PHASE2_4_PLAN.md](./docs/PHASE2_4_PLAN.md).
+
+**Spec next (not shipped yet):** Spark / Airflow, Neo4j, pgvector, Terraform, AWS, OpenTelemetry / Prometheus / Grafana. Do not treat these as current.
 
 ---
 
@@ -135,6 +137,18 @@ python mcp_server/server.py
 API docs: **http://localhost:8000/docs**
 
 ---
+
+### 5. Optional: ingestion pipeline (Kafka → lake writer → MinIO)
+
+```bash
+make pipeline-up             # postgres, migrate, MinIO, Kafka (+ topics), lake-writer
+make publish-synthetic n=5   # SYNTHETIC market events through the tracked publisher
+make kafka-check             # topics + lake-writer consumer-group lag
+make dlq                     # dead letters (read-only)
+make test-kafka test-s3      # pipeline test tiers (isolated test topics/buckets)
+```
+
+Guarantees are at-least-once transport with idempotent, write-once sinks, not exactly-once. Details are in [docs/PHASE2_4_PLAN.md](./docs/PHASE2_4_PLAN.md). Set `POSTGRES_PORT`, `KAFKA_PORT` or `MINIO_PORT` if the default host ports are taken.
 
 ## Environment variables
 

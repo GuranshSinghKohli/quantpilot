@@ -42,6 +42,7 @@ def event_headers(event: Event) -> Headers:
         ("source", event.source.encode()),
         ("event_id", event.event_id.encode()),
         ("run_id", str(event.run_id).encode()),
+        ("correlation_id", (event.correlation_id or str(event.run_id)).encode()),
     ]
 
 

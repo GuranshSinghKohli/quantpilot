@@ -12,11 +12,17 @@ API_URL   ?= http://localhost:8000
 MINIO_PORT          ?= 9000
 MINIO_ROOT_USER     ?= quantpilot
 MINIO_ROOT_PASSWORD ?= quantpilot-dev-only
+KAFKA_PORT          ?= 9092
+POSTGRES_PORT       ?= 5432
+PIPELINE = MINIO_ROOT_USER=$(MINIO_ROOT_USER) MINIO_ROOT_PASSWORD=$(MINIO_ROOT_PASSWORD) \
+           MINIO_PORT=$(MINIO_PORT) KAFKA_PORT=$(KAFKA_PORT) POSTGRES_PORT=$(POSTGRES_PORT) \
+           $(COMPOSE) --profile pipeline
 LAKE_ENV = LAKE_BACKEND=s3 LAKE_ENDPOINT_URL=http://localhost:$(MINIO_PORT) \
            AWS_ACCESS_KEY_ID=$(MINIO_ROOT_USER) AWS_SECRET_ACCESS_KEY=$(MINIO_ROOT_PASSWORD)
 
 .PHONY: help up dev down db migrate revision api test test-unit test-integration typecheck ready \
-        lake-up lake-down lake-init lake-check test-s3
+        lake-up lake-down lake-init lake-check test-s3 \
+        kafka-up kafka-down kafka-check pipeline-up pipeline-down pipeline-logs publish-synthetic dlq test-kafka
 
 help:
 	@echo "up                compose stack (postgres, redis, migrate, backend, frontend)"
@@ -36,6 +42,14 @@ help:
 	@echo "lake-init         create bucket + enable versioning via boto3 (idempotent)"
 	@echo "lake-check        bucket, versioning and a write-once probe against MinIO"
 	@echo "test-s3           S3 tier against MinIO (throwaway quantpilot-test-* buckets)"
+	@echo "kafka-up          Kafka (KRaft) + kafka-init (topics from Settings), then kafka-check"
+	@echo "kafka-down        stop Kafka (volume kept)"
+	@echo "kafka-check       verify topics and show lake-writer consumer-group lag"
+	@echo "pipeline-up       postgres + migrate + MinIO + Kafka + lake-writer (compose profile pipeline)"
+	@echo "pipeline-down     stop the pipeline services"
+	@echo "publish-synthetic n=5  publish SYNTHETIC market events through the tracked publisher (compose Postgres)"
+	@echo "dlq               list dead letters (never commits)"
+	@echo "test-kafka        kafka tier against the compose broker (throwaway test.* topics and groups)"
 
 up:
 	$(COMPOSE) up --build
@@ -92,3 +106,32 @@ test-s3:
 	cd backend && TEST_S3_ENDPOINT=http://localhost:$(MINIO_PORT) \
 		TEST_S3_ACCESS_KEY_ID=$(MINIO_ROOT_USER) TEST_S3_SECRET_ACCESS_KEY=$(MINIO_ROOT_PASSWORD) \
 		../$(PY) -m pytest tests/s3 -q
+
+kafka-up:
+	$(PIPELINE) up -d --wait kafka
+	$(PIPELINE) run --rm kafka-init
+	$(MAKE) kafka-check
+
+kafka-down:
+	$(PIPELINE) stop kafka
+
+kafka-check:
+	$(PIPELINE) run --rm --no-deps kafka-init python -m app.pipeline kafka check
+
+pipeline-up:
+	$(PIPELINE) up -d --build --wait lake-writer
+
+pipeline-down:
+	$(PIPELINE) stop lake-writer kafka minio postgres redis
+
+pipeline-logs:
+	$(PIPELINE) logs -f lake-writer
+
+publish-synthetic:
+	$(PIPELINE) run --rm --no-deps lake-writer python -m app.pipeline publish-synthetic --count $(or $(n),5)
+
+dlq:
+	$(PIPELINE) run --rm --no-deps lake-writer python -m app.pipeline dlq
+
+test-kafka:
+	cd backend && TEST_KAFKA_BOOTSTRAP=localhost:$(KAFKA_PORT) ../$(PY) -m pytest tests/kafka -q

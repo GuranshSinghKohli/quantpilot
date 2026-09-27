@@ -12,6 +12,17 @@ from app.pipeline.errors import FailureReason, PermanentError, RetryExhausted
 
 # Leave headroom under the broker limit for the DLQ envelope around the payload.
 _ENVELOPE_HEADROOM = 16 * 1024
+_DLQ_NAMESPACE = uuid.UUID("5d0c8f7e-0b8e-4d1a-9f4e-7a51c0de0d1a")
+
+
+def deterministic_dlq_id(component: str, topic: str, partition: int, offset: int, reason: str) -> uuid.UUID:
+    """Same failed delivery → same id, so a redelivered failure is recognisable
+    as a copy of the dead letter already published."""
+    return uuid.uuid5(_DLQ_NAMESPACE, f"{component}|{topic}|{partition}|{offset}|{reason}")
+
+
+def failure_reason(error: BaseException) -> FailureReason:
+    return _classify(error)[0]
 
 
 def dead_letter(
@@ -29,6 +40,7 @@ def dead_letter(
     offset: Optional[int] = None,
     original_key: Optional[bytes] = None,
     now: Optional[datetime] = None,
+    dlq_id: Optional[uuid.UUID] = None,
 ) -> DeadLetter:
     reason, retry_count, root = _classify(error)
     budget = max(max_bytes - _ENVELOPE_HEADROOM, 1024)
@@ -40,7 +52,7 @@ def dead_letter(
         text, encoding = base64.b64encode(payload).decode("ascii"), "base64"
 
     return DeadLetter(
-        dlq_id=uuid.uuid4(),
+        dlq_id=dlq_id or uuid.uuid4(),
         component=component,
         failure_reason=reason.value,
         error_type=type(root).__name__,

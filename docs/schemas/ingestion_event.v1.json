@@ -8,6 +8,20 @@
           "title": "Content Hash",
           "type": "string"
         },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
         "dedup_key": {
           "maxLength": 300,
           "minLength": 1,
@@ -187,6 +201,20 @@
           "pattern": "^[0-9a-f]{64}$",
           "title": "Content Hash",
           "type": "string"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
         },
         "dedup_key": {
           "maxLength": 300,
@@ -416,6 +444,20 @@
           "pattern": "^[0-9a-f]{64}$",
           "title": "Content Hash",
           "type": "string"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
         },
         "dedup_key": {
           "maxLength": 300,
