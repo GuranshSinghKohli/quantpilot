@@ -4,6 +4,7 @@
     processed/<domain>/year=YYYY/month=MM/day=DD/part-*.parquet   record date (Spark writes)
     rejects/<domain>/year=YYYY/month=MM/day=DD/<event_id>.json    the raw object's partition
     _manifests/processing/<job_id>.json
+    _manifests/loads/<job_id>/<attempt_id>.json                   canonical load reports
 
 A key is ``/``-separated segments of ``[A-Za-z0-9._=-]``. Segments may not
 start with ``.``, which rules out ``..`` traversal and keeps the local
@@ -117,3 +118,8 @@ def parse_raw_key(key: str) -> Tuple[str, date, str]:
 
 def manifest_key(job_id: uuid.UUID) -> str:
     return f"{MANIFESTS}/processing/{uuid.UUID(str(job_id))}.json"
+
+
+def load_report_key(job_id: uuid.UUID, attempt_id: uuid.UUID) -> str:
+    """One write-once report per canonical load attempt of a processing job."""
+    return f"{MANIFESTS}/loads/{uuid.UUID(str(job_id))}/{uuid.UUID(str(attempt_id))}.json"

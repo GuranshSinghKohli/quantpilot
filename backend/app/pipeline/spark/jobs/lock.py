@@ -1,7 +1,9 @@
 """One writer per processed output prefix.
 
 A job reads the target partitions, merges and overwrites them; two concurrent
-jobs on the same prefix would each overwrite the other's new rows. On Postgres
+jobs on the same prefix would each overwrite the other's new rows. The
+canonical loader (``app.pipeline.load``) takes the same lock, so a load never
+reads files a concurrent processing job is replacing. On Postgres
 the runner holds a session-level advisory lock keyed by the output prefix for
 the whole job; the database releases it if the process dies, so a crash never
 leaves a stale lock. SQLite (single-user dev and tests) has no equivalent and
@@ -40,7 +42,9 @@ def output_lock(session_factory: Callable[[], Session], output_prefix: str) -> I
         # Autocommit so the lock's connection is not left idle in a transaction for the job's duration.
         conn = db.connection(execution_options={"isolation_level": "AUTOCOMMIT"})
         if not conn.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": key}).scalar():
-            raise JobAlreadyRunning(f"another processing job is writing {output_prefix}; retry when it finishes")
+            raise JobAlreadyRunning(
+                f"another processing or load job holds {output_prefix}; retry when it finishes"
+            )
         try:
             yield
         finally:

@@ -7,7 +7,9 @@
    ``processing_job_id``), so reprocessing is a no-op for those rows.
 3. **Superseded versions**: per logical record (the contract's ``dedup_key``,
    computed once in Python and never re-derived here) only the newest
-   ``ingested_at`` survives, tie-broken by ``event_id`` ascending. dedup_key is
+   ``ingested_at`` survives, tie-broken by the larger ``event_id``: the same
+   order as the canonical guard ``app.repositories._upsert.newer_than_existing``,
+   so the processed winner is always the row the loader keeps. dedup_key is
    ``market:{symbol}:{interval}:{trading_date}:{source}``, ``company:cik:{cik}``
    and ``news:{url_hash}``. Titles and names never key a merge.
 """
@@ -35,5 +37,5 @@ def merge_existing(new: DataFrame, existing: DataFrame) -> Tuple[DataFrame, Data
 
 
 def keep_latest_versions(df: DataFrame) -> DataFrame:
-    order = Window.partitionBy("dedup_key").orderBy(F.col("ingested_at").desc(), F.col("event_id").asc())
+    order = Window.partitionBy("dedup_key").orderBy(F.col("ingested_at").desc(), F.col("event_id").desc())
     return df.withColumn(_RANK, F.row_number().over(order)).where(F.col(_RANK) == 1).drop(_RANK)

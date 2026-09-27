@@ -320,6 +320,57 @@ def _process(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def _load(args: argparse.Namespace) -> int:
+    import json
+    import uuid
+    from datetime import date
+
+    from app.core.settings import get_settings
+    from app.domain.enums import CanonicalLoadStatus
+    from app.pipeline.lake import build_object_store
+    from app.pipeline.load import CanonicalLoadRunner, LoadConfigError, select_jobs
+    from app.pipeline.load.source import check_selection
+    from app.pipeline.load.validation import synthetic_allowed
+    from app.pipeline.spark.config import ProcessingConfigError
+
+    try:
+        job_id = uuid.UUID(args.job) if args.job else None
+        check_selection(job_id=job_id, manifest=args.manifest, domain=args.domain, latest=args.latest)
+        since = date.fromisoformat(args.since) if args.since else None
+        until = date.fromisoformat(args.until) if args.until else None
+        if since and until and since > until:
+            raise LoadConfigError("--since is after --until")
+        if args.batch_size < 1:
+            raise LoadConfigError("--batch-size must be at least 1")
+        store = build_object_store(get_settings())
+        sessions = _require_migrated_db()
+        with sessions() as db:
+            if args.allow_synthetic and not synthetic_allowed(db):
+                raise LoadConfigError("--allow-synthetic is only accepted on a test database (name contains 'test')")
+            jobs = [j.id for j in select_jobs(db, job_id=job_id, manifest=args.manifest, domain=args.domain,
+                                              latest=args.latest)]
+        runner = CanonicalLoadRunner(store=store, session_factory=sessions, batch_size=args.batch_size,
+                                     allow_synthetic=args.allow_synthetic)
+    except (LoadConfigError, ValueError, OSError) as exc:
+        print(f"load: {exc}", file=sys.stderr)
+        return 2
+    results, ok = [], True
+    for job in jobs:
+        try:
+            result = runner.run(job, since=since, until=until)
+            results.append(result.as_dict())
+            ok = ok and result.status is CanonicalLoadStatus.COMPLETE
+        except (LoadConfigError, ProcessingConfigError) as exc:  # e.g. another job holds the domain lock
+            results.append({"job_id": str(job), "status": "NOT_STARTED", "error": str(exc)})
+            ok = False
+        except Exception as exc:  # the attempt is already recorded FAILED; report and continue
+            results.append({"job_id": str(job), "status": CanonicalLoadStatus.FAILED.value,
+                            "error": f"{type(exc).__name__}: {exc}"[:2000]})
+            ok = False
+    print(json.dumps({"loads": results}, indent=2, default=str))
+    return 0 if ok else 1
+
+
 def _dlq(args: argparse.Namespace) -> int:
     import json
     import uuid
@@ -406,6 +457,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     process_cmd.add_argument("--objects-file", default=None, help="file with one raw object key per line")
     process_cmd.add_argument("--output-prefix", default=None, help="processed/... folder (default processed/<domain>/)")
     process_cmd.set_defaults(handler=_process)
+
+    load_cmd = commands.add_parser(
+        "load", help="processed Parquet of one processing job (via its manifest) → canonical Postgres tables")
+    load_cmd.add_argument("--domain", choices=["news", "market", "company", "all"], default=None,
+                          help="with --latest: which domain ('all' = the latest job of each)")
+    load_cmd.add_argument("--job", default=None, help="processing job id to load")
+    load_cmd.add_argument("--manifest", default=None, help="processing manifest key or URI (…/_manifests/processing/<job>.json)")
+    load_cmd.add_argument("--latest", action="store_true", help="the most recent COMPLETED processing job of --domain")
+    load_cmd.add_argument("--since", default=None, help="only manifest partitions on/after YYYY-MM-DD")
+    load_cmd.add_argument("--until", default=None, help="only manifest partitions on/before YYYY-MM-DD")
+    load_cmd.add_argument("--batch-size", type=int, default=1000, help="rows per transaction (default 1000)")
+    load_cmd.add_argument("--allow-synthetic", action="store_true",
+                          help="load SYNTHETIC sources (refused unless the database name contains 'test')")
+    load_cmd.set_defaults(handler=_load)
 
     dlq_cmd = commands.add_parser("dlq", help="list dead letters (reads without committing)")
     dlq_cmd.add_argument("--limit", type=int, default=50)

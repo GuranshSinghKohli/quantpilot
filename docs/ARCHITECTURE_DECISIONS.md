@@ -285,3 +285,49 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - News versions whose `published_at` moved between days are not collapsed across partitions.
 - Output is deterministic logically, not byte-for-byte: Parquet file names contain a write UUID.
 
+## ADR-023 — Canonical loading: processed Parquet → Postgres
+
+**Status: Accepted, shipped in Phase 2 Step 2.7.**
+
+**Problem.** Processed Parquet is deduplicated per job but is not the system of record (ADR-002). Rows must reach `companies`, `market_bars` and `news_articles` + `sources` under three guarantees:
+- the Step 2.2 newest-wins rule, with no second versioning implementation;
+- no duplicates on replay, retry or a crash after commit;
+- no silent loss of invalid rows.
+
+**Decision.**
+- A separate CLI process (`python -m app.pipeline load`, `make load-*`) in the pipeline image, using pyarrow only. There is no Spark, Kafka, HTTP or FastAPI startup in the path.
+- Input is only the files listed in a `COMPLETED` job's write-once manifest, selected by job, manifest or `--latest` per domain, with an optional date filter. Each file's existence and size are checked against the manifest. A file rewritten by a later job fails with `ManifestMismatch` rather than loading different data.
+- Validation runs over the whole selection before anything is written:
+  - the schema;
+  - required fields;
+  - `event_id` and `dedup_key` recomputed from the record;
+  - the raw key and URI;
+  - the registered source for the domain;
+  - synthetic data refused;
+  - domain rules (OHLC ordering, http(s) URLs, the ticker list);
+  - lineage, meaning the event is in `ingestion_records` and the job exists.
+
+  Any problem fails the load with every problem listed.
+- Writes go through the existing `app/repositories/canonical.py` upserts:
+  - `ON CONFLICT … DO UPDATE WHERE newer_than_existing` for bars and articles;
+  - `SELECT … FOR UPDATE` plus the same version comparison for companies, keyed by CIK and never by name.
+
+  Spark's tie-break was aligned to the same rule (the larger `event_id` wins).
+- One transaction per batch. It never spans files and includes the `ingestion_records → loaded` ledger update. Rows that fail on a constraint are retried once after all batches; anything left marks the load `CANONICAL_LOAD_FAILED`.
+- Load state is kept on the existing `processing_jobs` row (migration `0007`): status, attempts and counts (candidates, inserted, updated, stale, duplicates, failed). There is also a write-once report per attempt at `_manifests/loads/<job>/<attempt>.json`. Reconciliation invariants are checked before `COMPLETE`.
+- The loader takes the same Postgres advisory lock as Spark processing for the domain's output prefix.
+
+**Rejected.**
+- A new load-tracking table, since `processing_jobs` already has one row per job.
+- Loading directly from raw data or Kafka.
+- Scanning `processed/` without a manifest.
+- COPY into a staging table, which adds a second write path with no measured need at current volumes.
+- Skip-and-continue on invalid rows.
+- Loading synthetic data outside test databases.
+
+**Cost.**
+- Idempotent, not exactly-once: a crash after a batch commits leaves the job `RUNNING`, and the rerun reports those rows as duplicates.
+- Only the latest job per domain is reliably loadable after partition overwrites.
+- Automatic ticker reassignment is not attempted.
+- Measured throughput (PHASE2_7_PLAN §11): about 900 rows/s for market bars and 1,000 rows/s for companies on this laptop.
+

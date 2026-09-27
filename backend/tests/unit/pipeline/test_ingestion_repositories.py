@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import build_engine
 from app.core.migrations import upgrade_to_head
-from app.domain.enums import IngestionRecordStatus as S, IngestionRunStatus, ProcessingJobStatus
+from app.domain.enums import CanonicalLoadStatus, IngestionRecordStatus as S, IngestionRunStatus, ProcessingJobStatus
 from app.domain.ingestion_models import IngestionRun, MarketBar, NewsArticle
 from app.domain.ingestion_schemas import CompanyListingIn, MarketBarIn, NewsArticleIn
 from app.domain.models import Company, Entity, Source
@@ -151,7 +151,12 @@ def test_processing_job_lifecycle_and_lineage(repo_db):
                "output_partitions": ["year=2026/month=09/day=01"]}
     repo.finish_processing_job(repo_db, env.job, status=ProcessingJobStatus.COMPLETED, metrics=metrics,
                                output_uri="s3://lake/processed/market/")
-    repo.record_load(repo_db, env.job, loaded_rows=1, duration_ms=5)
+    repo.start_load(repo_db, env.job)
+    assert (env.job.status, env.job.load_status, env.job.load_attempts) == ("COMPLETED", "CANONICAL_LOAD_RUNNING", 1)
+    counts = {"candidates": 1, "inserted": 1, "updated": 0, "stale": 0, "duplicates": 0, "failed": 0}
+    repo.finish_load(repo_db, env.job, status=CanonicalLoadStatus.COMPLETE, counts=counts,
+                     partitions=["year=2026/month=09/day=01"], report_uri="s3://lake/_manifests/loads/x.json")
+    assert (env.job.status, env.job.load_status, env.job.loaded_rows) == ("COMPLETED", "CANONICAL_LOAD_COMPLETE", 1)
     repo.advance_records(repo_db, S.LOADED, [eid], processing_job_id=env.job.id)
 
     trace = repo.lineage(repo_db, eid)
@@ -160,6 +165,7 @@ def test_processing_job_lifecycle_and_lineage(repo_db):
     assert trace["raw_record"]["kafka"] == {"topic": "test.topic", "partition": 1, "offset": 99}
     assert trace["raw_record"]["raw_uri"] == "s3://lake/raw/market/x.json"
     assert trace["processing_job"]["status"] == "COMPLETED"
+    assert trace["processing_job"]["load_status"] == "CANONICAL_LOAD_COMPLETE"
     assert env.job.output_partitions == ["year=2026/month=09/day=01"]
     assert repo.lineage(repo_db, _hex(424242)) is None
 

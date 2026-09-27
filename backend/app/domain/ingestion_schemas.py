@@ -12,7 +12,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class _Row(BaseModel):
@@ -74,7 +74,9 @@ class CompanyListingIn(_Row):
     cik: str = Field(pattern=r"^\d{10}$")
     name: str = Field(min_length=1, max_length=255)
     ticker: Optional[str] = Field(default=None, max_length=16)
+    tickers: List[str] = Field(default_factory=list)
     exchange: Optional[str] = Field(default=None, max_length=32)
+    source: Optional[str] = Field(default=None, max_length=64)
 
     @field_validator("ticker", "exchange")
     @classmethod
@@ -82,3 +84,19 @@ class CompanyListingIn(_Row):
         if value is None:
             return None
         return value.strip().upper() or None
+
+    @field_validator("tickers")
+    @classmethod
+    def _tickers(cls, value: List[str]) -> List[str]:
+        cleaned = [t.strip().upper() for t in value]
+        if any(not t or len(t) > 16 for t in cleaned):
+            raise ValueError("tickers must be 1-16 characters")
+        if len(set(cleaned)) != len(cleaned):
+            raise ValueError("tickers must not repeat")
+        return cleaned
+
+    @model_validator(mode="after")
+    def _primary_ticker_listed(self) -> "CompanyListingIn":
+        if self.tickers and self.ticker != self.tickers[0]:
+            raise ValueError("ticker must be the first of tickers")
+        return self

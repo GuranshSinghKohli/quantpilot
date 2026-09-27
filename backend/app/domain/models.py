@@ -120,6 +120,12 @@ class Company(Base):
     exchange: Mapped[Optional[str]] = mapped_column(String(32))
     cik: Mapped[Optional[str]] = mapped_column(String(10), unique=True)
     website: Mapped[Optional[str]] = mapped_column(String(512))
+    # Set by the canonical loader (0007); NULL for companies created elsewhere.
+    # ``ticker`` is the first listed ticker; ``tickers`` keeps every listed one.
+    tickers: Mapped[Optional[List[str]]] = mapped_column(JsonDoc)
+    source: Mapped[Optional[str]] = mapped_column(String(64))
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64))
+    raw_uri: Mapped[Optional[str]] = mapped_column(String(1024))
     # Lineage when the row was loaded by the ingestion pipeline (NULL otherwise).
     source_ingested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     event_id: Mapped[Optional[str]] = mapped_column(

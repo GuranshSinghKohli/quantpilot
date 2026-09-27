@@ -28,7 +28,8 @@ LAKE_ENV = LAKE_BACKEND=s3 LAKE_ENDPOINT_URL=http://localhost:$(MINIO_PORT) \
         lake-up lake-down lake-init lake-check test-s3 \
         kafka-up kafka-down kafka-check pipeline-up pipeline-down pipeline-logs publish-synthetic dlq test-kafka \
         ingest-news ingest-market ingest-company sources-check \
-        spark-build spark-news spark-market spark-company spark-all test-spark
+        spark-build spark-news spark-market spark-company spark-all test-spark \
+        load-news load-market load-company load-all
 
 help:
 	@echo "up                compose stack (postgres, redis, migrate, backend, frontend)"
@@ -66,6 +67,10 @@ help:
 	@echo "spark-company     same for SEC company rows"
 	@echo "spark-all         news, market, company  [PROCESS_START= PROCESS_END=]"
 	@echo "test-spark        spark tier (real PySpark; MinIO via S3A) in the spark-test image"
+	@echo "load-news         processed Parquet → Postgres for the latest COMPLETED news job  [LOAD_JOB= | LOAD_MANIFEST= ; LOAD_SINCE= LOAD_UNTIL= LOAD_BATCH_SIZE=]"
+	@echo "load-market       same for market bars"
+	@echo "load-company      same for SEC companies"
+	@echo "load-all          latest COMPLETED job of each domain  [LOAD_SINCE= LOAD_UNTIL=]"
 
 up:
 	$(COMPOSE) up --build
@@ -190,3 +195,18 @@ spark-all:
 
 test-spark:
 	$(PIPELINE) --profile spark run --rm --no-deps spark-test
+
+# Canonical loading runs in the one-shot `load` service (needs `make pipeline-up`).
+# Selection: LOAD_JOB=<processing job id> or LOAD_MANIFEST=<manifest key/URI>;
+# with neither, the latest COMPLETED processing job of the domain. Optional
+# LOAD_SINCE/LOAD_UNTIL filter the manifest's partitions; LOAD_BATCH_SIZE (1000).
+LOAD = $(PIPELINE) --profile load run --rm --no-deps load python -m app.pipeline load
+LOAD_SELECT = $(if $(LOAD_JOB),--job $(LOAD_JOB),$(if $(LOAD_MANIFEST),--manifest $(LOAD_MANIFEST),--latest))
+LOAD_OPTS = $(call opt,--since,$(LOAD_SINCE)) $(call opt,--until,$(LOAD_UNTIL)) \
+            $(call opt,--batch-size,$(LOAD_BATCH_SIZE))
+
+load-news load-market load-company:
+	$(LOAD) --domain $(subst load-,,$@) $(LOAD_SELECT) $(LOAD_OPTS)
+
+load-all:
+	$(LOAD) --domain all --latest $(LOAD_OPTS)

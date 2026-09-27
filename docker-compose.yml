@@ -225,6 +225,24 @@ services:
     command: ["python", "-m", "app.pipeline", "sources", "check"]
     restart: "no"
 
+  # One-shot canonical loading (`make load-news|load-market|load-company|load-all`):
+  # the processed Parquet a COMPLETED processing job's manifest names → Postgres.
+  # pyarrow only (no Spark, no Kafka, no provider keys).
+  load:
+    profiles: ["load"]
+    image: quantpilot-pipeline:dev
+    environment:
+      DATABASE_URL: postgresql://quantpilot:quantpilot@postgres:5432/quantpilot
+      DB_AUTO_MIGRATE: "false"
+      ENVIRONMENT: development
+      LAKE_BACKEND: s3
+      LAKE_BUCKET: ${LAKE_BUCKET:-quantpilot-lake}
+      LAKE_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-quantpilot}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-quantpilot-dev-only}
+    command: ["python", "-m", "app.pipeline", "load", "--help"]
+    restart: "no"
+
   # One-shot Spark processing (`make spark-news|spark-market|spark-company|spark-all`):
   # raw lake objects in MinIO → processed Parquet + rejects + manifest, tracked in
   # processing_jobs. PySpark local[*] inside this container; S3A reads the AWS_*

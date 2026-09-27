@@ -20,6 +20,10 @@ export const CURRENT_STACK: { layer: string; tech: string }[] = [
     layer: "Process",
     tech: "PySpark 4.1 batch, local[*] in one container: raw JSON → validated Parquet + rejects + manifests",
   },
+  {
+    layer: "Load",
+    tech: "Manifest-driven canonical loader (pyarrow): processed Parquet → validated, idempotent upserts into Postgres",
+  },
   { layer: "Ship", tech: "Docker Compose, GitHub Actions, Pytest (SQLite + Postgres tiers)" },
 ];
 

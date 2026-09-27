@@ -113,7 +113,7 @@ Each row gets the **first** failing check (ordered list of `Rule(code, failed, m
 
 1. **Exact duplicates:** the same `event_id` in several objects (e.g. a copy under another day) → one row, lowest `raw_key` wins.
 2. **Already processed:** the job reads the rows already in the partitions it will rewrite (explicit processed schema). A new row whose `event_id` is already there is dropped in favour of the **existing** row, which keeps its original `processing_job_id`. Rerunning a window is therefore a logical no-op.
-3. **Superseded versions:** per contract `dedup_key` (news: URL hash; market: symbol + interval + trading_date + source; company: CIK), only the newest `ingested_at` survives, tie-broken by `event_id` ascending. Titles and names never key a merge.
+3. **Superseded versions:** per contract `dedup_key` (news: URL hash; market: symbol + interval + trading_date + source; company: CIK), only the newest `ingested_at` survives, tie-broken by the larger `event_id` (the same order as the canonical upsert guard; aligned in Step 2.7). Titles and names never key a merge.
 
 Then `localCheckpoint(eager=True)` materializes the merged result, so the overwrite never reads the files it replaces, and the partitions are written with **dynamic partition overwrite** (only partitions in the output are replaced, each with its complete merged contents). Counters: `input_objects`, `valid_rows`, `rejected_rows`, `duplicate_rows`, `already_processed_rows`, `existing_rows`, `superseded_rows`, `output_rows`, `new_rows`; invariants are checked before the job may complete (`output = valid − duplicate − already_processed + existing − superseded`).
 

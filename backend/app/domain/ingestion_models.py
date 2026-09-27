@@ -1,4 +1,5 @@
-"""Ingestion pipeline tables (migration 0005; processing_jobs input columns 0006).
+"""Ingestion pipeline tables (migration 0005; processing_jobs input columns 0006,
+canonical load columns 0007).
 
 Tracking: ingestion_sources → ingestion_runs → ingestion_records (one row per
 ingested event version) and processing_jobs (one row per Spark run).
@@ -35,6 +36,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.models import Base
 from app.domain.enums import (
+    CanonicalLoadStatus,
     IngestionDomain,
     IngestionRecordStatus,
     IngestionRunStatus,
@@ -110,6 +112,7 @@ class ProcessingJob(Base):
         _one_of("domain", IngestionDomain, "ck_processing_jobs_domain"),
         _one_of("status", ProcessingJobStatus, "ck_processing_jobs_status"),
         _one_of("mode", ProcessingMode, "ck_processing_jobs_mode"),
+        _one_of("load_status", CanonicalLoadStatus, "ck_processing_jobs_load_status"),
         Index("ix_processing_jobs_domain_started", "domain", "started_at"),
     )
 
@@ -141,6 +144,21 @@ class ProcessingJob(Base):
     loaded_rows: Mapped[Optional[int]] = mapped_column(Integer)
     loaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     load_duration_ms: Mapped[Optional[int]] = mapped_column(Integer)
+    # Canonical load stage (0007), separate from the processing ``status``. The
+    # columns describe the latest load attempt; each attempt also writes a
+    # write-once report object at ``load_report_uri``.
+    load_status: Mapped[Optional[str]] = mapped_column(String(32))
+    load_attempts: Mapped[int] = _counter()
+    load_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    load_candidates: Mapped[int] = _counter()
+    load_inserted: Mapped[int] = _counter()
+    load_updated: Mapped[int] = _counter()
+    load_stale: Mapped[int] = _counter()
+    load_duplicates: Mapped[int] = _counter()
+    load_failed: Mapped[int] = _counter()
+    load_partitions: Mapped[List[str]] = mapped_column(JsonDoc, nullable=False, default=list, server_default="[]")
+    load_error: Mapped[Optional[str]] = mapped_column(Text)
+    load_report_uri: Mapped[Optional[str]] = mapped_column(String(1024))
     created_at: Mapped[datetime] = _created_at()
 
 

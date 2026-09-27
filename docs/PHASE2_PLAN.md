@@ -215,7 +215,7 @@ The system uses three identities, each computed **once** by the shared Python co
 |---|---|
 | Ingestor | `event_id` already in `ingestion_records` with status ≥ `published` → counted `duplicate`, not republished |
 | Lake-writer | Conditional put: the object already exists → `exists`. Idempotent and not an error |
-| Spark | Window over `dedup_key`; keep the newest `ingested_at`, tie-broken by `event_id` ascending. Deterministic; the number removed is reported as `duplicates_removed` |
+| Spark | Window over `dedup_key`; keep the newest `ingested_at`, tie-broken by the larger `event_id` (the canonical `newer_than_existing` order). Deterministic; the number removed is reported as `duplicates_removed` |
 | Loader | `ON CONFLICT (natural key) DO UPDATE … WHERE excluded.source_ingested_at > table.source_ingested_at`. Replaying older data never overwrites newer data |
 
 The rule "same record + same content hash → no duplicate canonical row" is therefore enforced at four independent points. The canonical UNIQUE constraint is the final guarantee.
@@ -289,7 +289,7 @@ companies (+)       source_ingested_at NULL, event_id NULL, processing_job_id NU
 
 **What goes where.**
 - **News** is a document, so it lands in `sources` (`source_type='news'`: url, url_hash, title, publisher, published_at, content_hash, **raw_uri**) with news-specific fields in `news_articles`. There is no second copy of the URL, title or date. Later phases' `evidence_records` then attach to the same `sources` row.
-- **Companies** go through `get_or_create_company` into `entities` + `companies`, keyed by CIK. SEC lists some CIKs with several tickers (e.g. share classes). The first listed ticker becomes `companies.ticker`; the rest stay in raw and processed data, and the limitation is documented.
+- **Companies** go through `get_or_create_company` into `entities` + `companies`, keyed by CIK. SEC lists some CIKs with several tickers (e.g. share classes). The first listed ticker becomes `companies.ticker`. Since Step 2.7 (migration 0007) the full list is kept in `companies.tickers`.
 - **Market bars** have no Phase 1 home (`market_event_windows` is derived analytics), so they get the new table `market_bars`. The prompt's `market_data` name is used as the dataset/domain name.
 
 **The loader** (`python -m app.pipeline load --domain market [--job <id>]`) reads the processed partitions listed in a job manifest with pyarrow. It doesn't use Spark JDBC, which can't upsert. It writes batched `INSERT … ON CONFLICT DO UPDATE` with the newest-wins guard, one transaction per partition, then marks the `ingestion_records` rows `loaded`. Retries are safe: a reload is a no-op.
@@ -384,7 +384,7 @@ make pipeline-test                # kafka + s3 + spark + pipeline tiers against 
 | Dev default DB is still SQLite | The migration stays portable; `make pipeline` targets compose Postgres (`DATABASE_URL` set by compose); the SQLite suite keeps running |
 | Test runtime and CI complexity grow | New tiers are opt-in locally and run in a separate CI job |
 | `trading_date` vs timestamp time-zone mistakes for daily bars | Identity uses the exchange-local session date from yfinance's index; timestamps stored in UTC; covered by unit tests |
-| CIKs with several tickers vs `companies.cik UNIQUE` | First listed ticker becomes canonical; the others stay in raw and processed data; documented |
+| CIKs with several tickers vs `companies.cik UNIQUE` | First listed ticker becomes `companies.ticker`; the full list is kept in `companies.tickers` (Step 2.7) |
 | Scope creep toward Airflow, agents or graph | Out of scope; runs are CLI/Make-triggered; nothing downstream consumes canonical tables yet |
 
 ## 15. Implementation phases (each step: code + tests + green suite before the next)
@@ -397,7 +397,7 @@ make pipeline-test                # kafka + s3 + spark + pipeline tiers against 
 | **2.4** | Kafka: compose `kafka` + `kafka-init`; producer, consumer loop, DLQ publisher; lake-writer service; `make kafka-up` (as built: `docs/PHASE2_4_PLAN.md`; message key is `event_id`, not `dedup_key`) | `kafka` tier (redelivery, malformed → DLQ, DLQ-failure no-commit) ✅ |
 | **2.5** | Source adapters + `ingest` CLI + run tracking. As built: Massive news + Massive daily bars (replacing yfinance, see `docs/PHASE2_5_PLAN.md` §2 and ADR-021) and SEC companies | unit + mocked-provider e2e through Kafka/MinIO; live SEC run → raw objects in MinIO ✅ |
 | **2.6** | Spark image + generic job (market, news, company) + rejects + manifests + `processing_jobs`. As built: `make spark-*`, see `docs/PHASE2_6_PLAN.md` and ADR-022 | `spark` tier (+ MinIO via S3A); `make spark-all` twice on the live raw data → identical rows ✅ |
-| **2.7** | Loader + lineage CLI + `make runs/dlq/lineage` | integration + `pipeline` tier; duplicate run → identical counts |
+| **2.7** | Canonical loader. As built: processed Parquet → Postgres via `make load-*`, manifest-driven, validated before writing, idempotent, migration `0007`; see `docs/PHASE2_7_PLAN.md` and ADR-023 | unit + integration + `spark` e2e; `make load-company` on the live SEC data, then a replay → all duplicates ✅ |
 | **2.8** | `make pipeline` end to end on real data; CI pipeline job | full verification (below) |
 | **2.9** | Docs: README, this file as-built, ADR-009/010/011 amendments + new ADR-020 (effectively-once pipeline), `ENV_VARIABLES.md`, `backend/app/README.md`, `stack.ts` | frontend tsc + lint |
 

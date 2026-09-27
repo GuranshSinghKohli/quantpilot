@@ -190,6 +190,15 @@ class ProcessingJobStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class CanonicalLoadStatus(StrEnum):
+    """Load stage of a processing job, kept apart from its processing ``status``.
+    NULL on a COMPLETED job means PROCESSING_COMPLETE (not loaded yet)."""
+
+    RUNNING = "CANONICAL_LOAD_RUNNING"
+    COMPLETE = "CANONICAL_LOAD_COMPLETE"
+    FAILED = "CANONICAL_LOAD_FAILED"
+
+
 class ProcessingMode(StrEnum):
     FULL = "full"
     INCREMENTAL = "incremental"

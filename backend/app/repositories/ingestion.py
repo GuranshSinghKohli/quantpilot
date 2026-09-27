@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, Optional, Sequence, Tuple
 
 from sqlalchemy import bindparam, func, or_, select, update
 from sqlalchemy.orm import Session
@@ -18,6 +18,7 @@ from app.domain.enums import (
     RECORD_DELIVERED,
     RECORD_RETRYABLE,
     RECORD_TRANSITIONS,
+    CanonicalLoadStatus,
     IngestionRecordStatus,
     IngestionRunStatus,
     ProcessingJobStatus,
@@ -323,10 +324,47 @@ def finish_processing_job(
     return job
 
 
-def record_load(db: Session, job: ProcessingJob, *, loaded_rows: int, duration_ms: int) -> ProcessingJob:
-    job.loaded_rows = loaded_rows
-    job.loaded_at = _now()
-    job.load_duration_ms = duration_ms
+def start_load(db: Session, job: ProcessingJob) -> ProcessingJob:
+    """Begin a canonical load attempt: the ``load_*`` columns now describe it."""
+    job.load_status = CanonicalLoadStatus.RUNNING.value
+    job.load_attempts = (job.load_attempts or 0) + 1
+    job.load_started_at = _now()
+    job.load_candidates = job.load_inserted = job.load_updated = 0
+    job.load_stale = job.load_duplicates = job.load_failed = 0
+    job.load_partitions = []
+    job.load_error = None
+    job.load_report_uri = None
+    job.loaded_rows = job.loaded_at = job.load_duration_ms = None
+    db.flush()
+    return job
+
+
+def finish_load(
+    db: Session,
+    job: ProcessingJob,
+    *,
+    status: CanonicalLoadStatus,
+    counts: Dict[str, int],
+    partitions: Sequence[str],
+    error: Optional[str] = None,
+    report_uri: Optional[str] = None,
+) -> ProcessingJob:
+    finished = _now()
+    job.load_status = status.value
+    job.load_candidates = int(counts.get("candidates", 0))
+    job.load_inserted = int(counts.get("inserted", 0))
+    job.load_updated = int(counts.get("updated", 0))
+    job.load_stale = int(counts.get("stale", 0))
+    job.load_duplicates = int(counts.get("duplicates", 0))
+    job.load_failed = int(counts.get("failed", 0))
+    job.loaded_rows = job.load_inserted + job.load_updated
+    job.load_partitions = list(partitions)
+    job.load_error = error[:8000] if error else None
+    job.load_report_uri = report_uri
+    job.loaded_at = finished
+    started = job.load_started_at or finished
+    started = started if started.tzinfo else started.replace(tzinfo=timezone.utc)
+    job.load_duration_ms = int((finished - started).total_seconds() * 1000)
     db.flush()
     return job
 
@@ -375,6 +413,9 @@ def lineage(db: Session, event_id: str) -> Optional[Dict[str, Any]]:
             "spark_app_id": job.spark_app_id,
             "output_uri": job.output_uri,
             "manifest_uri": job.manifest_uri,
+            "load_status": job.load_status,
+            "loaded_at": _iso(job.loaded_at),
+            "load_report_uri": job.load_report_uri,
         },
     }
 
