@@ -108,8 +108,8 @@ An RSS adapter is deliberately deferred. It would need an XML hardening dependen
 ## 5. Raw data lake design
 
 - **Interface** (`app/pipeline/lake/`): `put_if_absent(key, bytes) -> PutResult(created|exists)`, `get(key)`, `list(prefix)`, `uri(key)`. There are two backends behind it:
-  - **`S3Lake`** (boto3) is the target. It runs against AWS S3 or **MinIO** locally, and is the only backend in compose.
-  - **`LocalLake`** is a filesystem root with the same key layout. It is used only by unit and Spark tests, so they don't need MinIO. It is the same architecture, not a separate storage design.
+  - **`S3ObjectStore`** (boto3) is the target. It runs against AWS S3 or **MinIO** locally, and is the only backend in compose.
+  - **`LocalObjectStore`** is a filesystem root with the same key layout. It is used only by unit and Spark tests, so they don't need MinIO. It is the same architecture, not a separate storage design.
 - **Layout.** Partitions use the **ingestion** date (UTC), because raw is append-only by arrival time:
 
 ```
@@ -125,6 +125,24 @@ s3://quantpilot-lake/_manifests/processing/<job_id>.json
 - **Immutability.** Keys are the deterministic `event_id`, so a redelivered message maps to the same key. Writes use `If-None-Match: *` (conditional put, supported by S3 and MinIO), so an existing object is never overwritten. The MinIO bucket also has versioning enabled as a second guard. Changed content means a new `content_hash`, which means a new `event_id` and a new object; history is preserved.
 - **Reproducibility.** Everything downstream (processed Parquet and the canonical rows) can be rebuilt from `raw/` alone with `make process` then `make load`.
 - **Known cost.** Small files. That's acceptable at this volume (hundreds to thousands of objects per day). Compaction is a later-phase job.
+
+**As built (Step 2.3).**
+- **Package.** The code lives in `app/pipeline/lake/`:
+  - `base.py` defines the `ObjectStore` interface, which has `put_if_absent`, `get`, `head`, `exists`, `list`, `uri` and `check`.
+  - `keys.py` builds and validates the key layout above.
+  - `local.py` is `LocalObjectStore`; `s3.py` is `S3ObjectStore`.
+  - `build_object_store()` picks the backend from `LAKE_BACKEND`.
+- **Refused writes.** `put_if_absent` never replaces an object. When the key is already taken, it returns `created=False` and the stored object's SHA-256. The caller decides what differing bytes mean. This can happen when the same `event_id` is re-sent in a later run with a new `run_id` or `ingested_at`. In that case the first copy that landed wins.
+- **Local backend.** Bytes are staged in a `.tmp-*` file, fsynced, then hard-linked to the final name (`os.link`, which is atomic and fails if the name exists). The final file is made read-only. Key segments may not start with `.`, which rules out `..` traversal.
+- **S3 backend.**
+  - Every put sends `If-None-Match: *` and `ChecksumSHA256`, and stores `x-amz-meta-sha256`. A 412 response means the object exists. Reads are checked against the stored hash.
+  - Botocore's own retries are off, so `call_with_retry` owns all retries. It retries 409 `ConditionalRequestConflict` (a concurrent writer), 5xx responses, throttling and connection errors, with bounded backoff. Permanent errors, such as 403, are raised immediately.
+  - Credentials come only from the standard AWS chain.
+- **`python -m app.pipeline lake init|check`.**
+  - `init` creates the bucket and enables versioning; it is idempotent.
+  - `check` reports the bucket and versioning status, then runs a write-once probe: it tries to overwrite `_health/write-once-probe.json` and checks that the original is intact. This catches S3-compatible servers that silently ignore `If-None-Match`.
+- **MinIO image.** Docker Hub and quay.io no longer serve `minio/minio` or `minio/mc`, so compose uses Chainguard's `minio` and `minio-client` images. The free tier only publishes `latest`, so both are pinned by digest. The images have no shell, so setup is two one-shot `mc` services: `minio-ready` runs `mc ready`, then `minio-init` runs `mc mb --ignore-existing --with-versioning`.
+- **Test isolation.** `tests/conftest.py` pins `LAKE_BACKEND=local`, `LAKE_LOCAL_ROOT=backend/tests/_test_lake/` and a `quantpilot-test-*` bucket name before any app import. The `s3` tier creates a fresh bucket per test and deletes all its object versions afterwards.
 
 ## 6. Data schemas (canonical contracts)
 
@@ -295,11 +313,11 @@ Every tier runs on isolated resources and is **skipped unless explicitly configu
 
 | Tier (marker) | Needs | Covers | Isolation |
 |---|---|---|---|
-| unit (none) | nothing | contracts/validators, hashing and identities, dedup ordering, serde round-trip, retry/backoff (fake sleep), transient-vs-permanent classification, DLQ envelope, lake key layout, `LocalLake` write-once, run status derivation, adapter mapping from recorded payload fixtures | tmp dirs |
+| unit (none) | nothing | contracts/validators, hashing and identities, dedup ordering, serde round-trip, retry/backoff (fake sleep), transient-vs-permanent classification, DLQ envelope, lake key layout, `LocalObjectStore` write-once, run status derivation, adapter mapping from recorded payload fixtures | tmp dirs |
 | integration | `TEST_DATABASE_URL` (existing) | `0005` drift check and round-trip, upserts (newest-wins, no duplicates), run tracking, loader from a Parquet fixture written with pyarrow, lineage query | existing schema reset + SAVEPOINT rollback |
 | `kafka` | `TEST_KAFKA_BOOTSTRAP` | producer → consumer, redelivery without duplicates, malformed → DLQ, DLQ-publish failure doesn't commit | per-test topic names `test.<uuid>.*` and unique consumer groups; deleted in teardown |
-| `s3` | `TEST_S3_ENDPOINT` (MinIO) | `S3Lake` conditional put, list/get, immutability | per-session bucket `quantpilot-test-<uuid>`, emptied and deleted |
-| `spark` | Java 17 | raw → processed Parquet, dedup determinism (twice → identical output), rejects, partitioning, manifest | `LocalLake` in tmp dirs, `local[1]` |
+| `s3` | `TEST_S3_ENDPOINT` (MinIO) | `S3ObjectStore` conditional put, list/get, immutability | per-session bucket `quantpilot-test-<uuid>`, emptied and deleted |
+| `spark` | Java 17 | raw → processed Parquet, dedup determinism (twice → identical output), rejects, partitioning, manifest | `LocalObjectStore` in tmp dirs, `local[1]` |
 | `pipeline` | all of the above | fixture ingest → Kafka → raw → Spark → Parquet → Postgres; the same input twice → identical canonical row counts; malformed input → DLQ and no canonical row | all of the above |
 
 - **Fixtures.** Adapter tests use small recorded payloads, clearly labelled `fixtures/<source>/…` with a README noting the capture date. Pipeline tests use synthetic records named as synthetic. No fixture is ever loaded into the development database or presented as real data.
@@ -364,7 +382,7 @@ make pipeline-test                # kafka + s3 + spark + pipeline tiers against 
 |---|---|---|
 | **2.1** | `app/pipeline/` skeleton: `contracts.py` (IngestionEvent, News/Market/Company records, DeadLetter), identities/hashing, serde, validation, `retry.py`; pipeline settings in `Settings`; JSON Schema export | unit tier; full SQLite suite; `alembic check` unchanged |
 | **2.2** | Migration `0005` + models + repositories (ingestion sources/runs/records, processing_jobs, market_bars, news_articles, lineage columns); run-tracking service | integration tier on Postgres; `alembic check` on SQLite + Postgres; round-trip |
-| **2.3** | Lake: interface, `LocalLake`, `S3Lake`; compose `minio` + `minio-init`; `make lake-up` | unit + `s3` tier |
+| **2.3** | Lake: interface, `LocalObjectStore`, `S3ObjectStore`; compose `minio` + `minio-ready` + `minio-init`; `make lake-up` / `lake-check` / `test-s3` | unit + `s3` tier ✅ |
 | **2.4** | Kafka: compose `kafka` + `kafka-init`; producer, consumer loop, DLQ publisher; lake-writer service; `make kafka-up` | `kafka` tier (redelivery, malformed → DLQ, DLQ-failure no-commit) |
 | **2.5** | Source adapters (yfinance market, yfinance news, SEC companies) + `ingest` CLI + run tracking | unit (fixtures); live smoke on real data → raw objects in MinIO |
 | **2.6** | Spark image + generic job (market, news, company) + rejects + manifests + `processing_jobs` | `spark` tier; `make process` on the live raw data |

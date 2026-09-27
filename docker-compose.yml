@@ -83,5 +83,49 @@ services:
     depends_on:
       - backend
 
+  # --- Ingestion pipeline (profile "pipeline"; `make up` does not start these) ---
+  # Chainguard publishes the maintained MinIO build; free tags are `latest` only,
+  # so the images are pinned by digest.
+  minio:
+    profiles: ["pipeline"]
+    image: cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
+    command: ["server", "/data", "--address", ":9000", "--console-address", ":9001"]
+    environment:
+      # Dev-only placeholders, like the Postgres password above. Override in the
+      # shell or a root .env; real AWS credentials never go in this file.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-quantpilot}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-quantpilot-dev-only}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - quantpilot_minio:/data
+
+  # The images have no shell, so readiness and bucket creation are two one-shot
+  # mc commands. `mc ready` blocks until the server answers.
+  minio-ready:
+    profiles: ["pipeline"]
+    image: cgr.dev/chainguard/minio-client@sha256:b8b144ab34694ecea25aa352c4be9de4c26ee2a02701521dce02ee5593c57338
+    environment:
+      MC_HOST_lake: http://${MINIO_ROOT_USER:-quantpilot}:${MINIO_ROOT_PASSWORD:-quantpilot-dev-only}@minio:9000
+    command: ["ready", "lake"]
+    depends_on:
+      - minio
+    restart: "no"
+
+  minio-init:
+    profiles: ["pipeline"]
+    image: cgr.dev/chainguard/minio-client@sha256:b8b144ab34694ecea25aa352c4be9de4c26ee2a02701521dce02ee5593c57338
+    environment:
+      MC_HOST_lake: http://${MINIO_ROOT_USER:-quantpilot}:${MINIO_ROOT_PASSWORD:-quantpilot-dev-only}@minio:9000
+    # Versioning is a second guard behind conditional writes. `lake init` also
+    # enables it on a bucket that already existed.
+    command: ["mb", "--ignore-existing", "--with-versioning", "lake/${LAKE_BUCKET:-quantpilot-lake}"]
+    depends_on:
+      minio-ready:
+        condition: service_completed_successfully
+    restart: "no"
+
 volumes:
   quantpilot_pg:
+  quantpilot_minio:

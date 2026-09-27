@@ -13,6 +13,8 @@ def _settings(monkeypatch, **env) -> Settings:
 
 
 def test_pipeline_defaults(monkeypatch):
+    for pinned in ("LAKE_BACKEND", "LAKE_BUCKET", "LAKE_LOCAL_ROOT", "LAKE_ENDPOINT_URL"):
+        monkeypatch.delenv(pinned, raising=False)
     s = _settings(monkeypatch)
     assert s.raw_topics == {
         "news": "quantpilot.news.raw",
@@ -22,6 +24,7 @@ def test_pipeline_defaults(monkeypatch):
     assert s.KAFKA_TOPIC_DLQ == "quantpilot.ingestion.dlq"
     assert s.KAFKA_CONSUMER_GROUP_LAKE == "quantpilot.lake-writer"
     assert s.LAKE_BACKEND == "s3"
+    assert s.LAKE_BUCKET == "quantpilot-lake"
 
 
 def test_topic_names_are_configurable_and_validated(monkeypatch):

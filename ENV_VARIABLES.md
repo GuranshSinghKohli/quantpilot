@@ -68,6 +68,29 @@ All secrets belong in `.env` / `.env.local` files — never commit them to Git.
 
 Copy `backend/.env.example` to `backend/.env` for local development.
 
+## Ingestion pipeline (Phase 2, in progress)
+
+Read by `python -m app.pipeline …`. The API does not need them. Kafka is configured but not yet used; the lake is live as of Step 2.3.
+
+| Variable | Required / Optional | Description | Example value |
+|----------|-------------------|-------------|---------------|
+| `LAKE_BACKEND` | Optional | `s3` (default; AWS S3 or MinIO) or `local` (filesystem, same key layout) | `s3` |
+| `LAKE_BUCKET` | Optional | Lake bucket, validated against S3 naming rules (default `quantpilot-lake`) | `quantpilot-lake` |
+| `LAKE_ENDPOINT_URL` | Optional | S3 endpoint. Empty = AWS; set for MinIO | `http://localhost:9000` |
+| `LAKE_REGION` | Optional | Bucket region (default `us-east-1`) | `us-east-1` |
+| `LAKE_LOCAL_ROOT` | Optional | Root directory for `LAKE_BACKEND=local` (default `backend/data/lake`, git-ignored) | `/tmp/quantpilot-lake` |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | For `s3` | Standard AWS credential chain (env, profile or instance role); QuantPilot never reads them into its own settings. `make lake-*` passes the MinIO dev placeholders | — |
+| `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | Optional | Compose MinIO credentials. Dev-only defaults `quantpilot` / `quantpilot-dev-only`; override for anything shared | — |
+| `MINIO_PORT` / `MINIO_CONSOLE_PORT` | Optional | Host ports for MinIO API / console (defaults `9000` / `9001`) | `9000` |
+| `KAFKA_BOOTSTRAP_SERVERS` | Optional | Broker list (default `localhost:9092`) | `localhost:9092` |
+| `KAFKA_TOPIC_NEWS_RAW` / `KAFKA_TOPIC_MARKET_RAW` / `KAFKA_TOPIC_COMPANY_RAW` / `KAFKA_TOPIC_DLQ` | Optional | Topic names (defaults `quantpilot.{news,market,company}.raw`, `quantpilot.ingestion.dlq`); must be distinct | `quantpilot.news.raw` |
+| `KAFKA_CONSUMER_GROUP_LAKE` | Optional | Lake-writer consumer group (default `quantpilot.lake-writer`) | `quantpilot.lake-writer` |
+| `KAFKA_MAX_MESSAGE_BYTES` | Optional | Max encoded event size (default `1000000`) | `1000000` |
+| `INGEST_SYMBOLS` | Optional | Symbols for market/news adapters (default `AAPL,MSFT,NVDA`) | `AAPL,MSFT` |
+| `PIPELINE_RETRY_MAX_ATTEMPTS` / `PIPELINE_RETRY_BASE_SECONDS` / `PIPELINE_RETRY_MAX_SECONDS` | Optional | Bounded exponential backoff with full jitter (defaults `5` / `0.5` / `30`) | `5` |
+
+Test-only: `TEST_S3_ENDPOINT`, `TEST_S3_ACCESS_KEY_ID`, `TEST_S3_SECRET_ACCESS_KEY` enable the `s3` tier (`make test-s3`), which creates and deletes its own `quantpilot-test-*` buckets. The test suite always pins the lake to `backend/tests/_test_lake/`.
+
 ## Frontend (Vercel / local)
 
 | Variable | Required / Optional | Description | Example value |

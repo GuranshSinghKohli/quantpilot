@@ -46,6 +46,7 @@ else:
 _DEFAULT_SQLITE = f"sqlite:///{(BACKEND_DIR / 'data' / 'quantpilot.db').as_posix()}"
 _DEV_JWT_SECRET = "dev-only-change-me-quantpilot"
 _KAFKA_NAME = re.compile(r"[A-Za-z0-9._-]{1,249}")
+_S3_BUCKET = re.compile(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]")
 
 
 class Settings(BaseSettings):
@@ -209,6 +210,20 @@ class Settings(BaseSettings):
         if not _KAFKA_NAME.fullmatch(value):
             raise ValueError(f"invalid Kafka topic/group name: {value!r}")
         return value
+
+    @field_validator("LAKE_BUCKET")
+    @classmethod
+    def _bucket_name(cls, value: str) -> str:
+        if not _S3_BUCKET.fullmatch(value) or ".." in value:
+            raise ValueError(f"invalid S3 bucket name: {value!r}")
+        return value
+
+    @field_validator("LAKE_ENDPOINT_URL")
+    @classmethod
+    def _endpoint_url(cls, value: str) -> str:
+        if value and not value.startswith(("http://", "https://")):
+            raise ValueError("LAKE_ENDPOINT_URL must be empty (AWS) or an http(s) URL")
+        return value.rstrip("/")
 
     @model_validator(mode="after")
     def _retry_bounds(self) -> "Settings":
