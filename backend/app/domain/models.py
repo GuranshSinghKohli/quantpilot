@@ -120,6 +120,15 @@ class Company(Base):
     exchange: Mapped[Optional[str]] = mapped_column(String(32))
     cik: Mapped[Optional[str]] = mapped_column(String(10), unique=True)
     website: Mapped[Optional[str]] = mapped_column(String(512))
+    # Lineage when the row was loaded by the ingestion pipeline (NULL otherwise).
+    source_ingested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    event_id: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        ForeignKey("ingestion_records.event_id", ondelete="RESTRICT", name="fk_companies_event_id"),
+    )
+    processing_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("processing_jobs.id", ondelete="RESTRICT", name="fk_companies_processing_job_id")
+    )
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = _updated_at()
 
@@ -491,3 +500,8 @@ class Report(Base):
     created_at: Mapped[datetime] = _created_at()
 
     research_job: Mapped[ResearchJob] = relationship(back_populates="reports")
+
+
+# Registered last: the ingestion tables reference helpers above and are
+# referenced by Company, so importing this module always yields full metadata.
+from app.domain import ingestion_models  # noqa: E402,F401

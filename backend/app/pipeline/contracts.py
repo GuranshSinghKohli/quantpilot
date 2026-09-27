@@ -33,17 +33,12 @@ from pydantic import (
     model_validator,
 )
 
+from app.domain.enums import IngestionDomain as Domain
 from app.domain.identity import normalize_url
 from app.pipeline import identity
 
 SCHEMA_VERSION = 1
 SUPPORTED_SCHEMA_VERSIONS = frozenset({1})
-
-
-class Domain(StrEnum):
-    NEWS = "news"
-    MARKET = "market"
-    COMPANY = "company"
 
 
 class DataSourceType(StrEnum):
