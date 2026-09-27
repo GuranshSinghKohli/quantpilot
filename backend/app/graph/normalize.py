@@ -33,3 +33,33 @@ def source_system_for_company(source: Optional[str]) -> str:
     if raw.startswith("sec"):
         return "sec"
     return raw or "sec"
+
+
+# Closed suffix list. Used only to derive a display stem from an authoritative legal name.
+_LEGAL_SUFFIXES = (
+    "incorporated",
+    "corporation",
+    "company",
+    "limited",
+    "inc",
+    "corp",
+    "ltd",
+    "llc",
+    "plc",
+    "co",
+)
+
+
+def legal_name_stem(value: str) -> Optional[str]:
+    """Strip a trailing legal suffix. 'NVIDIA CORPORATION' → 'NVIDIA'. Not fuzzy merge."""
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    tokens = raw.split()
+    if len(tokens) < 2:
+        return None
+    last = _PUNCT.sub("", tokens[-1]).casefold().rstrip(".")
+    if last not in _LEGAL_SUFFIXES:
+        return None
+    stem = " ".join(tokens[:-1]).rstrip(",").strip()
+    return stem or None

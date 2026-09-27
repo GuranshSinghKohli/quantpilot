@@ -36,6 +36,7 @@ from app.db.models import Base
 from app.domain.enums import (
     AgentRunStatus,
     AliasType,
+    CandidateStatus,
     ClaimKind,
     EntityType,
     EventEntityRole,
@@ -386,6 +387,88 @@ class GraphProjection(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     error: Mapped[Optional[str]] = mapped_column(Text)
     projected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()
+
+
+class GraphProjectionRun(Base):
+    """One project/repair attempt. Postgres stays committed even if Neo4j fails."""
+
+    __tablename__ = "graph_projection_runs"
+    __table_args__ = (
+        CheckConstraint("operation IN ('project', 'repair')", name="ck_graph_projection_runs_operation"),
+        CheckConstraint(
+            "status IN ('success', 'partial', 'failed', 'unavailable')",
+            name="ck_graph_projection_runs_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    operation: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    entities_projected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    relationships_projected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source: Mapped[Optional[str]] = mapped_column(String(64))
+    job_id: Mapped[Optional[str]] = mapped_column(String(64))
+    code_version: Mapped[Optional[str]] = mapped_column(String(64))
+    error: Mapped[Optional[str]] = mapped_column(Text)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _created_at()
+
+
+class RelationshipCandidateRecord(Base):
+    """Proposed edge. Not a graph relationship until ACCEPTED."""
+
+    __tablename__ = "relationship_candidates"
+    __table_args__ = (
+        UniqueConstraint(
+            "from_entity_id",
+            "relationship_type",
+            "to_entity_id",
+            "evidence_id",
+            name="uq_relationship_candidates_identity",
+        ),
+        CheckConstraint(
+            "from_entity_id <> to_entity_id",
+            name="ck_relationship_candidates_not_self",
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_relationship_candidates_confidence",
+        ),
+        _one_of("relationship_type", RelationshipType, "ck_relationship_candidates_type"),
+        _one_of("status", CandidateStatus, "ck_relationship_candidates_status"),
+        _one_of("provenance_kind", ProvenanceKind, "ck_relationship_candidates_provenance"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    from_entity_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    relationship_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    to_entity_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sources.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    evidence_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("evidence_records.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    provenance_kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=ProvenanceKind.OBSERVED.value
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=CandidateStatus.PENDING.value
+    )
+    accepted_relationship_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("relationships.id", ondelete="SET NULL")
+    )
+    discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = _updated_at()
 

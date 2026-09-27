@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.domain.models import Entity, Relationship, RelationshipEvidence
+from app.domain.models import Entity, EntityAlias, Relationship, RelationshipCandidateRecord, RelationshipEvidence
 from app.graph.errors import GraphUnavailable
 from app.graph.store import neo4j_configured, run_cypher
 
@@ -31,10 +31,86 @@ def entity_payload(entity: Entity) -> Dict[str, Any]:
         "source_system": entity.source_system,
         "source_key": entity.source_key,
         "cik": company.cik if company is not None else None,
-        "tickers": list(company.tickers or []) if company is not None else None,
+        "tickers": list(company.tickers or ([company.ticker] if company.ticker else []))
+        if company is not None
+        else None,
         "ticker": company.ticker if company is not None else None,
+        "legal_name": company.legal_name if company is not None else None,
+        "exchange": company.exchange if company is not None else None,
         "technology_slug": technology.slug if technology is not None else None,
     }
+
+
+def entity_aliases(db: Session, entity_id: uuid.UUID, *, limit: int = MAX_RESULTS) -> List[Dict[str, Any]]:
+    stmt = select(EntityAlias).where(EntityAlias.entity_id == entity_id).limit(min(limit, MAX_RESULTS))
+    return [
+        {
+            "alias": row.alias,
+            "normalized_alias": row.normalized_alias,
+            "alias_type": row.alias_type,
+            "confidence": row.confidence,
+        }
+        for row in db.scalars(stmt)
+    ]
+
+
+def entity_provenance(db: Session, entity_id: uuid.UUID) -> Optional[Dict[str, Any]]:
+    entity = db.get(Entity, entity_id)
+    if entity is None:
+        return None
+    company = entity.company
+    return {
+        "entity_id": str(entity.id),
+        "source_system": entity.source_system,
+        "source_key": entity.source_key,
+        "cik": company.cik if company is not None else None,
+        "legal_name": company.legal_name if company is not None else None,
+        "exchange": company.exchange if company is not None else None,
+    }
+
+
+def relationship_provenance(db: Session, relationship_id: uuid.UUID) -> Optional[Dict[str, Any]]:
+    stmt = (
+        select(Relationship)
+        .options(selectinload(Relationship.evidence_links).selectinload(RelationshipEvidence.evidence))
+        .where(Relationship.id == relationship_id)
+    )
+    edge = db.scalars(stmt).first()
+    if edge is None:
+        return None
+    return _edge_payload(edge)
+
+
+def relationship_candidates(
+    db: Session,
+    entity_id: Optional[uuid.UUID] = None,
+    *,
+    limit: int = MAX_RESULTS,
+) -> List[Dict[str, Any]]:
+    stmt = select(RelationshipCandidateRecord)
+    if entity_id is not None:
+        stmt = stmt.where(
+            or_(
+                RelationshipCandidateRecord.from_entity_id == entity_id,
+                RelationshipCandidateRecord.to_entity_id == entity_id,
+            )
+        )
+    stmt = stmt.limit(min(limit, MAX_RESULTS))
+    return [
+        {
+            "candidate_id": str(row.id),
+            "from_entity_id": str(row.from_entity_id),
+            "relationship_type": row.relationship_type,
+            "to_entity_id": str(row.to_entity_id),
+            "status": row.status,
+            "confidence": row.confidence,
+            "provenance_kind": row.provenance_kind,
+            "source_id": str(row.source_id),
+            "evidence_id": str(row.evidence_id),
+            "accepted_relationship_id": str(row.accepted_relationship_id) if row.accepted_relationship_id else None,
+        }
+        for row in db.scalars(stmt)
+    ]
 
 
 def list_relationships(db: Session, entity_id: uuid.UUID, *, limit: int = MAX_RESULTS) -> List[Dict[str, Any]]:
@@ -86,6 +162,10 @@ def neighbors_postgres(db: Session, entity_id: uuid.UUID, *, limit: int = MAX_RE
             continue
         item = entity_payload(entity)
         item["relationship"] = edge
+        item["relationship_type"] = edge["relationship_type"]
+        item["relationship_id"] = edge["relationship_id"]
+        item["provenance_kind"] = edge["provenance_kind"]
+        item["confidence"] = edge["confidence"]
         out.append(item)
     return out[:limit]
 

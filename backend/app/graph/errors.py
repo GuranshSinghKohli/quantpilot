@@ -25,3 +25,11 @@ class RelationshipConflict(GraphError):
 
 class GraphUnavailable(RuntimeError):
     """Neo4j is down or unconfigured. Postgres is unaffected."""
+
+
+class UnsafeNeo4jTarget(RuntimeError):
+    """A test tried to use the developer Neo4j instance."""
+
+
+class EvidenceInsufficient(GraphError):
+    """Candidate evidence does not explicitly state the relationship."""

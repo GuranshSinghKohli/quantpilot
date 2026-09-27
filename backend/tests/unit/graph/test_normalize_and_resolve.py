@@ -208,7 +208,7 @@ def test_confidence_and_validity_bounds():
 def test_graph_metrics_reject_high_cardinality_labels():
     metrics = Metrics()
     metrics.inc("graph_projection_total", operation="project", status="ok", kind="entity")
-    for label in ("entity_id", "relationship_id", "ticker", "cik", "url"):
+    for label in ("entity_id", "relationship_id", "candidate_id", "evidence_id", "ticker", "cik", "url"):
         assert label in FORBIDDEN_LABELS
         with pytest.raises(MetricLabelError):
             metrics.inc("graph_projection_total", **{label: "x"})

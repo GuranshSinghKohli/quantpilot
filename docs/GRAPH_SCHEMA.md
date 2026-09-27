@@ -10,6 +10,8 @@ PostgreSQL is the source of truth. Neo4j is a derived projection of `entities`, 
 | Aliases (names, tickers) | Postgres `entity_aliases` |
 | Directed relationships + provenance | Postgres `relationships` + `relationship_evidence` + `sources` + `evidence_records` |
 | Last projection attempt | Postgres `graph_projections` |
+| Projection run checkpoint | Postgres `graph_projection_runs` |
+| Proposed edges (not graph edges) | Postgres `relationship_candidates` |
 | Traversal (depth > 1) | Neo4j, if running |
 
 There is no `graph_entities` / `graph_relationships` table. Those names would duplicate ADR-006.
@@ -28,7 +30,7 @@ There is no `graph_entities` / `graph_relationships` table. Those names would du
 
 `:Entity` on every node, plus one of `:Company` `:Technology` `:Product` `:Person` `:Organization` `:Event`.
 
-Node properties: `entity_id` (identity), `entity_type`, `canonical_name`, `normalized_name`, `source_system`, `source_key`. Company nodes also have `cik`, `tickers`.
+Node properties: `entity_id` (identity), `entity_type`, `canonical_name`, `normalized_name`, `source_system`, `source_key`. Company nodes also have `cik`, `tickers`, `legal_name`, `exchange` when the SEC source provided them. `sic` / `country` / `industry` are not invented.
 
 Relationship types match the Postgres vocabulary. Properties: `relationship_id` (identity), `confidence`, `source_id`, `evidence_id`, `valid_from`, `valid_to`, `provenance_kind`, `status`.
 

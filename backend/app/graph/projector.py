@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.pipeline_context import pipeline_bind
 from app.domain.enums import EntityType
-from app.domain.models import Company, Entity, GraphProjection, Relationship, RelationshipEvidence
+from app.domain.models import Company, Entity, GraphProjection, GraphProjectionRun, Relationship, RelationshipEvidence
 from app.graph.errors import GraphUnavailable
 from app.graph.metrics import GRAPH_METRICS
 from app.graph.schema import ensure_schema
@@ -63,6 +63,12 @@ def _record(db: Session, kind: str, record_id: uuid.UUID, status: str, error: Op
 
 def _entity_params(entity: Entity) -> dict:
     company = entity.company
+    tickers: list[str] = []
+    if company is not None:
+        if company.tickers:
+            tickers = list(company.tickers)
+        elif company.ticker:
+            tickers = [company.ticker]
     return {
         "entity_id": str(entity.id),
         "entity_type": entity.entity_type,
@@ -71,9 +77,9 @@ def _entity_params(entity: Entity) -> dict:
         "source_system": entity.source_system,
         "source_key": entity.source_key,
         "cik": company.cik if company is not None else None,
-        "tickers": list(company.tickers or ([company.ticker] if company and company.ticker else []))
-        if company is not None
-        else [],
+        "tickers": tickers,
+        "legal_name": company.legal_name if company is not None else None,
+        "exchange": company.exchange if company is not None else None,
     }
 
 
@@ -84,7 +90,8 @@ def upsert_entity_node(entity: Entity) -> None:
         "MERGE (e:Entity {entity_id: $entity_id}) "
         "SET e.entity_type = $entity_type, e.canonical_name = $canonical_name, "
         "e.normalized_name = $normalized_name, e.source_system = $source_system, "
-        "e.source_key = $source_key, e.cik = $cik, e.tickers = $tickers",
+        "e.source_key = $source_key, e.cik = $cik, e.tickers = $tickers, "
+        "e.legal_name = $legal_name, e.exchange = $exchange",
         params,
     )
     # Label is from EntityType, never from a request string.
@@ -117,14 +124,43 @@ def upsert_relationship_edge(edge: Relationship) -> None:
     )
 
 
+def _checkpoint(
+    db: Session,
+    *,
+    operation: str,
+    status: str,
+    entities: int,
+    relationships: int,
+    failures: int,
+    started_at: datetime,
+    error: Optional[str] = None,
+    source: str = "cli",
+) -> None:
+    db.add(
+        GraphProjectionRun(
+            operation=operation,
+            status=status,
+            entities_projected=entities,
+            relationships_projected=relationships,
+            failures=failures,
+            source=source,
+            error=error,
+            started_at=started_at,
+            finished_at=_now(),
+        )
+    )
+
+
 def project(
     db: Session,
     *,
     entity_ids: Optional[Sequence[uuid.UUID]] = None,
     relationship_ids: Optional[Sequence[uuid.UUID]] = None,
     init_schema: bool = True,
+    source: str = "cli",
 ) -> dict:
     started = time.perf_counter()
+    started_at = _now()
     with pipeline_bind(component="graph", operation="project"):
         try:
             if init_schema:
@@ -161,13 +197,26 @@ def project(
                         status="failed",
                     )
             duration = time.perf_counter() - started
+            status = "success" if failures == 0 else "partial"
             GRAPH_METRICS.inc("graph_projection_total", operation="project", status="ok" if failures == 0 else "partial")
             GRAPH_METRICS.observe("graph_projection_duration_seconds", duration, operation="project")
+            _checkpoint(
+                db,
+                operation="project",
+                status=status,
+                entities=projected_e,
+                relationships=projected_r,
+                failures=failures,
+                started_at=started_at,
+                source=source,
+            )
             db.commit()
             log_event(
                 logger,
                 20,
                 "GRAPH_PROJECTED",
+                component="graph",
+                operation="project",
                 status="ok" if failures == 0 else "partial",
                 duration_ms=int(duration * 1000),
             )

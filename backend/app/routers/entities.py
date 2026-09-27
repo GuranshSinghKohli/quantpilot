@@ -17,10 +17,14 @@ from app.graph.queries import (
     MAX_RESULTS,
     companies_for_technology,
     direct_relationship,
+    entity_aliases,
     entity_payload,
+    entity_provenance,
     get_entity,
     list_relationships,
     neighbors,
+    relationship_candidates,
+    relationship_provenance,
     technologies_for_company,
 )
 
@@ -39,6 +43,8 @@ class EntityOut(BaseModel):
     cik: Optional[str] = None
     tickers: Optional[list] = None
     ticker: Optional[str] = None
+    legal_name: Optional[str] = None
+    exchange: Optional[str] = None
     technology_slug: Optional[str] = None
 
 
@@ -79,6 +85,40 @@ def read_neighbors(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"entity_id": str(entity_id), "depth": depth, "neighbors": items}
+
+
+@router.get("/entities/{entity_id}/aliases")
+def read_aliases(
+    entity_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=MAX_RESULTS),
+) -> dict:
+    _entity_or_404(db, entity_id)
+    return {"entity_id": str(entity_id), "aliases": entity_aliases(db, entity_id, limit=limit)}
+
+
+@router.get("/entities/{entity_id}/provenance")
+def read_entity_provenance(entity_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    _entity_or_404(db, entity_id)
+    return entity_provenance(db, entity_id) or {}
+
+
+@router.get("/entities/{entity_id}/candidates")
+def read_candidates(
+    entity_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=MAX_RESULTS),
+) -> dict:
+    _entity_or_404(db, entity_id)
+    return {"entity_id": str(entity_id), "candidates": relationship_candidates(db, entity_id, limit=limit)}
+
+
+@router.get("/relationships/{relationship_id}/provenance")
+def read_relationship_provenance(relationship_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    payload = relationship_provenance(db, relationship_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="relationship not found")
+    return payload
 
 
 @router.get("/entities/{entity_id}/technologies")

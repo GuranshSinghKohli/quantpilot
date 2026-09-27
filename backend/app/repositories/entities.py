@@ -54,6 +54,7 @@ def get_or_create_company(db: Session, data: CompanyIn) -> Tuple[Company, bool]:
                 source_system="sec" if data.cik else None,
                 source_key=data.cik,
             )
+            tickers = [data.ticker] if data.ticker else []
             company = Company(
                 entity=entity,
                 legal_name=data.legal_name,
@@ -61,10 +62,10 @@ def get_or_create_company(db: Session, data: CompanyIn) -> Tuple[Company, bool]:
                 exchange=data.exchange,
                 cik=data.cik,
                 website=data.website,
+                tickers=tickers or None,
             )
             db.add(company)
             db.flush()
-            tickers = [data.ticker] if data.ticker else []
             sync_company_aliases(db, entity, legal_name=data.legal_name, tickers=tickers)
             db.flush()
         return company, True

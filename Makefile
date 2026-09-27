@@ -32,7 +32,8 @@ LAKE_ENV = LAKE_BACKEND=s3 LAKE_ENDPOINT_URL=http://localhost:$(MINIO_PORT) \
         load-news load-market load-company load-all \
         pipeline-status pipeline-check pipeline-reconcile pipeline-quality \
         retry-load reprocess-job retry-ingestion metrics-up metrics \
-        graph-up graph-down graph-status graph-project graph-check graph-seed test-neo4j
+        graph-up graph-down graph-test-up graph-test-down graph-status graph-project \
+        graph-reconcile graph-repair graph-quality graph-check graph-seed test-neo4j
 
 help:
 	@echo "up                compose stack (postgres, redis, migrate, backend, frontend)"
@@ -83,13 +84,18 @@ help:
 	@echo "retry-ingestion   new ingest from FAILED/PARTIAL RUN="
 	@echo "metrics           GET $(API_URL)/metrics"
 	@echo "metrics-up        optional Prometheus scraping the API (compose profile observability)"
-	@echo "graph-up          Neo4j (compose profile graph) then graph-status"
-	@echo "graph-down        stop Neo4j (volume kept)"
+	@echo "graph-up          developer Neo4j (compose profile graph) then graph-status"
+	@echo "graph-down        stop developer Neo4j (volume kept)"
+	@echo "graph-test-up     disposable Neo4j for tests (profile graph-test, :17687)"
+	@echo "graph-test-down   stop the test Neo4j (volume kept, separate from developer data)"
 	@echo "graph-status      Postgres vs Neo4j counts, last projection, schema"
 	@echo "graph-project     idempotent Postgres → Neo4j upsert"
+	@echo "graph-reconcile   read-only ID diff (never deletes)"
+	@echo "graph-repair      opt-in upserts; deletion needs --allow-delete --confirm-delete"
+	@echo "graph-quality     read-only entity/relationship/candidate/projection hygiene"
 	@echo "graph-check       pending/failed projections (does not mutate)"
 	@echo "graph-seed        deterministic evidenced relationship fixtures"
-	@echo "test-neo4j        Neo4j tier (skip unless TEST_NEO4J_URI is set)"
+	@echo "test-neo4j        isolated Neo4j tier (TEST_NEO4J_URI=localhost:17687; never :7687)"
 
 up:
 	$(COMPOSE) up --build
@@ -265,7 +271,10 @@ metrics-up:
 
 NEO4J_PASSWORD ?= quantpilot-dev-only
 NEO4J_BOLT_PORT ?= 7687
-TEST_NEO4J_URI ?= bolt://localhost:$(NEO4J_BOLT_PORT)
+NEO4J_TEST_PASSWORD ?= quantpilot-test-only
+NEO4J_TEST_BOLT_PORT ?= 17687
+# Tests never default to the developer bolt port.
+TEST_NEO4J_URI ?= bolt://localhost:$(NEO4J_TEST_BOLT_PORT)
 
 graph-up:
 	NEO4J_PASSWORD=$(NEO4J_PASSWORD) NEO4J_BOLT_PORT=$(NEO4J_BOLT_PORT) \
@@ -274,6 +283,13 @@ graph-up:
 
 graph-down:
 	$(COMPOSE) --profile graph stop neo4j
+
+graph-test-up:
+	NEO4J_TEST_PASSWORD=$(NEO4J_TEST_PASSWORD) NEO4J_TEST_BOLT_PORT=$(NEO4J_TEST_BOLT_PORT) \
+		$(COMPOSE) --profile graph-test up -d --wait neo4j-test
+
+graph-test-down:
+	$(COMPOSE) --profile graph-test stop neo4j-test
 
 graph-status:
 	cd backend && NEO4J_URI=bolt://localhost:$(NEO4J_BOLT_PORT) NEO4J_PASSWORD=$(NEO4J_PASSWORD) \
@@ -287,9 +303,21 @@ graph-check:
 	cd backend && NEO4J_URI=bolt://localhost:$(NEO4J_BOLT_PORT) NEO4J_PASSWORD=$(NEO4J_PASSWORD) \
 		../$(PY) -m app.graph check
 
+graph-reconcile:
+	cd backend && NEO4J_URI=bolt://localhost:$(NEO4J_BOLT_PORT) NEO4J_PASSWORD=$(NEO4J_PASSWORD) \
+		../$(PY) -m app.graph reconcile
+
+graph-repair:
+	cd backend && NEO4J_URI=bolt://localhost:$(NEO4J_BOLT_PORT) NEO4J_PASSWORD=$(NEO4J_PASSWORD) \
+		../$(PY) -m app.graph repair
+
+graph-quality:
+	cd backend && NEO4J_URI=bolt://localhost:$(NEO4J_BOLT_PORT) NEO4J_PASSWORD=$(NEO4J_PASSWORD) \
+		../$(PY) -m app.graph quality
+
 graph-seed:
 	cd backend && ../$(PY) -m app.graph seed-fixtures
 
 test-neo4j:
-	cd backend && TEST_NEO4J_URI=$(TEST_NEO4J_URI) NEO4J_URI=$(TEST_NEO4J_URI) \
-		NEO4J_PASSWORD=$(NEO4J_PASSWORD) ../$(PY) -m pytest tests/neo4j -q
+	cd backend && TEST_NEO4J_URI=$(TEST_NEO4J_URI) TEST_NEO4J_PASSWORD=$(NEO4J_TEST_PASSWORD) \
+		../$(PY) -m pytest tests/neo4j -q

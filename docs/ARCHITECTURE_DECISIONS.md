@@ -69,6 +69,8 @@ Baseline facts come from `CURRENT_STATE.md`.
 
 **Amended (Phase 3.1).** Compose profile `graph` runs Neo4j 5 community. The API starts if Neo4j is down. `/ready` reports `neo4j` and does not fail on it. See `docs/PHASE3_1_PLAN.md`, `docs/GRAPH_SCHEMA.md`, ADR-025.
 
+**Amended (Phase 3.2).** Tests use a separate `graph-test` Neo4j (`localhost:17687`). Reconciliation is read-only. Repair is opt-in. Relationship candidates are not graph edges until accepted. See `docs/PHASE3_2_PLAN.md`, ADR-026.
+
 ## ADR-008 — pgvector replaces ChromaDB, later
 
 **Decision (future phase).** Embeddings for evidence chunks live in a Postgres table with a `vector` column. The embedding model and dimension are recorded per row (`embedding_model`) so re-embedding is explicit.
@@ -371,5 +373,22 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - Parallel `graph_entities` / `graph_relationships` tables.
 - LLM / article extraction in this phase.
 - Making Neo4j required for `/ready` or API startup.
+
+## ADR-026 — Graph reliability and relationship candidates
+
+**Status: Accepted, shipped in Phase 3.2.**
+
+**Problem.** Phase 3.1 projection was additive and shared the developer Neo4j with tests. Stale nodes accumulated. There was no candidate stage before a canonical edge.
+
+**Decision.**
+- Disposable `neo4j-test` container (profile `graph-test`). Tests refuse `localhost:7687`.
+- `graph reconcile` is read-only ID comparison. `graph repair` upserts missing/mismatched state. Deletion requires `--allow-delete --confirm-delete`.
+- `relationship_candidates` is a staging table. Acceptance uses `persist_relationship`. Rejected candidates never reach Neo4j.
+- Spark-test defaults `TEST_KAFKA_BOOTSTRAP=kafka:29092`; host Kafka tests stay on `localhost:9092`.
+
+**Rejected.**
+- Automatic Neo4j deletes during reconcile.
+- Fuzzy entity matching or LLM relationship extraction.
+- Using the developer Neo4j volume as the test database.
 
 

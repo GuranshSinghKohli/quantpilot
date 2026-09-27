@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from typing import Iterable, Optional
 
 from sqlalchemy.orm import Session
 
 from app.domain.enums import AliasType
-from app.domain.models import Entity, EntityAlias
-from app.graph.normalize import normalize_name, normalize_ticker
+from app.domain.models import Company, Entity, EntityAlias
+from app.graph.normalize import legal_name_stem, normalize_name, normalize_ticker
 from app.repositories._upsert import insert_ignore
 
 
@@ -46,10 +46,57 @@ def upsert_alias(
     )
 
 
-def sync_company_aliases(db: Session, entity: Entity, *, legal_name: str, tickers: list[str]) -> None:
+def _ticker_list(company: Optional[Company], extra: Iterable[str]) -> list[str]:
+    seen: list[str] = []
+    for symbol in extra:
+        if symbol and symbol not in seen:
+            seen.append(symbol)
+    if company is None:
+        return seen
+    if company.ticker and company.ticker not in seen:
+        seen.append(company.ticker)
+    for symbol in company.tickers or []:
+        if symbol and symbol not in seen:
+            seen.append(symbol)
+    return seen
+
+
+def sync_company_aliases(
+    db: Session,
+    entity: Entity,
+    *,
+    legal_name: str,
+    tickers: list[str],
+    display_name: Optional[str] = None,
+    source_name: Optional[str] = None,
+) -> None:
+    """Idempotent aliases from authoritative structured fields only."""
     entity.normalized_name = normalize_name(entity.canonical_name)
     upsert_alias(db, entity.id, legal_name, AliasType.LEGAL_NAME)
-    upsert_alias(db, entity.id, entity.canonical_name, AliasType.DISPLAY_NAME)
-    for symbol in tickers:
-        if symbol:
-            upsert_alias(db, entity.id, symbol, AliasType.TICKER)
+    display = display_name or entity.canonical_name
+    upsert_alias(db, entity.id, display, AliasType.DISPLAY_NAME)
+    stem = legal_name_stem(legal_name)
+    if stem and normalize_name(stem) != normalize_name(legal_name):
+        upsert_alias(db, entity.id, stem, AliasType.DISPLAY_NAME)
+    if source_name and normalize_name(source_name) not in {
+        normalize_name(legal_name),
+        normalize_name(display),
+    }:
+        upsert_alias(db, entity.id, source_name, AliasType.SOURCE_ALIAS)
+    for symbol in _ticker_list(entity.company, tickers):
+        upsert_alias(db, entity.id, symbol, AliasType.TICKER)
+
+
+def enrich_company_aliases(db: Session, company: Company) -> None:
+    """Re-apply structured aliases for an existing company row."""
+    entity = company.entity or db.get(Entity, company.entity_id)
+    if entity is None:
+        return
+    sync_company_aliases(
+        db,
+        entity,
+        legal_name=company.legal_name,
+        tickers=list(company.tickers or ([company.ticker] if company.ticker else [])),
+        display_name=entity.canonical_name,
+        source_name=company.source if company.source and company.source.lower() not in {"sec"} else None,
+    )

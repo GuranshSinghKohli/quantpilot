@@ -100,6 +100,15 @@ class ResolutionStatus(StrEnum):
     AMBIGUOUS = "AMBIGUOUS"
 
 
+class CandidateStatus(StrEnum):
+    """A candidate is not a graph edge until ACCEPTED."""
+
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
+    AMBIGUOUS = "AMBIGUOUS"
+
+
 class WindowLabel(StrEnum):
     """Event-impact windows relative to the event date (trading days)."""
 

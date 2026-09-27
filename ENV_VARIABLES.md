@@ -168,7 +168,9 @@ Optional. The API starts if Neo4j is unset or down. Postgres remains the source 
 | `NEO4J_PASSWORD` | Optional | `SecretStr`; never logged | compose default `quantpilot-dev-only` |
 | `NEO4J_DATABASE` | Optional | Default `neo4j` | `neo4j` |
 
-`make graph-up` starts compose profile `graph`. `TEST_NEO4J_URI` enables `make test-neo4j`.
+`make graph-up` starts compose profile `graph` (developer instance, `localhost:7687`). `make graph-test-up` starts profile `graph-test` (disposable, `localhost:17687`). `TEST_NEO4J_URI` must be the isolated URI (`bolt://localhost:17687` or `bolt://neo4j-test:7687`); `localhost:7687` is rejected. `TEST_NEO4J_PASSWORD` defaults to `quantpilot-test-only`.
+
+`spark-test` defaults `TEST_KAFKA_BOOTSTRAP` to `kafka:29092`. Host `make test-kafka` still uses `localhost:9092`. Override the container with `SPARK_TEST_KAFKA_BOOTSTRAP` only if you need a different broker.
 
 Test-only: `TEST_KAFKA_BOOTSTRAP` enables the `kafka` tier (`make test-kafka`; per-test `test.<id>.*` topics and groups, deleted afterwards). `TEST_S3_ENDPOINT`, `TEST_S3_ACCESS_KEY_ID`, `TEST_S3_SECRET_ACCESS_KEY` enable the `s3` tier (`make test-s3`), which creates and deletes its own `quantpilot-test-*` buckets. The test suite always pins the lake to `backend/tests/_test_lake/`, Kafka to the unroutable `127.0.0.1:9`, and topic/group names to `test.unconfigured.*`. It also blanks `NEWS_API_KEY`/`MARKET_API_KEY` and points every source base URL at `http://127.0.0.1:9`, so no test can reach a real provider; adapter tests use an httpx `MockTransport`. `make test-kafka` also sets the `TEST_S3_*` variables so the mocked-provider end-to-end tests run against MinIO. The `spark` tier needs pyspark + Java 17 and runs in the `spark-test` image (`make test-spark`, which sets `TEST_S3_*` for MinIO); `SPARK_TEST_DATABASE_URL` / `SPARK_TEST_KAFKA_BOOTSTRAP` pass `TEST_DATABASE_URL` / `TEST_KAFKA_BOOTSTRAP` into that container to run every tier there.
 

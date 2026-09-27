@@ -21,13 +21,14 @@ Labels = Tuple[Tuple[str, str], ...]
 ALLOWED_LABELS = frozenset({
     "domain", "source", "operation", "status", "component",
     "topic", "partition", "result", "kind", "provider", "reason",
-    "method", "route",
+    "method", "route", "entity_type", "relationship_type",
 })
 
 FORBIDDEN_LABELS = frozenset({
     "event_id", "job_id", "request_id", "offset", "url", "ticker", "cik",
     "name", "title", "error", "user_id", "raw_uri", "article", "payload",
     "correlation_id", "investigation_id", "entity_id", "relationship_id",
+    "candidate_id", "evidence_id",
 })
 
 DEFAULT_MAX_SERIES = 64

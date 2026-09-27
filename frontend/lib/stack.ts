@@ -26,7 +26,7 @@ export const CURRENT_STACK: { layer: string; tech: string }[] = [
   },
   {
     layer: "Graph",
-    tech: "Postgres entities/relationships/aliases (SoT) → optional Neo4j 5 projection (compose profile graph)",
+    tech: "Postgres entities/relationships/aliases/candidates (SoT) → optional Neo4j 5 projection + reconcile/repair (profiles graph, graph-test)",
   },
   { layer: "Ship", tech: "Docker Compose, GitHub Actions, Pytest (SQLite + Postgres tiers)" },
   {
