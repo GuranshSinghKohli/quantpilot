@@ -1,6 +1,6 @@
-# ResearchResult (Phase 4.2)
+# ResearchResult (Phase 4.3)
 
-`POST /api/research` returns a bounded, serializable `ResearchResult`. It is not a prose report.
+`POST /api/research` returns a bounded, serializable `ResearchResult`.
 
 ```
 request
@@ -15,11 +15,19 @@ errors
 unavailable_components    # semantic | llm | agent name
 created_at
 research_job_id           # when persisted
+research_id               # same id, for API display
+status                    # succeeded | partial | failed
+plan                      # ResearchPlan
+report                    # ResearchReport (omits empty sections)
 ```
+
+`succeeded` is a completed run. `partial` means at least one selected specialist failed and the rest were kept. `failed` means the request was invalid or oversized with nothing to report.
+
+Report sections, when present: `executive_summary`, `key_facts`, `market_observations`, `company_relationships`, `technology_findings`, `implications`, `scenarios`, `conflicts`, `limitations`, `citations`. Implications stay `INFERENCE`. Scenarios stay `SCENARIO`. Conflicts list both sides.
 
 ## Persistence
 
-Optional write to existing tables (`0003`): `research_jobs`, `agent_runs`, `research_claims`. `claim_evidence` is created only when an evidence_ref is a real `evidence_records.id`. Full EvidencePackages and raw LLM transcripts are not stored.
+Optional write to existing tables (`0003`): `research_jobs`, `agent_runs`, `research_claims`, `reports`. `claim_evidence` is created only when an evidence_ref is a real `evidence_records.id`. The plan and report live in `reports.sections`. Full EvidencePackages and raw LLM transcripts are not stored. Same idempotency key does not duplicate claims.
 
 Job type is `event_research` when the request has event IDs and no entity IDs; otherwise `company_research`.
 

@@ -1,4 +1,4 @@
-# LangGraph workflow (Phase 4.2)
+# LangGraph workflow (Phase 4.3)
 
 Topology is fixed in code. The LLM cannot add nodes or edges.
 
@@ -6,8 +6,12 @@ Topology is fixed in code. The LLM cannot add nodes or edges.
 START
   → validate_request
   → build_evidence_package
-  → run_specialized_agents    # news, company, technology, market (fixed order)
-  → evidence_verification
+  → create_research_plan
+  → run_relevant_specialists   # only the planned subset, fixed order
+  → collect_findings
+  → verify_claims
+  → resolve_conflicts
+  → assemble_report
   → finalize_result
   → END
 ```
@@ -18,19 +22,19 @@ Implementation: `app/research/graph.py` using the already-pinned `langgraph==0.6
 
 `ResearchState` is a JSON-serializable dict:
 
-`request`, `evidence_package`, `agent_findings`, `claims`, `verification_results`, `errors`, `metadata`, `result`
+`request`, `evidence_package`, `plan`, `agent_findings`, `claims`, `verification_results`, `errors`, `metadata`, `report`, `result`
 
 The database session and LLM provider are contextvars (`app/research/runtime.py`), not state fields. Findings reference citation/document/chunk/evidence IDs, not raw document bodies.
 
 ## Specialists
 
-The specialist node is a conceptual fan-out. Execution is sequential (`news` → `company` → `technology` → `market`) so FakeLLM tests are deterministic. Agents write only to `agent_findings[agent]`.
+The specialist node runs only agents named on the `ResearchPlan`, in fixed order (`news` → `company` → `technology` → `market`). Others are stored as `skipped`. FakeLLM tests stay deterministic because the order does not change.
 
 Retries: transient timeout / rate-limit / temporary provider errors use bounded exponential backoff (`LLM_MAX_RETRIES`). Permanent auth or malformed output after retries fail that agent only.
 
 ## Prompts
 
-`news-v1`, `company-v1`, `technology-v1`, `market-v1`, `evidence-v1`. Change the version string when wording changes. Raw prompts and raw completions are not persisted.
+`master-v1`, `news-v1`, `company-v1`, `technology-v1`, `market-v1`, `evidence-v1`, `report-v1`. Change the version string when wording changes. Raw prompts and raw completions are not persisted. The report prompt may only repeat statements already on the verified set.
 
 ## Later jobs
 

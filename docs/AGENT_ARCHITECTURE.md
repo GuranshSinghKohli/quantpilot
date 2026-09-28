@@ -1,8 +1,10 @@
-# Agent architecture (Phase 4.2)
+# Agent architecture (Phase 4.3)
 
 Specialized research agents consume a Phase 4.1 **EvidencePackage**. They do not search PostgreSQL, Neo4j, pgvector, Kafka, or S3 themselves.
 
-This path is **not** the investigation graph and **not** the ticker analysis graph. Those remain in `app/workflows/`. There is no Master Agent in this phase.
+This path is **not** the investigation graph and **not** the ticker analysis graph. Those remain in `app/workflows/`.
+
+The master node is bounded. It chooses which of the four specialists to run and how verified findings are grouped. It does not create tools, nodes, evidence, or citations. See `docs/PHASE4_3_PLAN.md`.
 
 ## Agents
 

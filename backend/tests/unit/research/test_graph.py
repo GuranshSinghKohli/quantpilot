@@ -38,19 +38,25 @@ def test_all_agents_succeed(db):
     blob = json.dumps(result.model_dump(mode="json"), default=str)
     assert result.verified_claims or result.findings
     assert result.citations
-    assert {m.agent for m in result.agent_metadata} >= {"news", "company", "technology", "market", "evidence"}
+    ran = {m.agent for m in result.agent_metadata if m.status == "succeeded"}
+    assert {"master", "news", "company", "technology", "evidence"} <= ran
+    assert any(m.agent == "market" and m.status == "skipped" for m in result.agent_metadata)
+    assert result.plan is not None and "market" not in result.plan.selected_agents
+    assert result.report is not None and result.status == "succeeded"
     assert "buy" not in blob.lower() or "should buy" not in blob.lower()
     assert result.research_job_id is not None
 
 
 def test_one_and_multiple_agent_failures(db):
     world = seed_partnership(db)
-    one = _run(db, world, fail_agents={"market"})
-    assert "market" in one.unavailable_components
+    one = _run(db, world, fail_agents={"news"})
+    assert "news" in one.unavailable_components
+    assert one.status == "partial"
     assert one.verified_claims or one.findings
-    assert any(item.get("stage") == "market" for item in one.errors)
+    assert any(item.get("stage") == "news" for item in one.errors)
     many = _run(db, world, fail_agents={"news", "technology", "market"})
-    assert {"news", "technology", "market"} <= set(many.unavailable_components)
+    assert {"news", "technology"} <= set(many.unavailable_components)
+    assert "market" not in many.unavailable_components
     assert any(m.agent == "evidence" and m.status == "succeeded" for m in many.agent_metadata)
 
 

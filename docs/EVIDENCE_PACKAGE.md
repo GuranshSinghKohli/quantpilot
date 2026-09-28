@@ -2,7 +2,7 @@
 
 `ContextAssembler` is a deterministic service. It is not LangGraph and does not write claims.
 
-Phase 4.2 agents consume this package via `POST /api/research`. They still must not search tables directly. See `docs/PHASE4_2_PLAN.md`.
+Phase 4.2 specialists consume this package via `POST /api/research`. Phase 4.3 plans and reports over the same package. Agents still must not search tables directly. See `docs/PHASE4_3_PLAN.md`.
 
 Default ceilings: 20 entities, 20 events, 20 relationships, 10 documents/chunks, 500-character excerpts. Requests above the ceiling are rejected.
 

@@ -443,9 +443,28 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - MarketAgent reports existing impact windows only. No buy/sell/hold, no causation, no prediction.
 
 **Rejected.**
-- Master Agent, autonomous planning/browsing, CrewAI, MCP research tools.
+- Autonomous browsing, CrewAI, MCP research tools.
 - LLM-created graph edges or relationship extraction.
 - A second vector database or a competing evidence table.
+
+## ADR-030 — Bounded master research, verified report
+
+**Status: Accepted, shipped in Phase 4.3.**
+
+**Problem.** A research request needs a plan, a subset of the existing specialists, and a report that cannot promote unsupported text into a fact.
+
+**Decision.**
+- Same `app/research/` graph. Nine fixed nodes. The model fills `ResearchPlan` and may repeat already-verified summary lines.
+- Unknown or oversized plans fall back to the documented keyword/package router.
+- Report assembly is deterministic. Unmatched summary lines are dropped.
+- Conflicts stay conflicts. Inference and scenario stay labeled.
+- Persist the report on the existing `reports` table. No migration past `0011`.
+- `run_research()` stays synchronous and worker-callable. No Kafka research topic in this phase.
+
+**Rejected.**
+- A second research endpoint, a second LLM abstraction, or a new claims table.
+- Letting the model add tools, nodes, citations, or investment advice.
+- Treating FakeLLM evaluation numbers as model quality.
 
 
 

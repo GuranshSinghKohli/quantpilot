@@ -10,6 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain.enums import ClaimKind, VerificationStatus
 
+ALLOWED_SPECIALISTS = ("news", "company", "technology", "market")
+PLAN_VERSION = "plan-v1"
+
 
 class AgentFinding(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -22,6 +25,7 @@ class AgentFinding(BaseModel):
     citations: List[str] = Field(default_factory=list, max_length=20)
     confidence: float = Field(ge=0.0, le=1.0, default=0.5)
     reasoning_summary: str = Field(default="", max_length=500)
+    verification_status: Optional[VerificationStatus] = None
 
     @field_validator("statement", "reasoning_summary")
     @classmethod
@@ -79,6 +83,64 @@ class ToolResult(BaseModel):
     errors: List[str] = Field(default_factory=list)
 
 
+class MasterPlanPayload(BaseModel):
+    """Structured planner output. Agent names outside the fixed enum are rejected."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    objective: str = Field(min_length=1, max_length=500)
+    selected_agents: List[str] = Field(default_factory=list, max_length=8)
+    evidence_requirements: List[str] = Field(default_factory=list, max_length=8)
+    requested_sections: List[str] = Field(default_factory=list, max_length=12)
+    reasoning_notes: str = Field(default="", max_length=500)
+
+
+class SummaryDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bullets: List[str] = Field(default_factory=list, max_length=8)
+
+
+class ResearchPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    objective: str
+    normalized_request: Dict[str, Any]
+    selected_agents: List[str]
+    evidence_requirements: List[str] = Field(default_factory=list)
+    requested_sections: List[str] = Field(default_factory=list)
+    reasoning_notes: str = ""
+    plan_version: str = PLAN_VERSION
+    source: str = "fallback"
+
+
+class ReportItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    statement: str
+    finding_type: ClaimKind
+    claim_id: str
+    citation_ids: List[str] = Field(default_factory=list)
+    agent: str
+
+
+class ResearchReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    executive_summary: List[ReportItem] = Field(default_factory=list)
+    key_facts: Optional[List[ReportItem]] = None
+    market_observations: Optional[List[ReportItem]] = None
+    company_relationships: Optional[List[ReportItem]] = None
+    technology_findings: Optional[List[ReportItem]] = None
+    implications: Optional[List[ReportItem]] = None
+    scenarios: Optional[List[ReportItem]] = None
+    conflicts: Optional[List[ReportItem]] = None
+    limitations: List[str] = Field(default_factory=list)
+    citations: List[Dict[str, Any]] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
 class ResearchResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -94,6 +156,10 @@ class ResearchResult(BaseModel):
     unavailable_components: List[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     research_job_id: Optional[uuid.UUID] = None
+    research_id: Optional[uuid.UUID] = None
+    status: str = "succeeded"
+    plan: Optional[ResearchPlan] = None
+    report: Optional[ResearchReport] = None
 
 
 def empty_package(query: str = "") -> Dict[str, Any]:
@@ -130,5 +196,7 @@ def initial_state(request: Dict[str, Any]) -> Dict[str, Any]:
         "verification_results": [],
         "errors": [],
         "metadata": {},
+        "plan": {},
+        "report": {},
         "result": {},
     }

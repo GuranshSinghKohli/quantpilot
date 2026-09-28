@@ -140,6 +140,10 @@ class FakeLLMProvider:
             raise LLMError("authentication failure", retryable=False, error_type="auth")
 
     def _payload(self, agent: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        if agent == "master":
+            return self._master_payload(context)
+        if agent == "report":
+            return {"bullets": list(context.get("allowed_statements") or [])[:3]}
         if self.scenario == "missing_citation":
             return {
                 "findings": [
@@ -200,6 +204,41 @@ class FakeLLMProvider:
                 ]
             }
         return {"findings": _valid_findings(agent, context)}
+
+    def _master_payload(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        if self.scenario == "bad_plan":
+            return {
+                "objective": "invalid specialist",
+                "selected_agents": ["sql_agent"],
+                "evidence_requirements": [],
+                "requested_sections": [],
+                "reasoning_notes": "rejected",
+            }
+        if self.scenario == "oversized_plan":
+            return {
+                "objective": "too many agents",
+                "selected_agents": ["news", "company", "technology", "market", "news"],
+                "evidence_requirements": [],
+                "requested_sections": [],
+                "reasoning_notes": "oversized",
+            }
+        agents = list(context.get("candidate_agents") or [])
+        return {
+            "objective": str(context.get("query") or "research")[:500] or "research",
+            "selected_agents": agents,
+            "evidence_requirements": ["citation_required_for_facts"],
+            "requested_sections": [
+                "key_facts",
+                "market_observations",
+                "company_relationships",
+                "technology_findings",
+                "implications",
+                "scenarios",
+                "conflicts",
+                "limitations",
+            ],
+            "reasoning_notes": "documented router",
+        }
 
 
 def _valid_findings(agent: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:

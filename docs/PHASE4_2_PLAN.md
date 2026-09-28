@@ -3,7 +3,7 @@
 Status: **as-built with this step.**
 Baseline: `6440968 feat: establish evidence and retrieval foundation` (Alembic head `0011`).
 
-Phase 4.2 adds a **deterministic LangGraph** that consumes a Phase 4.1 EvidencePackage and emits structured, verified research findings. It does **not** add a Master Agent, autonomous planning, browsing, MCP research tools, LLM extraction into the graph, investment advice, or stock prediction.
+Phase 4.2 adds a **deterministic LangGraph** that consumes a Phase 4.1 EvidencePackage and emits structured, verified research findings. It does **not** add autonomous browsing, MCP research tools, LLM extraction into the graph, investment advice, or stock prediction. Phase 4.3 later added a bounded master node on this same graph; the topology diagram below is the 4.2 shape. See `docs/PHASE4_3_PLAN.md` for the current nodes.
 
 ```
 ResearchRequest

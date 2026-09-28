@@ -66,10 +66,11 @@ def test_partial_failure_and_success_via_endpoint(db):
     partial = _run(
         db,
         ResearchRequest(query="AMD partnership with Meta", entity_ids=[world["amd"].entity_id]),
-        llm=FakeLLMProvider(fail_agents={"market"}),
+        llm=FakeLLMProvider(fail_agents={"news"}),
         persist=False,
     )
-    assert "market" in partial.unavailable_components
+    assert "news" in partial.unavailable_components
+    assert partial.status == "partial"
     success = _run(
         db,
         ResearchRequest(query="AMD partnership with Meta", entity_ids=[world["amd"].entity_id]),
@@ -77,4 +78,4 @@ def test_partial_failure_and_success_via_endpoint(db):
         persist=False,
     )
     assert success.agent_metadata
-    assert {m.status for m in success.agent_metadata} <= {"succeeded"}
+    assert {m.status for m in success.agent_metadata} <= {"succeeded", "skipped"}

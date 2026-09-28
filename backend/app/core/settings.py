@@ -124,6 +124,12 @@ class Settings(BaseSettings):
     LLM_OUTPUT_PRICE_PER_MTOK: Optional[float] = None
     RESEARCH_TIMEOUT_SECONDS: float = Field(60.0, ge=1)
     RESEARCH_MAX_FINDINGS_PER_AGENT: int = Field(12, ge=1, le=40)
+    RESEARCH_MAX_AGENTS: int = Field(4, ge=1, le=4)
+    RESEARCH_MAX_FINDINGS: int = Field(40, ge=1, le=80)
+    RESEARCH_MAX_CLAIMS: int = Field(40, ge=1, le=80)
+    RESEARCH_MAX_EVIDENCE: int = Field(20, ge=1, le=50)
+    RESEARCH_MAX_REPORT_SECTIONS: int = Field(8, ge=1, le=12)
+    RESEARCH_MAX_SUMMARY_ITEMS: int = Field(3, ge=1, le=8)
     INVESTIGATION_PRICE_MOVE_THRESHOLD: float = 2.5
     INVESTIGATION_MATERIALITY_THRESHOLD: float = 40.0
     INVESTIGATION_EXPOSURE_WEIGHT: float = 100.0

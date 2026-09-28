@@ -10,6 +10,8 @@ PROMPT_VERSIONS = {
     "technology": "technology-v1",
     "market": "market-v1",
     "evidence": "evidence-v1",
+    "master": "master-v1",
+    "report": "report-v1",
 }
 
 _SHARED = """You are a QuantPilot research specialist. You receive a bounded EvidencePackage.
@@ -26,6 +28,16 @@ Do not produce buy, sell, hold, price targets, expected returns, or portfolio ad
 """
 
 SYSTEM_PROMPTS = {
+    "master": (
+        "Role: MasterResearch. You may only choose specialists from "
+        "news, company, technology, market. You cannot add tools, nodes, or agents. "
+        "Return JSON with objective, selected_agents, evidence_requirements, "
+        "requested_sections, reasoning_notes. Do not invent evidence."
+    ),
+    "report": (
+        "Role: report summary. Repeat only statements provided in allowed_statements. "
+        "Do not add facts, recommendations, or causal claims. Return JSON {\"bullets\": [...]}."
+    ),
     "news": _SHARED
     + "Role: NewsAgent. Summarize news documents and explicit events. "
     "Do not infer a relationship from two names appearing in one article.",

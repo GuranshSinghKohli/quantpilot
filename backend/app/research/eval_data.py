@@ -221,7 +221,7 @@ CASES: List[Dict[str, Any]] = [
         "expected_types": ["FACT"],
         "must_cite": True,
         "scenario": "valid",
-        "fail_agents": ["market"],
+        "fail_agents": ["news"],
         "relevant_agents": ["news", "company"],
         "expect_partial": True,
     },

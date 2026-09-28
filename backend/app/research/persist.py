@@ -5,12 +5,14 @@ from __future__ import annotations
 import hashlib
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domain.enums import AgentRunStatus, ClaimKind, EvidenceStance, ResearchJobStatus, ResearchJobType, VerificationStatus
-from app.domain.models import AgentRun, ClaimEvidence, EvidenceRecord, ResearchClaim
+from app.domain.enums import ReportStatus
+from app.domain.models import AgentRun, ClaimEvidence, EvidenceRecord, Report, ResearchClaim
 from app.domain.schemas import ResearchJobIn
 from app.repositories.research_jobs import create_job
 from app.research.schemas import ResearchResult
@@ -23,10 +25,11 @@ def persist_result(
     result: ResearchResult,
     *,
     owner_key: str = "research-api",
+    idempotency_key: Optional[str] = None,
 ) -> uuid.UUID:
     payload = request.model_dump(mode="json")
-    key = hashlib.sha256(f"{owner_key}|{uuid.uuid4().hex}".encode("utf-8")).hexdigest()
-    job, _ = create_job(
+    key = idempotency_key or hashlib.sha256(f"{owner_key}|{uuid.uuid4().hex}".encode("utf-8")).hexdigest()
+    job, created = create_job(
         db,
         ResearchJobIn(
             owner_key=owner_key,
@@ -37,11 +40,16 @@ def persist_result(
         ),
     )
     now = datetime.now(timezone.utc)
-    failed = any(item.get("error_type") in {"invalid_request", "oversized", "auth"} for item in result.errors)
-    partial = bool(result.unavailable_components) or any(item.get("stage") in {"news", "company", "technology", "market"} for item in result.errors)
-    if failed and not result.findings and not result.verified_claims:
+    existing_claims = db.scalar(
+        select(func.count()).select_from(ResearchClaim).where(ResearchClaim.research_job_id == job.id)
+    )
+    if not created and existing_claims:
+        result.research_job_id = job.id
+        result.research_id = job.id
+        return job.id
+    if result.status == "failed":
         job.status = ResearchJobStatus.FAILED.value
-    elif partial:
+    elif result.status == "partial":
         job.status = ResearchJobStatus.PARTIAL.value
     else:
         job.status = ResearchJobStatus.SUCCEEDED.value
@@ -65,6 +73,9 @@ def persist_result(
             status=status,
             model=meta.model,
             prompt_version=meta.prompt_version,
+            input_hash=hashlib.sha256(
+                f"{meta.agent}|{meta.prompt_version}|{meta.status}".encode("utf-8")
+            ).hexdigest(),
             tokens_in=meta.input_tokens,
             tokens_out=meta.output_tokens,
             latency_ms=meta.duration_ms,
@@ -76,7 +87,11 @@ def persist_result(
         db.flush()
         run_ids[meta.agent] = run.id
 
+    seen_statements = set()
     for claim in [*result.verified_claims, *result.unsupported_claims, *result.conflicts]:
+        if claim.statement in seen_statements:
+            continue
+        seen_statements.add(claim.statement)
         row = ResearchClaim(
             research_job_id=job.id,
             agent_run_id=run_ids.get(claim.agent),
@@ -103,7 +118,21 @@ def persist_result(
                     else EvidenceStance.CONTRADICTS.value,
                 )
             )
+    if result.report is not None:
+        db.add(
+            Report(
+                research_job_id=job.id,
+                version=1,
+                status=ReportStatus.FINAL.value,
+                title=result.report.title[:512],
+                sections=[
+                    {"section": "plan", "body": result.plan.model_dump(mode="json") if result.plan else {}},
+                    {"section": "report", "body": result.report.model_dump(mode="json")},
+                ],
+            )
+        )
     result.research_job_id = job.id
+    result.research_id = job.id
     return job.id
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
@@ -54,22 +55,45 @@ def run_research(
                 raise ResearchUnavailable(str(exc), error_type=exc.error_type) from exc
         tokens.append((research_llm, research_llm.set(provider)))
         RESEARCH_METRICS.inc(
+            "research_requests_total",
+            1,
+            operation="research",
+            status="started",
+            component="research",
+        )
+        RESEARCH_METRICS.inc(
             "research_runs_total",
             1,
             operation="research",
             status="started",
             component="research",
         )
+        started = time.perf_counter()
         raw: Dict[str, Any] = invoke_research(request.model_dump(mode="json"))
+        elapsed = time.perf_counter() - started
         result = ResearchResult.model_validate(raw.get("result") or {})
         if any(item.get("error_type") == "oversized" for item in result.errors):
             detail = next((item.get("detail") for item in result.errors if item.get("error_type") == "oversized"), "oversized")
             raise RequestOversized(detail or "oversized")
         if persist:
             persist_result(db, request, result)
-        status = "failed" if result.errors and not result.findings and not result.verified_claims else "ok"
-        if result.unavailable_components:
-            status = "partial" if status == "ok" else status
+        if result.status == "partial":
+            status = "partial"
+        elif result.status == "failed" or (result.errors and not result.findings and not result.verified_claims):
+            status = "failed"
+        else:
+            status = "ok"
+        RESEARCH_METRICS.observe(
+            "research_duration_seconds",
+            elapsed,
+            operation="research",
+            status=result.status if result.status in {"succeeded", "partial", "failed"} else status,
+            component="research",
+        )
+        if status == "ok" and result.status == "succeeded":
+            RESEARCH_METRICS.inc("research_completed_total", 1, operation="research", status="succeeded", component="research")
+        elif status == "partial":
+            RESEARCH_METRICS.inc("research_partial_total", 1, operation="research", status="partial", component="research")
         RESEARCH_METRICS.inc(
             "research_runs_total",
             1,
@@ -80,6 +104,13 @@ def run_research(
         if status == "failed":
             RESEARCH_METRICS.inc(
                 "research_failures_total",
+                1,
+                operation="research",
+                status="failed",
+                component="research",
+            )
+            RESEARCH_METRICS.inc(
+                "research_failed_total",
                 1,
                 operation="research",
                 status="failed",

@@ -14,6 +14,8 @@ from app.graph.service import RelationshipCandidate, persist_relationship
 from app.repositories import entities, events, sources
 from app.research.eval_data import CASES, COMPANIES, DOCUMENTS, NOW
 from app.research.llm import FakeLLMProvider
+from app.research.report import factual_items
+from app.research.schemas import ALLOWED_SPECIALISTS
 from app.research.service import run_research
 from app.retrieval.documents import index_documents
 from app.retrieval.embeddings import FakeEmbeddingProvider
@@ -148,6 +150,16 @@ def evaluate_research(db: Session) -> Dict[str, Any]:
     recall_hits = 0
     recall_total = 0
     timings: List[float] = []
+    plan_hits = 0
+    routing_hits = 0
+    structure_hits = 0
+    factual_cited = 0
+    factual_total = 0
+    unsupported_final_hits = 0
+    unsupported_final_total = 0
+    conflict_hits = 0
+    partial_hits = 0
+    summary_cover: List[float] = []
 
     for case in CASES:
         entity_ids = [companies[ticker].entity_id for ticker in case.get("tickers") or [] if ticker in companies]
@@ -193,6 +205,35 @@ def evaluate_research(db: Session) -> Dict[str, Any]:
             recall_total += len(expected)
             recall_hits += len(expected & got)
 
+        plan = result.plan
+        names = list(plan.selected_agents) if plan else []
+        plan_ok = bool(plan) and all(name in ALLOWED_SPECIALISTS for name in names) and len(names) <= 4
+        plan_hits += int(plan_ok)
+        routing_hits += int(plan_ok and plan is not None and plan.source in {"llm", "fallback"})
+        report = result.report
+        factual = list(factual_items(report)) if report else []
+        structure_ok = report is not None and all(item.citation_ids and item.claim_id for item in factual)
+        if result.status == "failed":
+            structure_ok = report is None or structure_ok
+        structure_hits += int(structure_ok)
+        factual_total += len(factual)
+        factual_cited += sum(1 for item in factual if item.citation_ids)
+        unsupported_text = {claim.statement for claim in result.unsupported_claims}
+        unsupported_final_total += len(factual)
+        unsupported_final_hits += sum(1 for item in factual if item.statement in unsupported_text)
+        if result.conflicts:
+            kept = list(report.conflicts or []) if report else []
+            conflict_hits += int(len(kept) >= len(result.conflicts) and all(item.citation_ids for item in kept))
+        else:
+            conflict_hits += int(not (report and report.conflicts))
+        expect_partial = bool(case.get("expect_partial"))
+        partial_hits += int((result.status == "partial") == expect_partial)
+        summary = list(report.executive_summary) if report else []
+        if summary:
+            summary_cover.append(sum(1 for item in summary if item.citation_ids) / len(summary))
+        else:
+            summary_cover.append(1.0)
+
         if case.get("must_not_verify_relationship"):
             bad = [
                 claim
@@ -208,8 +249,10 @@ def evaluate_research(db: Session) -> Dict[str, Any]:
     return {
         "set": "development_fake_llm",
         "limitation": (
+            "DEVELOPMENT-ONLY. FAKE LLM. NOT HUMAN-JUDGED. NOT PRODUCTION MODEL QUALITY. "
             "FakeLLMProvider extracts from EvidencePackage fields. "
-            "These are not OpenAI semantic quality and not human-judged accuracy."
+            "These are not OpenAI semantic quality and not human-judged accuracy. "
+            "Routing consistency checks the fixed agent enum and plan source, not semantic planner quality."
         ),
         "query_count": n,
         "citation_coverage": round(sum(citation_cover) / n, 4),
@@ -222,4 +265,15 @@ def evaluate_research(db: Session) -> Dict[str, Any]:
         "claim_recall": round(recall_hits / recall_total, 4) if recall_total else None,
         "mean_seconds": round(sum(timings) / n, 4),
         "note": "claim precision/recall use expected finding types, not human-rated statement match",
+        "report_citation_coverage": round(factual_cited / factual_total, 4) if factual_total else 1.0,
+        "factual_claim_verification_rate": round(factual_cited / factual_total, 4) if factual_total else 1.0,
+        "unsupported_final_claim_rate": round(unsupported_final_hits / unsupported_final_total, 4)
+        if unsupported_final_total
+        else 0.0,
+        "conflict_preservation_rate": round(conflict_hits / n, 4),
+        "report_structure_validity": round(structure_hits / n, 4),
+        "specialist_selection_accuracy": round(routing_hits / n, 4),
+        "partial_result_correctness": round(partial_hits / n, 4),
+        "plan_validity": round(plan_hits / n, 4),
+        "summary_evidence_coverage": round(sum(summary_cover) / n, 4),
     }

@@ -9,7 +9,7 @@ export const WORKFLOW =
 export const CURRENT_STACK: { layer: string; tech: string }[] = [
   { layer: "Frontend", tech: "Next.js 14, TypeScript, Tailwind" },
   { layer: "API", tech: "Python, FastAPI" },
-  { layer: "Agents", tech: "LangGraph + OpenAI (investigation, analysis, EvidencePackage research)" },
+  { layer: "Agents", tech: "LangGraph + OpenAI (investigation, analysis, bounded master research over EvidencePackage)" },
   { layer: "Store", tech: "PostgreSQL / SQLite (Alembic), optional Redis, ChromaDB (investigation memory), pgvector (retrieval index)" },
   { layer: "Tools", tech: "MCP, yfinance, SEC EDGAR" },
   {
@@ -38,6 +38,6 @@ export const CURRENT_STACK: { layer: string; tech: string }[] = [
 export const TARGET_STACK: { layer: string; tech: string }[] = [
   { layer: "Stream", tech: "Managed Kafka (RF ≥ 3), more stream consumers" },
   { layer: "Lake", tech: "AWS S3, Spark cluster, Airflow" },
-  { layer: "Agents", tech: "Master research agent / async research jobs (not shipped)" },
+  { layer: "Agents", tech: "Async research worker (not shipped)" },
   { layer: "Infra", tech: "Terraform, AWS, OTel / Grafana" },
 ];

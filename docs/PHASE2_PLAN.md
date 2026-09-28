@@ -403,7 +403,8 @@ make pipeline-test                # kafka + s3 + spark + pipeline tiers against 
 | **3.2** | Graph reliability, enrichment, relationship candidates. See `docs/PHASE3_2_PLAN.md` and ADR-026 | isolated Neo4j tests; spark-test Kafka default; reconcile/repair/quality; candidate pipeline ✅ |
 | **3.3** | Market & event intelligence. See `docs/PHASE3_3_PLAN.md` and ADR-027 | event candidates + impacts v1; trading-session windows; CanonicalEvent/INVOLVES; host + spark-test + isolated Neo4j ✅ |
 | **4.1** | Evidence + retrieval foundation. See `docs/PHASE4_1_PLAN.md` and ADR-028 | documents/chunks, pgvector, hybrid search, EvidencePackage; no LangGraph agents ✅ |
-| **4.2** | Specialized LangGraph research agents. See `docs/PHASE4_2_PLAN.md` and ADR-029 | News/Company/Technology/Market/Evidence over EvidencePackage; FakeLLM in tests; no Master Agent ✅ |
+| **4.2** | Specialized LangGraph research agents. See `docs/PHASE4_2_PLAN.md` and ADR-029 | News/Company/Technology/Market/Evidence over EvidencePackage; FakeLLM in tests ✅ |
+| **4.3** | Bounded master research + verified report. See `docs/PHASE4_3_PLAN.md` and ADR-030 | Fixed topology, selective specialists, deterministic report assembly; sync only; async worker later ✅ |
 | **2.9** | Docs: README, this file as-built, ADR-009/010/011 amendments + new ADR-020 (effectively-once pipeline), `ENV_VARIABLES.md`, `backend/app/README.md`, `stack.ts` | frontend tsc + lint |
 
 **Definition of done** is the checklist in the Phase 2 brief, verified on a real end-to-end run:
