@@ -8,8 +8,7 @@
 
 services:
   postgres:
-    # pgvector-enabled Postgres 16. The extension is available but not installed;
-    # no migration uses it yet (ADR: pgvector is target, ChromaDB is current).
+    # pgvector-enabled Postgres 16. Migration 0011 enables the vector extension.
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: quantpilot

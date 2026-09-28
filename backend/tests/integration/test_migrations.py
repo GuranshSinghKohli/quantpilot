@@ -27,6 +27,10 @@ CORE_TABLES = {
     "research_claims",
     "claim_evidence",
     "reports",
+    "retrieval_documents",
+    "retrieval_chunks",
+    "chunk_embeddings",
+    "document_entities",
 }
 
 
@@ -54,8 +58,8 @@ def test_downgrade_to_base_and_back(pg_engine):
     assert CORE_TABLES <= set(inspect(pg_engine).get_table_names())
 
 
-def test_pgvector_extension_is_available_but_not_enabled(pg_engine):
-    """The image ships pgvector for a later phase; no migration enables it yet."""
+def test_pgvector_extension_is_enabled(pg_engine):
+    """Phase 4.1 enables the extension; the image must still ship it."""
     with pg_engine.connect() as conn:
         available = conn.exec_driver_sql(
             "SELECT 1 FROM pg_available_extensions WHERE name = 'vector'"
@@ -64,4 +68,4 @@ def test_pgvector_extension_is_available_but_not_enabled(pg_engine):
             "SELECT 1 FROM pg_extension WHERE extname = 'vector'"
         ).first()
     assert available is not None
-    assert installed is None
+    assert installed is not None

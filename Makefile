@@ -34,7 +34,8 @@ LAKE_ENV = LAKE_BACKEND=s3 LAKE_ENDPOINT_URL=http://localhost:$(MINIO_PORT) \
         retry-load reprocess-job retry-ingestion metrics-up metrics \
         graph-up graph-down graph-test-up graph-test-down graph-status graph-project \
         graph-reconcile graph-repair graph-quality graph-check graph-seed test-neo4j \
-        market-events-from-news market-impact market-quality
+        market-events-from-news market-impact market-quality \
+        retrieval-documents retrieval-embed retrieval-evaluate
 
 help:
 	@echo "up                compose stack (postgres, redis, migrate, backend, frontend)"
@@ -100,6 +101,9 @@ help:
 	@echo "market-events-from-news  propose NEWS candidates from canonical articles with tickers"
 	@echo "market-impact     event-window v1 metrics  [EVENT= | SINCE= UNTIL=]"
 	@echo "market-quality    read-only event/market/impact checks"
+	@echo "retrieval-documents  normalize sources into retrieval documents"
+	@echo "retrieval-embed   embed pending chunks  [DOCUMENT=]"
+	@echo "retrieval-evaluate  development-set recall/precision (fake embeddings)"
 
 up:
 	$(COMPOSE) up --build
@@ -335,3 +339,12 @@ market-impact:
 
 market-quality:
 	cd backend && ../$(PY) -m app.market quality
+
+retrieval-documents:
+	cd backend && ../$(PY) -m app.retrieval documents
+
+retrieval-embed:
+	cd backend && ../$(PY) -m app.retrieval embed $(if $(DOCUMENT),--document $(DOCUMENT),)
+
+retrieval-evaluate:
+	cd backend && ../$(PY) -m app.retrieval evaluate

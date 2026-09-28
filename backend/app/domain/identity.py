@@ -70,3 +70,18 @@ def event_source_identity(source_key: str, external_id: str, event_type: str) ->
 
 def event_evidence_identity(source_id: uuid.UUID, evidence_id: uuid.UUID, event_type: str) -> str:
     return sha256_hex("|".join([str(source_id), str(evidence_id), event_type.strip()]))
+
+
+def document_identity(source_key: Optional[str], external_id: Optional[str], url_hash_value: str) -> str:
+    """Document identity is never title. Prefer vendor id, else the source URL hash."""
+    if source_key and external_id:
+        return sha256_hex(f"{source_key.strip()}|{external_id.strip()}")
+    return sha256_hex(url_hash_value)
+
+
+def document_uuid(identity_key: str) -> uuid.UUID:
+    return uuid.UUID(bytes=hashlib.sha256(identity_key.encode("utf-8")).digest()[:16])
+
+
+def chunk_identity(document_id: uuid.UUID, document_content_hash: str, chunk_index: int) -> str:
+    return sha256_hex(f"{document_id}:{document_content_hash}:{chunk_index}")

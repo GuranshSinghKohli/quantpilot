@@ -175,6 +175,23 @@ class EvidenceStance(StrEnum):
     CONTEXT = "context"
 
 
+class DocumentType(StrEnum):
+    NEWS_ARTICLE = "news_article"
+    SEC_FILING = "sec_filing"
+    COMPANY_DOCUMENT = "company_document"
+    RESEARCH_DOCUMENT = "research_document"
+    EVENT_DOCUMENT = "event_document"
+    OTHER = "other"
+
+
+class EvidenceType(StrEnum):
+    DOCUMENT_EXCERPT = "document_excerpt"
+    STRUCTURED_FACT = "structured_fact"
+    MARKET_FACT = "market_fact"
+    EVENT_FACT = "event_fact"
+    GRAPH_FACT = "graph_fact"
+
+
 class ReportStatus(StrEnum):
     DRAFT = "draft"
     FINAL = "final"

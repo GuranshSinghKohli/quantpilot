@@ -10,7 +10,7 @@ export const CURRENT_STACK: { layer: string; tech: string }[] = [
   { layer: "Frontend", tech: "Next.js 14, TypeScript, Tailwind" },
   { layer: "API", tech: "Python, FastAPI" },
   { layer: "Agents", tech: "LangGraph + OpenAI" },
-  { layer: "Store", tech: "PostgreSQL / SQLite (Alembic), optional Redis, ChromaDB" },
+  { layer: "Store", tech: "PostgreSQL / SQLite (Alembic), optional Redis, ChromaDB (investigation memory), pgvector (retrieval index)" },
   { layer: "Tools", tech: "MCP, yfinance, SEC EDGAR" },
   {
     layer: "Ingest",
@@ -38,6 +38,6 @@ export const CURRENT_STACK: { layer: string; tech: string }[] = [
 export const TARGET_STACK: { layer: string; tech: string }[] = [
   { layer: "Stream", tech: "Managed Kafka (RF ≥ 3), more stream consumers" },
   { layer: "Lake", tech: "AWS S3, Spark cluster, Airflow" },
-  { layer: "Graph", tech: "pgvector (Neo4j projection is current; RAG is not)" },
+  { layer: "Agents", tech: "LangGraph over EvidencePackage (not shipped)" },
   { layer: "Infra", tech: "Terraform, AWS, OTel / Grafana" },
 ];

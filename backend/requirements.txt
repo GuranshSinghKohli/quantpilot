@@ -32,3 +32,5 @@ opentelemetry-instrumentation-fastapi==0.62b1
 # mcp>=1.0.0
 # Phase 3.1 — optional Neo4j projection (API starts if the server is down)
 neo4j==5.28.2
+# Phase 4.1 — pgvector retrieval index (Postgres). SQLite stores embeddings as JSON.
+pgvector==0.3.6

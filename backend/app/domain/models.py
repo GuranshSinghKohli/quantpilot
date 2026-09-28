@@ -39,11 +39,13 @@ from app.domain.enums import (
     AliasType,
     CandidateStatus,
     ClaimKind,
+    DocumentType,
     EntityType,
     EventEntityRole,
     EventStatus,
     EventType,
     EvidenceStance,
+    EvidenceType,
     ProvenanceKind,
     RelationshipStatus,
     RelationshipType,
@@ -56,6 +58,17 @@ from app.domain.enums import (
 )
 
 JsonDoc = JSON().with_variant(JSONB(), "postgresql")
+EMBEDDING_DIMENSION = 1536
+
+
+def embedding_type():
+    """pgvector on PostgreSQL; JSON list on SQLite so unit tests stay local."""
+    try:
+        from pgvector.sqlalchemy import Vector
+
+        return Vector(EMBEDDING_DIMENSION).with_variant(JSON(), "sqlite")
+    except ImportError:  # pragma: no cover - runtime without the extra
+        return JSON()
 
 
 def _utc_now() -> datetime:
@@ -234,17 +247,116 @@ class Source(Base):
     created_at: Mapped[datetime] = _created_at()
 
 
+class RetrievalDocument(Base):
+    """Normalized retrieval document. Derived from ``sources``; not a second source."""
+
+    __tablename__ = "retrieval_documents"
+    __table_args__ = (
+        UniqueConstraint("source_id", name="uq_retrieval_documents_source"),
+        UniqueConstraint("identity_key", name="uq_retrieval_documents_identity"),
+        _one_of("document_type", DocumentType, "ck_retrieval_documents_type"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sources.id", ondelete="RESTRICT"), nullable=False
+    )
+    identity_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    document_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    external_id: Mapped[Optional[str]] = mapped_column(String(255))
+    title: Mapped[Optional[str]] = mapped_column(String(512))
+    canonical_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    publisher: Mapped[Optional[str]] = mapped_column(String(255))
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    language: Mapped[str] = mapped_column(String(16), nullable=False, default="en")
+    normalized_text: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    previous_content_hash: Mapped[Optional[str]] = mapped_column(String(64))
+    content_length: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()
+
+    source: Mapped[Source] = relationship()
+
+
+class DocumentEntity(Base):
+    """Resolved entity mention on a retrieval document. Never guessed."""
+
+    __tablename__ = "document_entities"
+
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("retrieval_documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    entity_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("entities.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    source_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("sources.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = _created_at()
+
+
+class RetrievalChunk(Base):
+    __tablename__ = "retrieval_chunks"
+    __table_args__ = (
+        UniqueConstraint(
+            "document_id", "document_content_hash", "chunk_index", name="uq_retrieval_chunks_version"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("retrieval_documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    document_content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+
+
+class ChunkEmbedding(Base):
+    __tablename__ = "chunk_embeddings"
+    __table_args__ = (
+        UniqueConstraint(
+            "chunk_id", "model_name", "model_version", name="uq_chunk_embeddings_model"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    chunk_id: Mapped[str] = mapped_column(
+        ForeignKey("retrieval_chunks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    model_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    dimension: Mapped[int] = mapped_column(Integer, nullable=False)
+    embedding: Mapped[Any] = mapped_column(embedding_type(), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()
+
+
 class EvidenceRecord(Base):
     """A located excerpt of a source that can support or contradict claims."""
 
     __tablename__ = "evidence_records"
     __table_args__ = (
         UniqueConstraint("source_id", "content_hash", name="uq_evidence_records_source_content"),
+        _one_of("evidence_type", EvidenceType, "ck_evidence_records_type"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     source_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("sources.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    document_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("retrieval_documents.id", ondelete="SET NULL"), index=True
+    )
+    evidence_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=EvidenceType.DOCUMENT_EXCERPT.value
     )
     excerpt: Mapped[str] = mapped_column(Text, nullable=False)
     # Where in the source: {"section": ..., "page": ..., "char_start": ..., "char_end": ...}

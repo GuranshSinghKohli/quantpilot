@@ -31,6 +31,7 @@ from app.routers import (
     entities,
     events,
     filings,
+    retrieval,
     investigations,
     memory,
     observability,
@@ -98,6 +99,7 @@ app.include_router(alerts.router, prefix="/api")
 app.include_router(observability.router, prefix="/api")
 app.include_router(entities.router, prefix="/api")
 app.include_router(events.router, prefix="/api")
+app.include_router(retrieval.router, prefix="/api")
 
 
 @app.middleware("http")

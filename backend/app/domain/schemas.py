@@ -16,6 +16,7 @@ from app.domain.enums import (
     EventEntityRole,
     EventType,
     EvidenceStance,
+    EvidenceType,
     RelationshipType,
     ResearchJobType,
     SourceType,
@@ -43,6 +44,8 @@ class EvidenceIn(_In):
     extraction_method: str = Field(min_length=1, max_length=64)
     extracted_at: datetime
     locator: Dict[str, Any] = Field(default_factory=dict)
+    evidence_type: EvidenceType = EvidenceType.DOCUMENT_EXCERPT
+    document_id: Optional[uuid.UUID] = None
 
 
 class CompanyIn(_In):

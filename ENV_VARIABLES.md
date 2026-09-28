@@ -168,6 +168,11 @@ Optional. The API starts if Neo4j is unset or down. Postgres remains the source 
 | `NEO4J_PASSWORD` | Optional | `SecretStr`; never logged | compose default `quantpilot-dev-only` |
 | `NEO4J_DATABASE` | Optional | Default `neo4j` | `neo4j` |
 | `MARKET_BENCHMARK_SYMBOL` | Optional | Benchmark series for event-window relative returns. No silent substitute if missing. | `SPY` |
+| `EMBEDDING_PROVIDER` | Optional | `openai` (default) or `fake` (tests / evaluate). | `openai` |
+| `EMBEDDING_MODEL` | Optional | Embedding model name. Default `text-embedding-3-small`. | `text-embedding-3-small` |
+| `EMBEDDING_DIMENSION` | Optional | Vector size; schema column is 1536 for v1. | `1536` |
+| `EMBEDDING_MODEL_VERSION` | Optional | Stored with each vector so model changes do not overwrite. | `v1` |
+| `OPENAI_API_KEY` | Optional for retrieval | Required for the OpenAI embedding provider. Tests force `fake` and blank the key. | `sk-...` |
 
 `make graph-up` starts compose profile `graph` (developer instance, `localhost:7687`). `make graph-test-up` starts profile `graph-test` (disposable, `localhost:17687`). `TEST_NEO4J_URI` must be the isolated URI (`bolt://localhost:17687` or `bolt://neo4j-test:7687`); `localhost:7687` is rejected. `TEST_NEO4J_PASSWORD` defaults to `quantpilot-test-only`.
 

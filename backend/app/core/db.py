@@ -13,7 +13,21 @@ from app.core.settings import get_settings
 
 def build_engine(url: str) -> Engine:
     connect_args = {"check_same_thread": False} if url.startswith("sqlite:") else {}
-    return create_engine(url, connect_args=connect_args, pool_pre_ping=True)
+    built = create_engine(url, connect_args=connect_args, pool_pre_ping=True)
+    if url.startswith("postgresql"):
+        from sqlalchemy import event
+
+        @event.listens_for(built, "connect")
+        def _register_pgvector(dbapi_conn, _connection_record) -> None:
+            try:
+                from pgvector.psycopg2 import register_vector
+
+                register_vector(dbapi_conn)
+            except Exception:
+                # Extension may not be installed yet (pre-0011) or the extra is missing.
+                return
+
+    return built
 
 
 engine = build_engine(get_settings().DATABASE_URL)

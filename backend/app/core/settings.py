@@ -97,6 +97,23 @@ class Settings(BaseSettings):
     INVESTIGATION_IDIO_PCT: float = 1.0
     INVESTIGATION_BENCHMARK: str = "SPY"
     MARKET_BENCHMARK_SYMBOL: str = "SPY"
+
+    # Retrieval / embeddings (Phase 4.1). Tests force the fake provider.
+    EMBEDDING_PROVIDER: Literal["openai", "fake"] = "openai"
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSION: int = Field(1536, ge=8, le=4096)
+    EMBEDDING_MODEL_VERSION: str = "v1"
+    EMBEDDING_TIMEOUT_SECONDS: float = Field(30.0, ge=1)
+    EMBEDDING_MAX_RETRIES: int = Field(3, ge=0, le=8)
+    EMBEDDING_BATCH_SIZE: int = Field(64, ge=1, le=256)
+    OPENAI_API_KEY: SecretStr = SecretStr("")
+    RETRIEVAL_MAX_ENTITIES: int = Field(20, ge=1, le=50)
+    RETRIEVAL_MAX_EVENTS: int = Field(20, ge=1, le=50)
+    RETRIEVAL_MAX_RELATIONSHIPS: int = Field(20, ge=1, le=50)
+    RETRIEVAL_MAX_DOCUMENTS: int = Field(10, ge=1, le=50)
+    RETRIEVAL_MAX_CHUNKS: int = Field(10, ge=1, le=50)
+    RETRIEVAL_MAX_EXCERPT: int = Field(500, ge=40, le=4000)
+    RETRIEVAL_MAX_TOP_K: int = Field(20, ge=1, le=50)
     INVESTIGATION_PRICE_MOVE_THRESHOLD: float = 2.5
     INVESTIGATION_MATERIALITY_THRESHOLD: float = 40.0
     INVESTIGATION_EXPOSURE_WEIGHT: float = 100.0

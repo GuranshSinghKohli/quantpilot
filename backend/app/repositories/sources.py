@@ -49,6 +49,8 @@ def add_evidence(db: Session, source_id: uuid.UUID, data: EvidenceIn) -> Tuple[E
         {
             "id": uuid.uuid4(),
             "source_id": source_id,
+            "document_id": data.document_id,
+            "evidence_type": data.evidence_type.value,
             "excerpt": data.excerpt,
             "locator": data.locator,
             "content_hash": digest,

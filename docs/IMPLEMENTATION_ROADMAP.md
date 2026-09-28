@@ -216,7 +216,7 @@ Deliberately **not** in Phase 1: embeddings, raw document bodies, graph-sync sta
 
 ## Phase 9 — Spec agents + RAG (week 11)
 - LangGraph graph with News, Company, Technology, Market, Evidence, and Master agents, writing `agent_runs` and `research_claims`.
-- pgvector embeddings over `evidence_records`; ChromaDB retired.
+- LangGraph agents consume the Phase 4.1 EvidencePackage. ChromaDB investigation memory is still separate.
 - The three current orchestration paths consolidate into this one.
 
 ## Phase 10 — Verification layer v2 (week 12)

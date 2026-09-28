@@ -59,7 +59,9 @@ Full diagram: **[ARCHITECTURE.md](./ARCHITECTURE.md)** · Current state, decisio
 
 **Market & event intelligence (Phase 3.3):** Canonical news with structured tickers may become `event_candidates` (`NEWS`); articles without tickers stay documents. Accepted candidates become confirmed `events` + `event_entities` (Phase 3.2 resolver; no guessing). `event_impacts` stores trading-session window returns on `market_bars` (`calculation_version=v1`, unadjusted close, `MARKET_BENCHMARK_SYMBOL`). Missing bars are `NULL`. Confirmed associations project as `:CanonicalEvent-[:INVOLVES]->:Entity`. CLI: `python -m app.market events-from-news|impact|quality`. APIs: `GET /api/events/{id}` and `/impact`. Not a forecast and not investment advice. See [docs/PHASE3_3_PLAN.md](./docs/PHASE3_3_PLAN.md).
 
-**Spec next (not shipped yet):** a Spark cluster (only `local[*]` exists) / Airflow, pgvector, LangGraph research over the graph, Terraform, AWS, Grafana. Neo4j projection and Prometheus scrape of `/metrics` are current. Do not treat target tech as shipped.
+**Evidence & retrieval (Phase 4.1):** Canonical sources become `retrieval_documents` + deterministic chunks. Embeddings go through `EmbeddingProvider` (`text-embedding-3-small` or a fake lexical hasher in tests). Postgres pgvector is a derived index (`chunk_embeddings`); SQLite stores JSON. Hybrid search + structured facts assemble a bounded EvidencePackage (`GET /api/search`, `POST /api/research/context`). CLI: `python -m app.retrieval documents|embed|evaluate`. Not LangGraph and not a research report. See [docs/PHASE4_1_PLAN.md](./docs/PHASE4_1_PLAN.md).
+
+**Spec next (not shipped yet):** LangGraph research over the EvidencePackage, a Spark cluster (only `local[*]` exists) / Airflow, Terraform, AWS, Grafana. Neo4j projection, pgvector retrieval, and Prometheus scrape of `/metrics` are current. Do not treat target tech as shipped.
 
 ---
 
@@ -117,7 +119,7 @@ Schema changes go through Alembic (`backend/alembic/versions/`); the API never r
 
 **Tests.** `make test` runs the full suite on a throwaway SQLite file. `make db && make test-integration` runs the Postgres tier (`backend/tests/integration/`: migration drift, core repositories) against `quantpilot_test`, which the compose Postgres creates on first boot.
 
-**Compose.** `make up` starts pgvector-enabled Postgres 16, Redis, a one-shot `migrate` service, the API and the frontend; `make dev` adds API hot reload. Host ports are overridable (`POSTGRES_PORT`, `REDIS_PORT`). pgvector is available in the image but not used by any table yet.
+**Compose.** `make up` starts pgvector-enabled Postgres 16, Redis, a one-shot `migrate` service, the API and the frontend; `make dev` adds API hot reload. Host ports are overridable (`POSTGRES_PORT`, `REDIS_PORT`). Migration `0011` enables the `vector` extension.
 
 The MCP server is **auto-spawned** by the backend over stdio — no separate terminal required for normal use.
 

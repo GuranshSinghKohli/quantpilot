@@ -45,6 +45,8 @@ for _var in ("NEWS_BASE_URL", "MARKET_BASE_URL", "COMPANY_BASE_URL"):
 
 os.environ.setdefault("INVESTIGATIONS_SWEEP_ENABLED", "false")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+os.environ["EMBEDDING_PROVIDER"] = "fake"
+os.environ["OPENAI_API_KEY"] = ""
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:

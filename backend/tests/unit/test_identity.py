@@ -6,7 +6,9 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.domain.identity import (
+    chunk_identity,
     content_hash,
+    document_identity,
     event_dedup_key,
     event_evidence_identity,
     event_source_identity,
@@ -68,3 +70,11 @@ def test_source_backed_event_identity_ignores_title():
     eid = uuid.uuid4()
     assert event_evidence_identity(sid, eid, "news") == event_evidence_identity(sid, eid, "news")
     assert event_evidence_identity(sid, eid, "news") != event_evidence_identity(sid, eid, "other")
+
+
+def test_document_and_chunk_identity_ignore_title():
+    assert document_identity("massive.news", "abc", "h1") == document_identity("massive.news", "abc", "h2")
+    assert document_identity(None, None, "h1") != document_identity(None, None, "h2")
+    doc = uuid.uuid4()
+    assert chunk_identity(doc, "hash", 0) == chunk_identity(doc, "hash", 0)
+    assert chunk_identity(doc, "hash", 0) != chunk_identity(doc, "hash", 1)

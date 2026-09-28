@@ -410,5 +410,23 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - Stock prediction or investment recommendations.
 - Forward-filling prices or silently substituting another benchmark.
 
+## ADR-028 — Retrieval is a package, not an agent
+
+**Status: Accepted, shipped in Phase 4.1.**
+
+**Problem.** Future research agents must not search arbitrary tables or invent context.
+
+**Decision.**
+- Reuse `sources` / `evidence_records`. Add derived `retrieval_documents`, `retrieval_chunks`, `chunk_embeddings`, `document_entities` (migration `0011`).
+- Enable pgvector on the existing Postgres. Exact cosine search for v1. SQLite stores JSON vectors for unit tests.
+- Embeddings go through `EmbeddingProvider`. Tests use a deterministic fake lexical hasher. OpenAI embeddings are optional at runtime.
+- `ContextAssembler` returns a bounded, cited EvidencePackage. Semantic failure is explicit; structured Postgres facts still assemble.
+- Neo4j is not queried. Agents are not implemented in this phase.
+
+**Rejected.**
+- LangGraph / LLM extraction / report generation in 4.1.
+- Making pgvector the document source of truth.
+- High-cardinality metric labels (query text, document_id, chunk_id).
+
 
 
