@@ -97,6 +97,8 @@ def test_matching_state_is_ok(db, monkeypatch):
             }
         },
     )
+    monkeypatch.setattr("app.graph.reconcile._neo4j_events", lambda: {})
+    monkeypatch.setattr("app.graph.reconcile._neo4j_event_links", lambda: {})
     report = reconcile(db)
     summary = reconcile_summary(report)
     assert summary["status"] == "OK"
@@ -130,6 +132,8 @@ def test_missing_extra_and_mismatch(db, monkeypatch):
         },
     )
     monkeypatch.setattr("app.graph.reconcile._neo4j_relationships", lambda: {})
+    monkeypatch.setattr("app.graph.reconcile._neo4j_events", lambda: {})
+    monkeypatch.setattr("app.graph.reconcile._neo4j_event_links", lambda: {})
     report = reconcile(db)
     assert str(tech.entity_id) in report["missing_entities"]
     assert extra_id in report["extra_entities"]

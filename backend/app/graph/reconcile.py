@@ -9,10 +9,20 @@ from typing import Any, Dict, List, Optional, Sequence, Set
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.domain.models import Entity, GraphProjection, GraphProjectionRun, Relationship
+from app.domain.enums import EventStatus
+from app.domain.models import Entity, Event, EventEntity, GraphProjection, GraphProjectionRun, Relationship
 from app.graph.errors import GraphUnavailable
 from app.graph.metrics import GRAPH_METRICS
-from app.graph.projector import _entity_params, _record, upsert_entity_node, upsert_relationship_edge
+from app.graph.projector import (
+    _entity_params,
+    _event_link_record_id,
+    _record,
+    event_link_id,
+    upsert_entity_node,
+    upsert_event_link,
+    upsert_event_node,
+    upsert_relationship_edge,
+)
 from app.graph.schema import ensure_schema
 from app.graph.store import probe_neo4j, run_cypher
 from app.observability.logger import get_logger, log_event
@@ -56,6 +66,22 @@ def _neo4j_relationships() -> Dict[str, Dict[str, Any]]:
     return {str(row["relationship_id"]): row for row in rows if row.get("relationship_id")}
 
 
+def _neo4j_events() -> Dict[str, Dict[str, Any]]:
+    rows = run_cypher(
+        "MATCH (e:CanonicalEvent) RETURN e.event_id AS event_id, e.event_type AS event_type, "
+        "e.status AS status, e.title AS title"
+    )
+    return {str(row["event_id"]): row for row in rows if row.get("event_id")}
+
+
+def _neo4j_event_links() -> Dict[str, Dict[str, Any]]:
+    rows = run_cypher(
+        "MATCH (e:CanonicalEvent)-[r:INVOLVES]->(n:Entity) "
+        "RETURN r.link_id AS link_id, e.event_id AS event_id, n.entity_id AS entity_id, r.role AS role"
+    )
+    return {str(row["link_id"]): row for row in rows if row.get("link_id")}
+
+
 def _mismatch(expected: Dict[str, Any], actual: Dict[str, Any], keys: Sequence[str]) -> List[str]:
     found = []
     for key in keys:
@@ -73,18 +99,34 @@ def reconcile(db: Session) -> dict:
     started = time.perf_counter()
     entities = list(db.scalars(select(Entity).options(selectinload(Entity.company))).unique())
     edges = list(db.scalars(select(Relationship)).unique())
+    events = list(db.scalars(select(Event).where(Event.status == EventStatus.CONFIRMED.value)))
+    event_links = list(
+        db.scalars(
+            select(EventEntity)
+            .join(Event, Event.id == EventEntity.event_id)
+            .where(Event.status == EventStatus.CONFIRMED.value)
+        )
+    )
     failed = db.scalars(select(GraphProjection).where(GraphProjection.status == "failed")).all()
 
     neo4j = probe_neo4j()
     report: Dict[str, Any] = {
         "entities_postgres": len(entities),
         "relationships_postgres": len(edges),
+        "events_postgres": len(events),
+        "event_links_postgres": len(event_links),
         "entities_neo4j": None,
         "relationships_neo4j": None,
+        "events_neo4j": None,
+        "event_links_neo4j": None,
         "missing_entities": [],
         "extra_entities": [],
         "missing_relationships": [],
         "extra_relationships": [],
+        "missing_events": [],
+        "extra_events": [],
+        "missing_event_relationships": [],
+        "extra_event_relationships": [],
         "property_mismatches": [],
         "projection_failures": len(failed),
         "neo4j": neo4j,
@@ -109,6 +151,8 @@ def reconcile(db: Session) -> dict:
     try:
         nodes = _neo4j_entities()
         rels = _neo4j_relationships()
+        event_nodes = _neo4j_events()
+        event_rels = _neo4j_event_links()
     except GraphUnavailable:
         report["neo4j"] = "unavailable"
         report["status"] = "UNAVAILABLE"
@@ -118,12 +162,20 @@ def reconcile(db: Session) -> dict:
 
     pg_entity_ids = {str(entity.id) for entity in entities}
     pg_rel_ids = {str(edge.id) for edge in edges}
+    pg_event_ids = {str(event.id) for event in events}
+    pg_event_link_ids = {event_link_id(link.event_id, link.entity_id, link.role) for link in event_links}
     report["entities_neo4j"] = len(nodes)
     report["relationships_neo4j"] = len(rels)
+    report["events_neo4j"] = len(event_nodes)
+    report["event_links_neo4j"] = len(event_rels)
     report["missing_entities"] = sorted(pg_entity_ids - set(nodes))
     report["extra_entities"] = sorted(set(nodes) - pg_entity_ids)
     report["missing_relationships"] = sorted(pg_rel_ids - set(rels))
     report["extra_relationships"] = sorted(set(rels) - pg_rel_ids)
+    report["missing_events"] = sorted(pg_event_ids - set(event_nodes))
+    report["extra_events"] = sorted(set(event_nodes) - pg_event_ids)
+    report["missing_event_relationships"] = sorted(pg_event_link_ids - set(event_rels))
+    report["extra_event_relationships"] = sorted(set(event_rels) - pg_event_link_ids)
 
     by_id = {str(entity.id): entity for entity in entities}
     for entity_id, node in nodes.items():
@@ -157,6 +209,10 @@ def reconcile(db: Session) -> dict:
         or report["extra_entities"]
         or report["missing_relationships"]
         or report["extra_relationships"]
+        or report["missing_events"]
+        or report["extra_events"]
+        or report["missing_event_relationships"]
+        or report["extra_event_relationships"]
         or report["property_mismatches"]
         or report["projection_failures"]
     )
@@ -165,6 +221,10 @@ def reconcile(db: Session) -> dict:
     report["extra_entity_count"] = len(report["extra_entities"])
     report["missing_relationship_count"] = len(report["missing_relationships"])
     report["extra_relationship_count"] = len(report["extra_relationships"])
+    report["missing_event_count"] = len(report["missing_events"])
+    report["extra_event_count"] = len(report["extra_events"])
+    report["missing_event_relationship_count"] = len(report["missing_event_relationships"])
+    report["extra_event_relationship_count"] = len(report["extra_event_relationships"])
     report["property_mismatch_count"] = len(report["property_mismatches"])
 
     GRAPH_METRICS.inc("graph_reconciliation_total", operation="reconcile", status=report["status"].lower())
@@ -210,6 +270,18 @@ def reconcile_summary(report: dict) -> dict:
         "property_mismatches": report.get(
             "property_mismatch_count", len(report.get("property_mismatches") or [])
         ),
+        "events_postgres": report.get("events_postgres", 0),
+        "events_neo4j": report.get("events_neo4j"),
+        "missing_events": report.get("missing_event_count", len(report.get("missing_events") or [])),
+        "extra_events": report.get("extra_event_count", len(report.get("extra_events") or [])),
+        "event_links_postgres": report.get("event_links_postgres", 0),
+        "event_links_neo4j": report.get("event_links_neo4j"),
+        "missing_event_relationships": report.get(
+            "missing_event_relationship_count", len(report.get("missing_event_relationships") or [])
+        ),
+        "extra_event_relationships": report.get(
+            "extra_event_relationship_count", len(report.get("extra_event_relationships") or [])
+        ),
         "projection_failures": report.get("projection_failures", 0),
         "status": report["status"],
         "neo4j": report.get("neo4j"),
@@ -234,6 +306,8 @@ def _checkpoint(
             status=status,
             entities_projected=entities,
             relationships_projected=relationships,
+            events_projected=0,
+            event_links_projected=0,
             failures=failures,
             source=source,
             error=error,
@@ -269,10 +343,22 @@ def repair(
 
     entities = {str(e.id): e for e in db.scalars(select(Entity).options(selectinload(Entity.company))).unique()}
     edges = {str(r.id): r for r in db.scalars(select(Relationship).options(selectinload(Relationship.evidence_links))).unique()}
+    events = {
+        str(e.id): e
+        for e in db.scalars(select(Event).where(Event.status == EventStatus.CONFIRMED.value))
+    }
+    links = {
+        event_link_id(link.event_id, link.entity_id, link.role): link
+        for link in db.scalars(
+            select(EventEntity)
+            .join(Event, Event.id == EventEntity.event_id)
+            .where(Event.status == EventStatus.CONFIRMED.value)
+        )
+    }
 
     repaired_e = repaired_r = updated = deleted = failures = 0
     try:
-        for entity_id in report["missing_entities"]:
+        for entity_id in report.get("missing_entities") or []:
             entity = entities.get(entity_id)
             if entity is None:
                 continue
@@ -284,7 +370,7 @@ def repair(
                 failures += 1
                 _record(db, "entity", entity.id, "failed", type(exc).__name__)
 
-        for rel_id in report["missing_relationships"]:
+        for rel_id in report.get("missing_relationships") or []:
             edge = edges.get(rel_id)
             if edge is None:
                 continue
@@ -295,6 +381,30 @@ def repair(
             except Exception as exc:
                 failures += 1
                 _record(db, "relationship", edge.id, "failed", type(exc).__name__)
+
+        for event_id in report.get("missing_events") or []:
+            event = events.get(event_id)
+            if event is None:
+                continue
+            try:
+                upsert_event_node(event)
+                _record(db, "event", event.id, "success")
+                repaired_e += 1
+            except Exception as exc:
+                failures += 1
+                _record(db, "event", event.id, "failed", type(exc).__name__)
+
+        for link_id in report.get("missing_event_relationships") or []:
+            link = links.get(link_id)
+            if link is None:
+                continue
+            try:
+                upsert_event_link(link)
+                _record(db, "event_link", _event_link_record_id(link), "success")
+                repaired_r += 1
+            except Exception as exc:
+                failures += 1
+                _record(db, "event_link", _event_link_record_id(link), "failed", type(exc).__name__)
 
         for mismatch in report["property_mismatches"]:
             if "entity_id" in mismatch:
@@ -321,13 +431,21 @@ def repair(
                     _record(db, "relationship", edge.id, "failed", type(exc).__name__)
 
         if allow_delete and confirm_delete:
-            extras: Set[str] = set(report["extra_entities"])
-            extra_rels: Set[str] = set(report["extra_relationships"])
+            extras: Set[str] = set(report.get("extra_entities") or [])
+            extra_rels: Set[str] = set(report.get("extra_relationships") or [])
+            extra_events: Set[str] = set(report.get("extra_events") or [])
+            extra_event_rels: Set[str] = set(report.get("extra_event_relationships") or [])
             for entity_id in extras:
                 run_cypher("MATCH (e:Entity {entity_id: $entity_id}) DETACH DELETE e", {"entity_id": entity_id})
                 deleted += 1
             for rel_id in extra_rels:
                 run_cypher("MATCH ()-[r {relationship_id: $rid}]->() DELETE r", {"rid": rel_id})
+                deleted += 1
+            for event_id in extra_events:
+                run_cypher("MATCH (e:CanonicalEvent {event_id: $event_id}) DETACH DELETE e", {"event_id": event_id})
+                deleted += 1
+            for link_id in extra_event_rels:
+                run_cypher("MATCH ()-[r:INVOLVES {link_id: $link_id}]->() DELETE r", {"link_id": link_id})
                 deleted += 1
         elif allow_delete and not confirm_delete:
             raise ValueError("--allow-delete requires --confirm-delete")

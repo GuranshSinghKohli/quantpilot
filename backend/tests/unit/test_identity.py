@@ -5,7 +5,14 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.domain.identity import content_hash, event_dedup_key, normalize_url, url_hash
+from app.domain.identity import (
+    content_hash,
+    event_dedup_key,
+    event_evidence_identity,
+    event_source_identity,
+    normalize_url,
+    url_hash,
+)
 
 
 @pytest.mark.parametrize(
@@ -48,3 +55,16 @@ def test_event_key_buckets_by_utc_day():
     assert key != event_dedup_key("partnership", entity, next_day, "h")
     assert key != event_dedup_key("acquisition", entity, morning, "h")
     assert key != event_dedup_key("partnership", uuid.uuid4(), morning, "h")
+
+
+def test_source_backed_event_identity_ignores_title():
+    assert event_source_identity("massive.news", "abc", "news") == event_source_identity(
+        "massive.news", "abc", "news"
+    )
+    assert event_source_identity("massive.news", "abc", "news") != event_source_identity(
+        "massive.news", "abc", "earnings"
+    )
+    sid = uuid.uuid4()
+    eid = uuid.uuid4()
+    assert event_evidence_identity(sid, eid, "news") == event_evidence_identity(sid, eid, "news")
+    assert event_evidence_identity(sid, eid, "news") != event_evidence_identity(sid, eid, "other")

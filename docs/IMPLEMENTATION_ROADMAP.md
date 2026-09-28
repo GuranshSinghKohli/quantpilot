@@ -117,14 +117,22 @@ sources             id, source_type [news|filing|press_release|research|market_d
                     published_at NULL, retrieved_at, content_hash, raw_uri NULL,
                     metadata JSONB
 
-events              id, event_type [product_launch|partnership|investment|acquisition|funding|
-                    earnings|filing|regulatory|executive_change|market_move|other],
-                    title, summary NULL, occurred_at NULL, detected_at,
-                    primary_source_id FK→sources, dedup_key UNIQUE,
+events              id, event_type [news|product_launch|technology_release|partnership|investment|
+                    acquisition|funding|earnings|filing|regulatory|executive_change|market_move|other],
+                    title, summary NULL, occurred_at NULL, published_at NULL, detected_at,
+                    primary_source_id FK→sources, evidence_id NULL, dedup_key UNIQUE,
                     status [detected|confirmed|rejected]
 
-event_entities      event_id FK, entity_id FK, role [subject|counterparty|mentioned],
+event_entities      event_id FK, entity_id FK, role [subject|counterparty|target|acquirer|acquired|
+                    investor|partner|supplier|customer|technology|mentioned|other],
+                    source_id NULL, evidence_id NULL, confidence NULL,
                     PK(event_id, entity_id, role)
+
+event_candidates    identity_key UNIQUE, event_type, title, source_id, evidence_id NULL,
+                    status [PENDING|ACCEPTED|REJECTED|AMBIGUOUS], accepted_event_id NULL
+
+event_impacts       (event_id, entity_id, symbol, calculation_version) UNIQUE,
+                    session-window returns / volume / volatility, nullable when unavailable
 
 relationships       id, subject_entity_id FK→entities, predicate [INVESTED_IN|PARTNERED_WITH|
                     SUPPLIES|COMPETES_WITH|USES|ACQUIRED|DEVELOPS|OWNS|CUSTOMERS_OF|DEPENDS_ON],

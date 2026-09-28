@@ -27,6 +27,7 @@ from app.graph.queries import (
     relationship_provenance,
     technologies_for_company,
 )
+from app.market.queries import entity_events, entity_market_impacts
 
 router = APIRouter(tags=["entities"])
 
@@ -133,6 +134,26 @@ def read_technology_companies(entity_id: uuid.UUID, db: Session = Depends(get_db
     if entity.entity_type != "technology":
         raise HTTPException(status_code=404, detail="technology not found")
     return {"entity_id": str(entity_id), "companies": companies_for_technology(db, entity_id)}
+
+
+@router.get("/entities/{entity_id}/events")
+def read_entity_events(
+    entity_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=MAX_RESULTS),
+) -> dict:
+    _entity_or_404(db, entity_id)
+    return {"entity_id": str(entity_id), "events": entity_events(db, entity_id, limit=limit)}
+
+
+@router.get("/entities/{entity_id}/market-impact")
+def read_entity_market_impact(
+    entity_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=MAX_RESULTS),
+) -> dict:
+    _entity_or_404(db, entity_id)
+    return {"entity_id": str(entity_id), "impacts": entity_market_impacts(db, entity_id, limit=limit)}
 
 
 @router.get("/graph/relationship")

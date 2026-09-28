@@ -12,6 +12,7 @@ ENTITY_CONSTRAINTS = (
     "CREATE INDEX entity_canonical_name IF NOT EXISTS FOR (e:Entity) ON (e.canonical_name)",
     "CREATE INDEX entity_type IF NOT EXISTS FOR (e:Entity) ON (e.entity_type)",
     "CREATE INDEX company_cik IF NOT EXISTS FOR (c:Company) ON (c.cik)",
+    "CREATE CONSTRAINT canonical_event_id IF NOT EXISTS FOR (e:CanonicalEvent) REQUIRE e.event_id IS UNIQUE",
 )
 
 
@@ -23,7 +24,11 @@ def _rel_constraint(rel_type: str) -> str:
 
 
 def schema_statements() -> List[str]:
-    return list(ENTITY_CONSTRAINTS) + [_rel_constraint(t.value) for t in RelationshipType]
+    return (
+        list(ENTITY_CONSTRAINTS)
+        + [_rel_constraint(t.value) for t in RelationshipType]
+        + [_rel_constraint("INVOLVES")]
+    )
 
 
 def ensure_schema() -> List[str]:
@@ -41,8 +46,9 @@ def schema_status() -> dict:
     except Exception as exc:
         return {"ok": False, "error": type(exc).__name__}
     names = {row["name"] for row in constraints + indexes}
-    expected = {"entity_id", "entity_canonical_name", "entity_type", "company_cik"}
+    expected = {"entity_id", "entity_canonical_name", "entity_type", "company_cik", "canonical_event_id"}
     expected.update(f"rel_{t.value.lower()}_id" for t in RelationshipType)
+    expected.add("rel_involves_id")
     return {
         "ok": expected.issubset(names),
         "present": sorted(names & expected),

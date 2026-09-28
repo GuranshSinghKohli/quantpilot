@@ -36,8 +36,10 @@ def upsert_event(db: Session, data: EventIn) -> Tuple[Event, bool]:
             "title": data.title,
             "summary": data.summary,
             "occurred_at": data.occurred_at,
+            "published_at": data.published_at,
             "detected_at": data.detected_at,
             "primary_source_id": data.primary_source_id,
+            "evidence_id": data.evidence_id,
             "dedup_key": key,
             "status": EventStatus.DETECTED.value,
         },
@@ -48,7 +50,14 @@ def upsert_event(db: Session, data: EventIn) -> Tuple[Event, bool]:
         insert_ignore(
             db,
             EventEntity,
-            {"event_id": event.id, "entity_id": link.entity_id, "role": link.role.value},
+            {
+                "event_id": event.id,
+                "entity_id": link.entity_id,
+                "role": link.role.value,
+                "source_id": link.source_id,
+                "evidence_id": link.evidence_id,
+                "confidence": link.confidence,
+            },
             ["event_id", "entity_id", "role"],
         )
     db.flush()

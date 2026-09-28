@@ -28,7 +28,9 @@ class SourceType(StrEnum):
 
 
 class EventType(StrEnum):
+    NEWS = "news"
     PRODUCT_LAUNCH = "product_launch"
+    TECHNOLOGY_RELEASE = "technology_release"
     PARTNERSHIP = "partnership"
     INVESTMENT = "investment"
     ACQUISITION = "acquisition"
@@ -50,7 +52,16 @@ class EventStatus(StrEnum):
 class EventEntityRole(StrEnum):
     SUBJECT = "subject"
     COUNTERPARTY = "counterparty"
+    TARGET = "target"
+    ACQUIRER = "acquirer"
+    ACQUIRED = "acquired"
+    INVESTOR = "investor"
+    PARTNER = "partner"
+    SUPPLIER = "supplier"
+    CUSTOMER = "customer"
+    TECHNOLOGY = "technology"
     MENTIONED = "mentioned"
+    OTHER = "other"
 
 
 class RelationshipType(StrEnum):

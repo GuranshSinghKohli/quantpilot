@@ -391,4 +391,24 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - Fuzzy entity matching or LLM relationship extraction.
 - Using the developer Neo4j volume as the test database.
 
+## ADR-027 — Market and event intelligence is descriptive
+
+**Status: Accepted, shipped in Phase 3.3.**
+
+**Problem.** Canonical news, market bars, and the entity graph existed, but there was no deterministic layer that turned structured sources into events, session windows, and benchmark-relative observations.
+
+**Decision.**
+- Reuse `events` / `event_entities`. Add `event_candidates` and `event_impacts` (migration `0010`).
+- News articles stay documents unless they have structured tickers; those become `NEWS` candidates, not auto-accepted economic events.
+- Entity associations use the Phase 3.2 resolver. Ambiguous/unresolved tickers are never guessed.
+- Trading windows are session offsets from actual `market_bars`. v1 uses unadjusted `close`. Missing data is `NULL`.
+- `relative_return` is a simple benchmark-adjusted proxy (`MARKET_BENCHMARK_SYMBOL`), not CAPM and not causal.
+- Confirmed events project as `:CanonicalEvent-[:INVOLVES]->:Entity`. The graph remains derived.
+
+**Rejected.**
+- LLM event extraction, RAG, pgvector, LangGraph research over impacts.
+- Stock prediction or investment recommendations.
+- Forward-filling prices or silently substituting another benchmark.
+
+
 

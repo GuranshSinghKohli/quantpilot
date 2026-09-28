@@ -77,6 +77,9 @@ class TechnologyIn(_In):
 class EventEntityIn(_In):
     entity_id: uuid.UUID
     role: EventEntityRole
+    source_id: Optional[uuid.UUID] = None
+    evidence_id: Optional[uuid.UUID] = None
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 
 class EventIn(_In):
@@ -85,7 +88,9 @@ class EventIn(_In):
     detected_at: datetime
     summary: Optional[str] = None
     occurred_at: Optional[datetime] = None
+    published_at: Optional[datetime] = None
     primary_source_id: Optional[uuid.UUID] = None
+    evidence_id: Optional[uuid.UUID] = None
     entities: List[EventEntityIn] = Field(default_factory=list)
 
     @property

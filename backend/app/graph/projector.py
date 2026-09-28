@@ -5,14 +5,22 @@ from __future__ import annotations
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Iterable, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.pipeline_context import pipeline_bind
-from app.domain.enums import EntityType
-from app.domain.models import Company, Entity, GraphProjection, GraphProjectionRun, Relationship, RelationshipEvidence
+from app.domain.enums import EntityType, EventStatus
+from app.domain.models import (
+    Entity,
+    Event,
+    EventEntity,
+    GraphProjection,
+    GraphProjectionRun,
+    Relationship,
+    RelationshipEvidence,
+)
 from app.graph.errors import GraphUnavailable
 from app.graph.metrics import GRAPH_METRICS
 from app.graph.schema import ensure_schema
@@ -124,6 +132,45 @@ def upsert_relationship_edge(edge: Relationship) -> None:
     )
 
 
+def event_link_id(event_id: uuid.UUID, entity_id: uuid.UUID, role: str) -> str:
+    return f"{event_id}:{entity_id}:{role}"
+
+
+def upsert_event_node(event: Event) -> None:
+    run_cypher(
+        "MERGE (e:CanonicalEvent {event_id: $event_id}) "
+        "SET e.event_type = $event_type, e.title = $title, e.status = $status, "
+        "e.occurred_at = $occurred_at, e.published_at = $published_at, e.source_id = $source_id",
+        {
+            "event_id": str(event.id),
+            "event_type": event.event_type,
+            "title": event.title,
+            "status": event.status,
+            "occurred_at": event.occurred_at.isoformat() if event.occurred_at else None,
+            "published_at": event.published_at.isoformat() if event.published_at else None,
+            "source_id": str(event.primary_source_id) if event.primary_source_id else None,
+        },
+    )
+
+
+def upsert_event_link(link: EventEntity) -> None:
+    run_cypher(
+        "MATCH (e:CanonicalEvent {event_id: $event_id}), (n:Entity {entity_id: $entity_id}) "
+        "MERGE (e)-[r:INVOLVES {link_id: $link_id}]->(n) "
+        "SET r.role = $role, r.source_id = $source_id, r.evidence_id = $evidence_id, "
+        "r.confidence = $confidence",
+        {
+            "event_id": str(link.event_id),
+            "entity_id": str(link.entity_id),
+            "link_id": event_link_id(link.event_id, link.entity_id, link.role),
+            "role": link.role,
+            "source_id": str(link.source_id) if link.source_id else None,
+            "evidence_id": str(link.evidence_id) if link.evidence_id else None,
+            "confidence": link.confidence,
+        },
+    )
+
+
 def _checkpoint(
     db: Session,
     *,
@@ -135,6 +182,8 @@ def _checkpoint(
     started_at: datetime,
     error: Optional[str] = None,
     source: str = "cli",
+    events: int = 0,
+    event_links: int = 0,
 ) -> None:
     db.add(
         GraphProjectionRun(
@@ -142,6 +191,8 @@ def _checkpoint(
             status=status,
             entities_projected=entities,
             relationships_projected=relationships,
+            events_projected=events,
+            event_links_projected=event_links,
             failures=failures,
             source=source,
             error=error,
@@ -167,7 +218,9 @@ def project(
                 ensure_schema()
             entities = _load_entities(db, entity_ids)
             edges = _load_relationships(db, relationship_ids)
-            projected_e = projected_r = failures = 0
+            events = _load_events(db)
+            links = _load_event_links(db)
+            projected_e = projected_r = projected_ev = projected_el = failures = 0
             for entity in entities:
                 try:
                     upsert_entity_node(entity)
@@ -196,6 +249,28 @@ def project(
                         relationship_type=edge.relationship_type,
                         status="failed",
                     )
+            for event in events:
+                try:
+                    upsert_event_node(event)
+                    _record(db, "event", event.id, "success")
+                    projected_ev += 1
+                    GRAPH_METRICS.inc("graph_entities_projected_total", kind="event", status="success")
+                except Exception as exc:
+                    failures += 1
+                    _record(db, "event", event.id, "failed", type(exc).__name__)
+                    GRAPH_METRICS.inc("graph_projection_failures_total", kind="event", status="failed")
+                    log_event(logger, 40, "GRAPH_EVENT_PROJECT_FAILED", event_type=event.event_type, status="failed")
+            for link in links:
+                try:
+                    upsert_event_link(link)
+                    _record(db, "event_link", _event_link_record_id(link), "success")
+                    projected_el += 1
+                    GRAPH_METRICS.inc("graph_relationships_projected_total", kind="event_link", status="success")
+                except Exception as exc:
+                    failures += 1
+                    _record(db, "event_link", _event_link_record_id(link), "failed", type(exc).__name__)
+                    GRAPH_METRICS.inc("graph_projection_failures_total", kind="event_link", status="failed")
+                    log_event(logger, 40, "GRAPH_EVENT_LINK_PROJECT_FAILED", status="failed")
             duration = time.perf_counter() - started
             status = "success" if failures == 0 else "partial"
             GRAPH_METRICS.inc("graph_projection_total", operation="project", status="ok" if failures == 0 else "partial")
@@ -206,6 +281,8 @@ def project(
                 status=status,
                 entities=projected_e,
                 relationships=projected_r,
+                events=projected_ev,
+                event_links=projected_el,
                 failures=failures,
                 started_at=started_at,
                 source=source,
@@ -224,6 +301,8 @@ def project(
                 "ok": failures == 0,
                 "entities": projected_e,
                 "relationships": projected_r,
+                "events": projected_ev,
+                "event_links": projected_el,
                 "failures": failures,
                 "duration_seconds": round(duration, 3),
             }
@@ -250,11 +329,38 @@ def _load_relationships(db: Session, ids: Optional[Sequence[uuid.UUID]]) -> List
     return list(db.scalars(stmt).unique())
 
 
+def _load_events(db: Session) -> List[Event]:
+    return list(db.scalars(select(Event).where(Event.status == EventStatus.CONFIRMED.value)))
+
+
+def _load_event_links(db: Session) -> List[EventEntity]:
+    return list(
+        db.scalars(
+            select(EventEntity)
+            .join(Event, Event.id == EventEntity.event_id)
+            .where(Event.status == EventStatus.CONFIRMED.value)
+        )
+    )
+
+
+def _event_link_record_id(link: EventEntity) -> uuid.UUID:
+    return uuid.uuid5(uuid.NAMESPACE_URL, event_link_id(link.event_id, link.entity_id, link.role))
+
+
 def pending_counts(db: Session) -> dict:
     from sqlalchemy import func
 
     entities = db.scalar(select(func.count()).select_from(Entity)) or 0
     relationships = db.scalar(select(func.count()).select_from(Relationship)) or 0
+    events = db.scalar(
+        select(func.count()).select_from(Event).where(Event.status == EventStatus.CONFIRMED.value)
+    ) or 0
+    event_links = db.scalar(
+        select(func.count())
+        .select_from(EventEntity)
+        .join(Event, Event.id == EventEntity.event_id)
+        .where(Event.status == EventStatus.CONFIRMED.value)
+    ) or 0
     projected = {
         kind: db.scalar(
             select(func.count()).select_from(GraphProjection).where(
@@ -262,18 +368,27 @@ def pending_counts(db: Session) -> dict:
             )
         )
         or 0
-        for kind in ("entity", "relationship")
+        for kind in ("entity", "relationship", "event", "event_link")
     }
     failed = db.scalar(
         select(func.count()).select_from(GraphProjection).where(GraphProjection.status == "failed")
     ) or 0
-    pending = (entities - projected["entity"]) + (relationships - projected["relationship"])
+    pending = (
+        (entities - projected["entity"])
+        + (relationships - projected["relationship"])
+        + (events - projected["event"])
+        + (event_links - projected["event_link"])
+    )
     GRAPH_METRICS.set("graph_sync_pending", float(max(pending, 0)), component="graph")
     return {
         "entities": entities,
         "relationships": relationships,
+        "events": events,
+        "event_links": event_links,
         "projected_entities": projected["entity"],
         "projected_relationships": projected["relationship"],
+        "projected_events": projected["event"],
+        "projected_event_links": projected["event_link"],
         "pending": max(pending, 0),
         "failed": failed,
     }

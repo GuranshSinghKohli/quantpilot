@@ -401,6 +401,7 @@ make pipeline-test                # kafka + s3 + spark + pipeline tiers against 
 | **2.8** | Hardening + observability. As built: `/metrics`, `/ready` pipeline probes, `make pipeline-status|check|reconcile|quality`, guarded retry, DLQ summary, optional Prometheus; see `docs/PHASE2_8_PLAN.md` and ADR-024 | unit + integration; `/health` stays cheap; replay + reconcile on the live SEC job ✅ |
 | **3.1** | Entity/relationship foundation + optional Neo4j projection. See `docs/PHASE3_1_PLAN.md` and ADR-025 | unit + Postgres + Neo4j tiers; API starts without Neo4j ✅ |
 | **3.2** | Graph reliability, enrichment, relationship candidates. See `docs/PHASE3_2_PLAN.md` and ADR-026 | isolated Neo4j tests; spark-test Kafka default; reconcile/repair/quality; candidate pipeline ✅ |
+| **3.3** | Market & event intelligence. See `docs/PHASE3_3_PLAN.md` and ADR-027 | event candidates + impacts v1; trading-session windows; CanonicalEvent/INVOLVES; host + spark-test + isolated Neo4j ✅ |
 | **2.9** | Docs: README, this file as-built, ADR-009/010/011 amendments + new ADR-020 (effectively-once pipeline), `ENV_VARIABLES.md`, `backend/app/README.md`, `stack.ts` | frontend tsc + lint |
 
 **Definition of done** is the checklist in the Phase 2 brief, verified on a real end-to-end run:

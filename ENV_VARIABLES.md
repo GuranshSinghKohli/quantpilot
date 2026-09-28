@@ -167,6 +167,7 @@ Optional. The API starts if Neo4j is unset or down. Postgres remains the source 
 | `NEO4J_USER` | Optional | Default `neo4j` | `neo4j` |
 | `NEO4J_PASSWORD` | Optional | `SecretStr`; never logged | compose default `quantpilot-dev-only` |
 | `NEO4J_DATABASE` | Optional | Default `neo4j` | `neo4j` |
+| `MARKET_BENCHMARK_SYMBOL` | Optional | Benchmark series for event-window relative returns. No silent substitute if missing. | `SPY` |
 
 `make graph-up` starts compose profile `graph` (developer instance, `localhost:7687`). `make graph-test-up` starts profile `graph-test` (disposable, `localhost:17687`). `TEST_NEO4J_URI` must be the isolated URI (`bolt://localhost:17687` or `bolt://neo4j-test:7687`); `localhost:7687` is rejected. `TEST_NEO4J_PASSWORD` defaults to `quantpilot-test-only`.
 

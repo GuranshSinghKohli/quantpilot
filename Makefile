@@ -33,7 +33,8 @@ LAKE_ENV = LAKE_BACKEND=s3 LAKE_ENDPOINT_URL=http://localhost:$(MINIO_PORT) \
         pipeline-status pipeline-check pipeline-reconcile pipeline-quality \
         retry-load reprocess-job retry-ingestion metrics-up metrics \
         graph-up graph-down graph-test-up graph-test-down graph-status graph-project \
-        graph-reconcile graph-repair graph-quality graph-check graph-seed test-neo4j
+        graph-reconcile graph-repair graph-quality graph-check graph-seed test-neo4j \
+        market-events-from-news market-impact market-quality
 
 help:
 	@echo "up                compose stack (postgres, redis, migrate, backend, frontend)"
@@ -96,6 +97,9 @@ help:
 	@echo "graph-check       pending/failed projections (does not mutate)"
 	@echo "graph-seed        deterministic evidenced relationship fixtures"
 	@echo "test-neo4j        isolated Neo4j tier (TEST_NEO4J_URI=localhost:17687; never :7687)"
+	@echo "market-events-from-news  propose NEWS candidates from canonical articles with tickers"
+	@echo "market-impact     event-window v1 metrics  [EVENT= | SINCE= UNTIL=]"
+	@echo "market-quality    read-only event/market/impact checks"
 
 up:
 	$(COMPOSE) up --build
@@ -321,3 +325,13 @@ graph-seed:
 test-neo4j:
 	cd backend && TEST_NEO4J_URI=$(TEST_NEO4J_URI) TEST_NEO4J_PASSWORD=$(NEO4J_TEST_PASSWORD) \
 		../$(PY) -m pytest tests/neo4j -q
+
+market-events-from-news:
+	cd backend && ../$(PY) -m app.market events-from-news
+
+market-impact:
+	cd backend && ../$(PY) -m app.market impact \
+		$(call opt,,$(EVENT)) $(call opt,--since,$(SINCE)) $(call opt,--until,$(UNTIL))
+
+market-quality:
+	cd backend && ../$(PY) -m app.market quality

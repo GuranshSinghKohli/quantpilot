@@ -61,3 +61,12 @@ def event_dedup_key(
         day = ts.astimezone(timezone.utc).date().isoformat()
     parts = [event_type, str(primary_entity_id or ""), day, primary_source_url_hash or ""]
     return sha256_hex("|".join(parts))
+
+
+def event_source_identity(source_key: str, external_id: str, event_type: str) -> str:
+    """Stable vendor identity. Title is not part of the key."""
+    return sha256_hex("|".join([source_key.strip(), external_id.strip(), event_type.strip()]))
+
+
+def event_evidence_identity(source_id: uuid.UUID, evidence_id: uuid.UUID, event_type: str) -> str:
+    return sha256_hex("|".join([str(source_id), str(evidence_id), event_type.strip()]))

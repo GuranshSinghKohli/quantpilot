@@ -10,13 +10,14 @@ Lineage: report -> research_claim -> claim_evidence -> evidence_record -> source
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import StrEnum
 from typing import Any, Dict, List, Optional, Type
 
 from sqlalchemy import (
     JSON,
     CheckConstraint,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -257,6 +258,8 @@ class EvidenceRecord(Base):
 
 
 class Event(Base):
+    """Normalized occurrence. A news article is a source, not automatically an event."""
+
     __tablename__ = "events"
     __table_args__ = (
         _one_of("event_type", EventType, "ck_events_event_type"),
@@ -268,9 +271,13 @@ class Event(Base):
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     summary: Mapped[Optional[str]] = mapped_column(Text)
     occurred_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     primary_source_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("sources.id", ondelete="SET NULL"), index=True
+    )
+    evidence_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("evidence_records.id", ondelete="SET NULL"), index=True
     )
     # Idempotency: normalized type + primary entity + time bucket + primary source.
     dedup_key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
@@ -287,7 +294,13 @@ class Event(Base):
 
 class EventEntity(Base):
     __tablename__ = "event_entities"
-    __table_args__ = (_one_of("role", EventEntityRole, "ck_event_entities_role"),)
+    __table_args__ = (
+        _one_of("role", EventEntityRole, "ck_event_entities_role"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
+            name="ck_event_entities_confidence",
+        ),
+    )
 
     event_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("events.id", ondelete="CASCADE"), primary_key=True
@@ -296,9 +309,107 @@ class EventEntity(Base):
         ForeignKey("entities.id", ondelete="CASCADE"), primary_key=True, index=True
     )
     role: Mapped[str] = mapped_column(String(16), primary_key=True)
+    source_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("sources.id", ondelete="SET NULL")
+    )
+    evidence_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("evidence_records.id", ondelete="SET NULL")
+    )
+    confidence: Mapped[Optional[float]] = mapped_column(Float)
 
     event: Mapped[Event] = relationship(back_populates="entities")
     entity: Mapped[Entity] = relationship()
+
+
+class EventCandidate(Base):
+    """Proposed occurrence. Not a canonical event, and not in impact/graph, until ACCEPTED."""
+
+    __tablename__ = "event_candidates"
+    __table_args__ = (
+        UniqueConstraint("identity_key", name="uq_event_candidates_identity"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
+            name="ck_event_candidates_confidence",
+        ),
+        _one_of("event_type", EventType, "ck_event_candidates_event_type"),
+        _one_of("status", CandidateStatus, "ck_event_candidates_status"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    identity_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    summary: Mapped[Optional[str]] = mapped_column(Text)
+    occurred_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sources.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    evidence_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("evidence_records.id", ondelete="SET NULL"), index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=CandidateStatus.PENDING.value
+    )
+    confidence: Mapped[Optional[float]] = mapped_column(Float)
+    accepted_event_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("events.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()
+
+
+class EventImpact(Base):
+    """Descriptive event-window analytics for one confirmed event/entity/symbol/version."""
+
+    __tablename__ = "event_impacts"
+    __table_args__ = (
+        UniqueConstraint(
+            "event_id",
+            "entity_id",
+            "symbol",
+            "calculation_version",
+            name="uq_event_impacts_identity",
+        ),
+        Index("ix_event_impacts_entity", "entity_id"),
+        Index("ix_event_impacts_event", "event_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("events.id", ondelete="CASCADE"), nullable=False
+    )
+    entity_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("entities.id", ondelete="CASCADE"), nullable=False
+    )
+    symbol: Mapped[str] = mapped_column(String(16), nullable=False)
+    event_trading_date: Mapped[Optional[date]] = mapped_column(Date)
+    baseline_price: Mapped[Optional[float]] = mapped_column(Float)
+    return_m1: Mapped[Optional[float]] = mapped_column(Float)
+    return_p1: Mapped[Optional[float]] = mapped_column(Float)
+    return_p3: Mapped[Optional[float]] = mapped_column(Float)
+    return_p5: Mapped[Optional[float]] = mapped_column(Float)
+    return_p20: Mapped[Optional[float]] = mapped_column(Float)
+    benchmark_return_p1: Mapped[Optional[float]] = mapped_column(Float)
+    benchmark_return_p3: Mapped[Optional[float]] = mapped_column(Float)
+    benchmark_return_p5: Mapped[Optional[float]] = mapped_column(Float)
+    benchmark_return_p20: Mapped[Optional[float]] = mapped_column(Float)
+    relative_return_p1: Mapped[Optional[float]] = mapped_column(Float)
+    relative_return_p3: Mapped[Optional[float]] = mapped_column(Float)
+    relative_return_p5: Mapped[Optional[float]] = mapped_column(Float)
+    relative_return_p20: Mapped[Optional[float]] = mapped_column(Float)
+    event_day_volume: Mapped[Optional[float]] = mapped_column(Float)
+    pre_event_average_volume: Mapped[Optional[float]] = mapped_column(Float)
+    volume_ratio: Mapped[Optional[float]] = mapped_column(Float)
+    pre_event_volatility: Mapped[Optional[float]] = mapped_column(Float)
+    event_window_volatility: Mapped[Optional[float]] = mapped_column(Float)
+    first_market_date: Mapped[Optional[date]] = mapped_column(Date)
+    last_market_date: Mapped[Optional[date]] = mapped_column(Date)
+    calculation_version: Mapped[str] = mapped_column(String(16), nullable=False)
+    calculation_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
+    calculated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()
 
 
 class Relationship(Base):
@@ -376,7 +487,10 @@ class GraphProjection(Base):
     __tablename__ = "graph_projections"
     __table_args__ = (
         UniqueConstraint("record_kind", "record_id", name="uq_graph_projections_record"),
-        CheckConstraint("record_kind IN ('entity', 'relationship')", name="ck_graph_projections_kind"),
+        CheckConstraint(
+            "record_kind IN ('entity', 'relationship', 'event', 'event_link')",
+            name="ck_graph_projections_kind",
+        ),
         CheckConstraint("status IN ('success', 'failed')", name="ck_graph_projections_status"),
     )
 
@@ -408,6 +522,8 @@ class GraphProjectionRun(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     entities_projected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     relationships_projected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    events_projected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    event_links_projected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     source: Mapped[Optional[str]] = mapped_column(String(64))
     job_id: Mapped[Optional[str]] = mapped_column(String(64))
