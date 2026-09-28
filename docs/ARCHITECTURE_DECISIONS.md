@@ -428,5 +428,24 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - Making pgvector the document source of truth.
 - High-cardinality metric labels (query text, document_id, chunk_id).
 
+## ADR-029 — Research agents consume packages, not tables
+
+**Status: Accepted, shipped in Phase 4.2.**
+
+**Problem.** Future (and current) agents must not bypass retrieval or invent evidence.
+
+**Decision.**
+- New `app/research/` LangGraph with a **fixed** topology. Investigation and analysis graphs stay unchanged.
+- Agents receive an EvidencePackage and a closed tool list that wraps existing retrieval services.
+- `LLMProvider` + `FakeLLMProvider`. Tests never call OpenAI. `/health` does not require an LLM key.
+- Reuse `research_jobs` / `agent_runs` / `research_claims` and `ClaimKind` / `VerificationStatus`. No new migration.
+- EvidenceAgent is a deterministic hallucination guard. Confidence cannot override status.
+- MarketAgent reports existing impact windows only. No buy/sell/hold, no causation, no prediction.
+
+**Rejected.**
+- Master Agent, autonomous planning/browsing, CrewAI, MCP research tools.
+- LLM-created graph edges or relationship extraction.
+- A second vector database or a competing evidence table.
+
 
 

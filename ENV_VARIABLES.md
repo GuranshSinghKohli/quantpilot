@@ -172,7 +172,11 @@ Optional. The API starts if Neo4j is unset or down. Postgres remains the source 
 | `EMBEDDING_MODEL` | Optional | Embedding model name. Default `text-embedding-3-small`. | `text-embedding-3-small` |
 | `EMBEDDING_DIMENSION` | Optional | Vector size; schema column is 1536 for v1. | `1536` |
 | `EMBEDDING_MODEL_VERSION` | Optional | Stored with each vector so model changes do not overwrite. | `v1` |
-| `OPENAI_API_KEY` | Optional for retrieval | Required for the OpenAI embedding provider. Tests force `fake` and blank the key. | `sk-...` |
+| `OPENAI_API_KEY` | Optional for retrieval / research | Required for OpenAI embeddings and the OpenAI research LLM. Tests force fake providers and blank the key. | `sk-...` |
+| `LLM_PROVIDER` | Optional | `openai` (default) or `fake` (tests / evaluate). | `fake` |
+| `LLM_MODEL` | Optional | Chat model for research structured output. Default `gpt-4o-mini`. | `gpt-4o-mini` |
+| `LLM_MODEL_VERSION` | Optional | Recorded on agent runs. Default `v1`. | `v1` |
+| `LLM_INPUT_PRICE_PER_MTOK` / `LLM_OUTPUT_PRICE_PER_MTOK` | Optional | If either is unset, estimated cost is unavailable. Never labeled as billed amount. | `0.15` |
 
 `make graph-up` starts compose profile `graph` (developer instance, `localhost:7687`). `make graph-test-up` starts profile `graph-test` (disposable, `localhost:17687`). `TEST_NEO4J_URI` must be the isolated URI (`bolt://localhost:17687` or `bolt://neo4j-test:7687`); `localhost:7687` is rejected. `TEST_NEO4J_PASSWORD` defaults to `quantpilot-test-only`.
 

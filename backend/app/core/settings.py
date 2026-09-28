@@ -114,6 +114,16 @@ class Settings(BaseSettings):
     RETRIEVAL_MAX_CHUNKS: int = Field(10, ge=1, le=50)
     RETRIEVAL_MAX_EXCERPT: int = Field(500, ge=40, le=4000)
     RETRIEVAL_MAX_TOP_K: int = Field(20, ge=1, le=50)
+    # Research agents (Phase 4.2). Tests force the fake provider.
+    LLM_PROVIDER: Literal["openai", "fake"] = "openai"
+    LLM_MODEL: str = "gpt-4o-mini"
+    LLM_MODEL_VERSION: str = "v1"
+    LLM_TIMEOUT_SECONDS: float = Field(30.0, ge=1)
+    LLM_MAX_RETRIES: int = Field(3, ge=0, le=8)
+    LLM_INPUT_PRICE_PER_MTOK: Optional[float] = None
+    LLM_OUTPUT_PRICE_PER_MTOK: Optional[float] = None
+    RESEARCH_TIMEOUT_SECONDS: float = Field(60.0, ge=1)
+    RESEARCH_MAX_FINDINGS_PER_AGENT: int = Field(12, ge=1, le=40)
     INVESTIGATION_PRICE_MOVE_THRESHOLD: float = 2.5
     INVESTIGATION_MATERIALITY_THRESHOLD: float = 40.0
     INVESTIGATION_EXPOSURE_WEIGHT: float = 100.0

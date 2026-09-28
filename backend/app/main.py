@@ -32,6 +32,7 @@ from app.routers import (
     events,
     filings,
     retrieval,
+    research,
     investigations,
     memory,
     observability,
@@ -43,6 +44,7 @@ request_logger = get_logger("api")
 _EXPENSIVE_PREFIXES = (
     "/api/investigations/investigate",
     "/api/analysis/",
+    "/api/research",
 )
 
 
@@ -100,6 +102,7 @@ app.include_router(observability.router, prefix="/api")
 app.include_router(entities.router, prefix="/api")
 app.include_router(events.router, prefix="/api")
 app.include_router(retrieval.router, prefix="/api")
+app.include_router(research.router, prefix="/api")
 
 
 @app.middleware("http")
@@ -202,6 +205,11 @@ async def metrics() -> PlainTextResponse:
         try:
             pending_counts(db)
             gauges.merge_from(GRAPH_METRICS)
+            from app.retrieval.metrics import RETRIEVAL_METRICS
+            from app.research.metrics import RESEARCH_METRICS
+
+            gauges.merge_from(RETRIEVAL_METRICS)
+            gauges.merge_from(RESEARCH_METRICS)
         except Exception:
             pass
         finally:
