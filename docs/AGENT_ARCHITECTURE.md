@@ -39,4 +39,4 @@ Agents cannot execute SQL or Cypher, read env/credentials, touch the filesystem 
 
 ## Failure
 
-One specialist can fail without dropping the others. EvidenceAgent still runs. LLM down → `POST /api/research` reports `llm_unavailable`. `/health` does not depend on the LLM.
+One specialist can fail without dropping the others. EvidenceAgent still runs. `POST /api/research` only stores the job. If the provider is down, the worker marks the job `failed` after bounded retries and does not invent a report. `/health` does not depend on the LLM.

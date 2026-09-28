@@ -38,4 +38,4 @@ Retries: transient timeout / rate-limit / temporary provider errors use bounded 
 
 ## Later jobs
 
-`run_research(db, request)` is independent of FastAPI. A future worker can call the same function. This phase does not add a Kafka research topic.
+`run_research(db, request)` is independent of FastAPI. Phase 4.4's worker calls that function. The HTTP handler does not. See `docs/PHASE4_4_PLAN.md`.

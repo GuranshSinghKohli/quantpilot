@@ -27,12 +27,37 @@ def _evaluate(_args: argparse.Namespace) -> int:
         engine.dispose()
 
 
+def _worker(_args: argparse.Namespace) -> int:
+    from app.core.db import SessionLocal
+    from app.core.settings import get_settings
+    from app.pipeline.kafka.config import producer_config
+    from app.pipeline.kafka.consumer import build_consumer
+    from app.pipeline.kafka.producer import EventProducer
+    from app.pipeline.retry import RetryPolicy
+    from app.research.worker import serve
+
+    settings = get_settings()
+    producer = EventProducer(producer_config(settings), policy=RetryPolicy.from_settings(settings))
+    consumer = build_consumer(settings, settings.KAFKA_CONSUMER_GROUP_RESEARCH)
+    consumer.subscribe([settings.KAFKA_TOPIC_RESEARCH_REQUEST])
+    try:
+        serve(SessionLocal, consumer, producer, settings)
+    finally:
+        consumer.close()
+        producer.close()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.research", description="QuantPilot research agents")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("evaluate", help="Development-set research metrics with FakeLLMProvider").set_defaults(
         func=_evaluate
     )
+    sub.add_parser(
+        "worker",
+        help="Publish the research outbox and consume quantpilot.research.request",
+    ).set_defaults(func=_worker)
     return parser
 
 

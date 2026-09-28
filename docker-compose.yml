@@ -200,6 +200,27 @@ services:
     # Unexpected errors exit without committing offsets; restart → redelivery.
     restart: on-failure
 
+  # Opt-in. Publishes the research outbox and consumes quantpilot.research.request.
+  # Kafka bootstrap is set here; do not point this at a hand-edited broker.
+  # Enable with: docker compose --profile pipeline --profile research up -d research-worker
+  research-worker:
+    profiles: ["research"]
+    image: quantpilot-pipeline:dev
+    environment:
+      DATABASE_URL: postgresql://quantpilot:quantpilot@postgres:5432/quantpilot
+      DB_AUTO_MIGRATE: "false"
+      ENVIRONMENT: development
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-fake}
+    command: ["python", "-m", "app.research", "worker"]
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
   # One-shot source ingestion (`make ingest-news|ingest-market|ingest-company`,
   # `make sources-check`). Own profile, so `pipeline-up` never starts it and the
   # lake writer never sees provider keys. Keys come from the shell or the

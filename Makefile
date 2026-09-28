@@ -35,7 +35,7 @@ LAKE_ENV = LAKE_BACKEND=s3 LAKE_ENDPOINT_URL=http://localhost:$(MINIO_PORT) \
         graph-up graph-down graph-test-up graph-test-down graph-status graph-project \
         graph-reconcile graph-repair graph-quality graph-check graph-seed test-neo4j \
         market-events-from-news market-impact market-quality \
-        retrieval-documents retrieval-embed retrieval-evaluate research-evaluate
+        retrieval-documents retrieval-embed retrieval-evaluate research-evaluate research-worker
 
 help:
 	@echo "up                compose stack (postgres, redis, migrate, backend, frontend)"
@@ -105,6 +105,7 @@ help:
 	@echo "retrieval-embed   embed pending chunks  [DOCUMENT=]"
 	@echo "retrieval-evaluate  development-set recall/precision (fake embeddings)"
 	@echo "research-evaluate development-set research metrics (FakeLLMProvider)"
+	@echo "research-worker   async research worker (needs pipeline + research profiles)"
 
 up:
 	$(COMPOSE) up --build
@@ -352,3 +353,6 @@ retrieval-evaluate:
 
 research-evaluate:
 	cd backend && ../$(PY) -m app.research evaluate
+
+research-worker:
+	$(COMPOSE) --profile pipeline --profile research up -d research-worker

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.enums import AgentRunStatus, ClaimKind, EvidenceStance, ResearchJobStatus, ResearchJobType, VerificationStatus
 from app.domain.enums import ReportStatus
-from app.domain.models import AgentRun, ClaimEvidence, EvidenceRecord, Report, ResearchClaim
+from app.domain.models import AgentRun, ClaimEvidence, EvidenceRecord, Report, ResearchClaim, ResearchJob
 from app.domain.schemas import ResearchJobIn
 from app.repositories.research_jobs import create_job
 from app.research.schemas import ResearchResult
@@ -26,37 +26,33 @@ def persist_result(
     *,
     owner_key: str = "research-api",
     idempotency_key: Optional[str] = None,
+    job: Optional[ResearchJob] = None,
 ) -> uuid.UUID:
     payload = request.model_dump(mode="json")
-    key = idempotency_key or hashlib.sha256(f"{owner_key}|{uuid.uuid4().hex}".encode("utf-8")).hexdigest()
-    job, created = create_job(
-        db,
-        ResearchJobIn(
-            owner_key=owner_key,
-            job_type=_job_type(request),
-            idempotency_key=key,
-            request=payload,
-            event_id=request.event_ids[0] if request.event_ids else None,
-        ),
-    )
+    owns_job = job is None
+    if owns_job:
+        key = idempotency_key or hashlib.sha256(f"{owner_key}|{uuid.uuid4().hex}".encode("utf-8")).hexdigest()
+        job, created = create_job(
+            db,
+            ResearchJobIn(
+                owner_key=owner_key,
+                job_type=_job_type(request),
+                idempotency_key=key,
+                request=payload,
+                event_id=request.event_ids[0] if request.event_ids else None,
+            ),
+        )
+    else:
+        created = False
     now = datetime.now(timezone.utc)
     existing_claims = db.scalar(
         select(func.count()).select_from(ResearchClaim).where(ResearchClaim.research_job_id == job.id)
     )
-    if not created and existing_claims:
+    _apply_job_status(job, result, now, bump_attempts=owns_job)
+    if existing_claims:
         result.research_job_id = job.id
         result.research_id = job.id
         return job.id
-    if result.status == "failed":
-        job.status = ResearchJobStatus.FAILED.value
-    elif result.status == "partial":
-        job.status = ResearchJobStatus.PARTIAL.value
-    else:
-        job.status = ResearchJobStatus.SUCCEEDED.value
-    job.current_stage = "finalize_result"
-    job.started_at = job.started_at or now
-    job.finished_at = now
-    job.attempts = (job.attempts or 0) + 1
 
     run_ids: Dict[str, uuid.UUID] = {}
     for meta in result.agent_metadata:
@@ -134,6 +130,22 @@ def persist_result(
     result.research_job_id = job.id
     result.research_id = job.id
     return job.id
+
+
+def _apply_job_status(job: ResearchJob, result: ResearchResult, now: datetime, *, bump_attempts: bool) -> None:
+    if result.status == "failed":
+        job.status = ResearchJobStatus.FAILED.value
+    elif result.status == "partial":
+        job.status = ResearchJobStatus.PARTIAL.value
+    else:
+        job.status = ResearchJobStatus.SUCCEEDED.value
+    job.current_stage = "finalize_result"
+    job.started_at = job.started_at or now
+    job.finished_at = now
+    job.worker_id = None
+    job.lease_until = None
+    if bump_attempts:
+        job.attempts = (job.attempts or 0) + 1
 
 
 def _job_type(request: ResearchRequest) -> ResearchJobType:

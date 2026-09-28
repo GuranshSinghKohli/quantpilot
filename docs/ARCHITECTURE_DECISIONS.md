@@ -466,5 +466,25 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - Letting the model add tools, nodes, citations, or investment advice.
 - Treating FakeLLM evaluation numbers as model quality.
 
+## ADR-031 — Async research uses an outbox and the existing graph
+
+**Status: Accepted, shipped in Phase 4.4.**
+
+**Problem.** `POST /api/research` ran the whole graph inside the request. A crash between a database commit and a Kafka publish could lose or double-submit work.
+
+**Decision.**
+- `POST` inserts `research_jobs` plus `research_outbox` in one transaction and returns `publish_pending` until the request event is published.
+- Topics `quantpilot.research.request`, `quantpilot.research.completed`, and `quantpilot.research.dlq` are created by `kafka init`. The message key is `research_id`.
+- The worker calls `run_research()`. It commits the database before the Kafka offset.
+- Duplicate delivery is ignored once a job is `succeeded`, `partial`, or `failed`.
+- A PostgreSQL row update is the lease. Live leases are not stolen.
+- Guarantee written in the docs: at-least-once delivery with idempotent processing.
+
+**Rejected.**
+- Describing the pipeline as a stronger delivery guarantee than at-least-once with idempotent processing.
+- Putting the EvidencePackage or credentials on Kafka.
+- A second job runner or a second Kafka client stack.
+- Automatic DLQ replay in this phase.
+
 
 

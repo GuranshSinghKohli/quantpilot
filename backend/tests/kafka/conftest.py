@@ -39,6 +39,10 @@ def kafka_settings():
         KAFKA_TOPIC_COMPANY_RAW=f"{prefix}.company.raw",
         KAFKA_TOPIC_DLQ=f"{prefix}.ingestion.dlq",
         KAFKA_CONSUMER_GROUP_LAKE=f"{prefix}.lake-writer",
+        KAFKA_TOPIC_RESEARCH_REQUEST=f"{prefix}.research.request",
+        KAFKA_TOPIC_RESEARCH_COMPLETED=f"{prefix}.research.completed",
+        KAFKA_TOPIC_RESEARCH_DLQ=f"{prefix}.research.dlq",
+        KAFKA_CONSUMER_GROUP_RESEARCH=f"{prefix}.research-worker",
         KAFKA_DELIVERY_TIMEOUT_MS=5_000,
         KAFKA_POLL_TIMEOUT_SECONDS=0.2,
         PIPELINE_RETRY_MAX_ATTEMPTS=3,
@@ -68,8 +72,9 @@ def topics(kafka_settings, admin):
     assert all(n.startswith("test.") for n in names), names
     for future in admin.delete_topics(names, operation_timeout=30).values():
         future.result()
+    stem = kafka_settings.KAFKA_TOPIC_NEWS_RAW.rsplit(".", 2)[0]
     groups = [g.group_id for g in admin.list_consumer_groups().result(timeout=10).valid
-              if g.group_id.startswith(kafka_settings.KAFKA_CONSUMER_GROUP_LAKE.rsplit(".", 1)[0])]
+              if g.group_id.startswith(stem)]
     if groups:
         for future in admin.delete_consumer_groups(groups, request_timeout=10).values():
             future.result()

@@ -216,7 +216,7 @@ Deliberately **not** in Phase 1: embeddings, raw document bodies, graph-sync sta
 
 ## Phase 9 — Spec agents + RAG (week 11)
 - LangGraph graph with News, Company, Technology, Market, Evidence, and Master agents, writing `agent_runs` and `research_claims`.
-- **Phase 4.2 shipped the five specialists over EvidencePackage** (`POST /api/research`). **Phase 4.3** adds a bounded master node and verified report assembly on that same graph. Async research jobs and path consolidation are still later.
+- **Phase 4.2 shipped the five specialists over EvidencePackage** (`POST /api/research`). **Phase 4.3** adds a bounded master node and verified report assembly on that same graph. **Phase 4.4** submits that graph through a Postgres outbox and Kafka. Path consolidation of the older investigation route is still later.
 - ChromaDB investigation memory is still separate.
 
 ## Phase 10 — Verification layer v2 (week 12)

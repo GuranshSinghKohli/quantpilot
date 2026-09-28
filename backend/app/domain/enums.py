@@ -143,6 +143,8 @@ class ResearchJobStatus(StrEnum):
     PARTIAL = "partial"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    # Durable row exists, Kafka request is not published yet.
+    PUBLISH_PENDING = "publish_pending"
 
 
 class AgentRunStatus(StrEnum):

@@ -85,6 +85,10 @@ Read by `python -m app.pipeline …`. The API does not need any of them and star
 | `KAFKA_BOOTSTRAP_SERVERS` | Optional | Broker list (default `localhost:9092`) | `localhost:9092` |
 | `KAFKA_TOPIC_NEWS_RAW` / `KAFKA_TOPIC_MARKET_RAW` / `KAFKA_TOPIC_COMPANY_RAW` / `KAFKA_TOPIC_DLQ` | Optional | Topic names (defaults `quantpilot.{news,market,company}.raw`, `quantpilot.ingestion.dlq`); must be distinct | `quantpilot.news.raw` |
 | `KAFKA_CONSUMER_GROUP_LAKE` | Optional | Lake-writer consumer group (default `quantpilot.lake-writer`) | `quantpilot.lake-writer` |
+| `KAFKA_TOPIC_RESEARCH_REQUEST` / `KAFKA_TOPIC_RESEARCH_COMPLETED` / `KAFKA_TOPIC_RESEARCH_DLQ` | Optional | Research topics (defaults `quantpilot.research.request`, `.completed`, `.dlq`). Distinct from the ingestion topics. | `quantpilot.research.request` |
+| `KAFKA_CONSUMER_GROUP_RESEARCH` | Optional | Research worker group (default `quantpilot.research-worker`) | `quantpilot.research-worker` |
+| `RESEARCH_MAX_QUEUED_JOBS` | Optional | Durable cap on publish_pending + queued + running jobs. Over the cap, `POST /api/research` returns 429. | `100` |
+| `RESEARCH_MAX_ATTEMPTS` / `RESEARCH_LEASE_SECONDS` / `RESEARCH_HEARTBEAT_SECONDS` | Optional | Worker retries and lease. | `3` / `120` / `15` |
 | `KAFKA_MAX_MESSAGE_BYTES` | Optional | Max encoded event size (default `1000000`) | `1000000` |
 | `KAFKA_CLIENT_ID` | Optional | Client id on every connection (default `quantpilot`) | `quantpilot` |
 | `KAFKA_SECURITY_PROTOCOL` | Optional | `PLAINTEXT` (default, local only), `SSL`, `SASL_PLAINTEXT`, `SASL_SSL` | `SASL_SSL` |

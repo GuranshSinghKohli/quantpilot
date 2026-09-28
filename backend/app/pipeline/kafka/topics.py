@@ -46,6 +46,36 @@ def topic_specs(settings) -> List[TopicSpec]:
                   settings.KAFKA_DLQ_RETENTION_HOURS * _HOUR_MS,
                   settings.KAFKA_MAX_MESSAGE_BYTES * DLQ_SIZE_FACTOR + RAW_OVERHEAD_BYTES)
     )
+    research_ms = settings.KAFKA_RESEARCH_RETENTION_HOURS * _HOUR_MS
+    research_partitions = settings.KAFKA_RESEARCH_PARTITIONS
+    specs.extend(
+        [
+            TopicSpec(
+                settings.KAFKA_TOPIC_RESEARCH_REQUEST,
+                "durable research execution requests",
+                research_partitions,
+                rf,
+                research_ms,
+                settings.KAFKA_MAX_MESSAGE_BYTES,
+            ),
+            TopicSpec(
+                settings.KAFKA_TOPIC_RESEARCH_COMPLETED,
+                "bounded research completion notices",
+                research_partitions,
+                rf,
+                research_ms,
+                settings.KAFKA_MAX_MESSAGE_BYTES,
+            ),
+            TopicSpec(
+                settings.KAFKA_TOPIC_RESEARCH_DLQ,
+                "research messages that cannot be processed",
+                1,
+                rf,
+                settings.KAFKA_DLQ_RETENTION_HOURS * _HOUR_MS,
+                settings.KAFKA_MAX_MESSAGE_BYTES * DLQ_SIZE_FACTOR + RAW_OVERHEAD_BYTES,
+            ),
+        ]
+    )
     return specs
 
 

@@ -60,4 +60,4 @@ Low-cardinality counters: `research_requests_total`, `research_completed_total`,
 - A new research HTTP route
 - Semantic quality claims from `FakeLLMProvider`
 
-`run_research()` is callable without FastAPI so a later worker can use it. That worker is not built here.
+`run_research()` is callable without FastAPI. Phase 4.4's worker calls it. This phase did not build that worker.

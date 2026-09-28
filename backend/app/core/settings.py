@@ -130,6 +130,14 @@ class Settings(BaseSettings):
     RESEARCH_MAX_EVIDENCE: int = Field(20, ge=1, le=50)
     RESEARCH_MAX_REPORT_SECTIONS: int = Field(8, ge=1, le=12)
     RESEARCH_MAX_SUMMARY_ITEMS: int = Field(3, ge=1, le=8)
+    RESEARCH_MAX_ATTEMPTS: int = Field(3, ge=1, le=10)
+    RESEARCH_RETRY_BASE_SECONDS: float = Field(0.5, gt=0)
+    RESEARCH_RETRY_MAX_SECONDS: float = Field(30.0, gt=0)
+    RESEARCH_LEASE_SECONDS: int = Field(120, ge=5, le=3600)
+    RESEARCH_HEARTBEAT_SECONDS: int = Field(15, ge=1, le=600)
+    RESEARCH_MAX_QUEUED_JOBS: int = Field(100, ge=1, le=100_000)
+    RESEARCH_OUTBOX_BATCH: int = Field(20, ge=1, le=200)
+    RESEARCH_REQUEST_VERSION: str = "v1"
     INVESTIGATION_PRICE_MOVE_THRESHOLD: float = 2.5
     INVESTIGATION_MATERIALITY_THRESHOLD: float = 40.0
     INVESTIGATION_EXPOSURE_WEIGHT: float = 100.0
@@ -169,6 +177,12 @@ class Settings(BaseSettings):
     KAFKA_TOPIC_COMPANY_RAW: str = "quantpilot.company.raw"
     KAFKA_TOPIC_DLQ: str = "quantpilot.ingestion.dlq"
     KAFKA_CONSUMER_GROUP_LAKE: str = "quantpilot.lake-writer"
+    KAFKA_TOPIC_RESEARCH_REQUEST: str = "quantpilot.research.request"
+    KAFKA_TOPIC_RESEARCH_COMPLETED: str = "quantpilot.research.completed"
+    KAFKA_TOPIC_RESEARCH_DLQ: str = "quantpilot.research.dlq"
+    KAFKA_CONSUMER_GROUP_RESEARCH: str = "quantpilot.research-worker"
+    KAFKA_RESEARCH_PARTITIONS: int = Field(3, ge=1, le=32)
+    KAFKA_RESEARCH_RETENTION_HOURS: int = Field(168, ge=1)
     KAFKA_MAX_MESSAGE_BYTES: int = Field(1_000_000, ge=1024)
     KAFKA_CLIENT_ID: str = "quantpilot"
     KAFKA_SECURITY_PROTOCOL: Literal["PLAINTEXT", "SSL", "SASL_PLAINTEXT", "SASL_SSL"] = "PLAINTEXT"
@@ -298,6 +312,10 @@ class Settings(BaseSettings):
         "KAFKA_TOPIC_COMPANY_RAW",
         "KAFKA_TOPIC_DLQ",
         "KAFKA_CONSUMER_GROUP_LAKE",
+        "KAFKA_TOPIC_RESEARCH_REQUEST",
+        "KAFKA_TOPIC_RESEARCH_COMPLETED",
+        "KAFKA_TOPIC_RESEARCH_DLQ",
+        "KAFKA_CONSUMER_GROUP_RESEARCH",
         mode="after",
     )
     @classmethod
@@ -399,11 +417,18 @@ class Settings(BaseSettings):
     def _retry_bounds(self) -> "Settings":
         if self.PIPELINE_RETRY_MAX_SECONDS < self.PIPELINE_RETRY_BASE_SECONDS:
             raise ValueError("PIPELINE_RETRY_MAX_SECONDS must be >= PIPELINE_RETRY_BASE_SECONDS")
+        if self.RESEARCH_RETRY_MAX_SECONDS < self.RESEARCH_RETRY_BASE_SECONDS:
+            raise ValueError("RESEARCH_RETRY_MAX_SECONDS must be >= RESEARCH_RETRY_BASE_SECONDS")
+        if self.RESEARCH_HEARTBEAT_SECONDS >= self.RESEARCH_LEASE_SECONDS:
+            raise ValueError("RESEARCH_HEARTBEAT_SECONDS must be shorter than RESEARCH_LEASE_SECONDS")
         topics = [
             self.KAFKA_TOPIC_NEWS_RAW,
             self.KAFKA_TOPIC_MARKET_RAW,
             self.KAFKA_TOPIC_COMPANY_RAW,
             self.KAFKA_TOPIC_DLQ,
+            self.KAFKA_TOPIC_RESEARCH_REQUEST,
+            self.KAFKA_TOPIC_RESEARCH_COMPLETED,
+            self.KAFKA_TOPIC_RESEARCH_DLQ,
         ]
         if len(set(topics)) != len(topics):
             raise ValueError("Kafka raw and DLQ topics must be distinct")

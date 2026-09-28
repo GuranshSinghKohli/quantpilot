@@ -23,7 +23,7 @@ ALLOWED_LABELS = frozenset({
     "topic", "partition", "result", "kind", "provider", "reason",
     "method", "route", "entity_type", "relationship_type",
     "event_type", "calculation_version", "model", "document_type",
-    "agent", "error_type", "verification_status", "finding_type",
+    "agent", "error_type", "error_category", "verification_status", "finding_type",
 })
 
 FORBIDDEN_LABELS = frozenset({

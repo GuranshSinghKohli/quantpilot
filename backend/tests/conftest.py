@@ -34,6 +34,10 @@ os.environ["KAFKA_TOPIC_MARKET_RAW"] = "test.unconfigured.market.raw"
 os.environ["KAFKA_TOPIC_COMPANY_RAW"] = "test.unconfigured.company.raw"
 os.environ["KAFKA_TOPIC_DLQ"] = "test.unconfigured.ingestion.dlq"
 os.environ["KAFKA_CONSUMER_GROUP_LAKE"] = "test.unconfigured.lake-writer"
+os.environ["KAFKA_TOPIC_RESEARCH_REQUEST"] = "test.unconfigured.research.request"
+os.environ["KAFKA_TOPIC_RESEARCH_COMPLETED"] = "test.unconfigured.research.completed"
+os.environ["KAFKA_TOPIC_RESEARCH_DLQ"] = "test.unconfigured.research.dlq"
+os.environ["KAFKA_CONSUMER_GROUP_RESEARCH"] = "test.unconfigured.research-worker"
 
 # And for external sources: no keys and an unroutable host, so nothing under test
 # can reach a real provider even if .env holds credentials. Adapter tests inject

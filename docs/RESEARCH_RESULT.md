@@ -1,6 +1,6 @@
 # ResearchResult (Phase 4.3)
 
-`POST /api/research` returns a bounded, serializable `ResearchResult`.
+`POST /api/research` returns `202` with `research_id`, `status` (`publish_pending` until the outbox is published), `correlation_id`, and `status_url`. `GET /api/research/{research_id}` returns the durable job. When the worker finishes, that body includes the `ResearchResult` fields below. See `docs/PHASE4_4_PLAN.md`.
 
 ```
 request

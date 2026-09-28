@@ -769,6 +769,12 @@ class ResearchJob(Base):
     current_stage: Mapped[Optional[str]] = mapped_column(String(64))
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error: Mapped[Optional[str]] = mapped_column(Text)
+    error_category: Mapped[Optional[str]] = mapped_column(String(32))
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(128))
+    worker_id: Mapped[Optional[str]] = mapped_column(String(64))
+    lease_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    heartbeat_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     queued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utc_now, server_default=func.now()
     )
@@ -785,6 +791,42 @@ class ResearchJob(Base):
     reports: Mapped[List["Report"]] = relationship(
         back_populates="research_job", cascade="all, delete-orphan"
     )
+    outbox_events: Mapped[List["ResearchOutbox"]] = relationship(
+        back_populates="research_job", cascade="all, delete-orphan"
+    )
+
+
+class ResearchOutbox(Base):
+    """Transactional outbox. Kafka publish happens after this row commits."""
+
+    __tablename__ = "research_outbox"
+    __table_args__ = (
+        UniqueConstraint("event_id", name="uq_research_outbox_event_id"),
+        CheckConstraint("kind IN ('request', 'completed', 'dlq')", name="ck_research_outbox_kind"),
+        CheckConstraint("status IN ('pending', 'published', 'failed')", name="ck_research_outbox_status"),
+        CheckConstraint("attempts >= 0", name="ck_research_outbox_attempts"),
+        Index("ix_research_outbox_pending", "status", "available_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    research_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("research_jobs.id", ondelete="CASCADE"), index=True
+    )
+    event_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    topic: Mapped[str] = mapped_column(String(249), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    payload: Mapped[Dict[str, Any]] = mapped_column(JsonDoc, nullable=False, default=dict)
+    correlation_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utc_now)
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    locked_by: Mapped[Optional[str]] = mapped_column(String(64))
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    error: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = _created_at()
+
+    research_job: Mapped[Optional[ResearchJob]] = relationship(back_populates="outbox_events")
 
 
 class AgentRun(Base):

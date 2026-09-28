@@ -28,7 +28,7 @@ def test_valid_request(db):
     # Router uses get_llm_provider (fake in tests). Call the service with an explicit provider
     # and also exercise the request body validator used by the API.
     body = ResearchBody(query="AMD partnership with Meta", entity_ids=[world["amd"].entity_id])
-    request = ResearchRequest.model_validate(body.model_dump())
+    request = ResearchRequest.model_validate(body.model_dump(exclude={"idempotency_key"}))
     result = run_research(db, request, llm=FakeLLMProvider(), embed_provider=FakeEmbeddingProvider())
     payload = result.model_dump(mode="json")
     assert "findings" in payload
