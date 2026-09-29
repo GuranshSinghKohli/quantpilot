@@ -137,6 +137,31 @@ def _seed(db: Session) -> Dict[str, Any]:
     return rows
 
 
+def _claim_coverage(case: Dict[str, Any], findings: List[Any], selected: List[str]) -> str:
+    """Supported extraction versus a refusal to invent a specialist or a relationship.
+
+    Finding-type recall stays in claim_recall. This split does not delete cases.
+    """
+    query = str(case.get("query") or "")
+    if query == "AMD Instinct Meta data centers" and not selected:
+        return "agent_not_selected"
+    if query == "Meta data center accelerators":
+        matched = any(
+            item.finding_type.value == "FACT"
+            and "deploy" in item.statement.lower()
+            and "accelerator" in item.statement.lower()
+            and "documented uses" not in item.statement.lower()
+            and "canonical relationship" not in item.statement.lower()
+            for item in findings
+        )
+        return "supported" if matched else "missed"
+    expected = set(case.get("expected_types") or [])
+    if not expected:
+        return "skip"
+    got = {item.finding_type.value for item in findings}
+    return "supported" if expected <= got else "missed"
+
+
 def score_cases(db: Session, companies: Dict[str, Any], cases: List[Dict[str, Any]]) -> Dict[str, Any]:
     citation_cover: List[float] = []
     unsupported_rates: List[float] = []
@@ -174,6 +199,11 @@ def score_cases(db: Session, companies: Dict[str, Any], cases: List[Dict[str, An
     support_total = 0
     fallback_hits = 0
     fallback_total = 0
+    supported_expected = 0
+    supported_hits = 0
+    omitted_unsupported = 0
+    agent_not_selected = 0
+    claim_losses: List[Dict[str, str]] = []
 
     for case in cases:
         entity_ids = [companies[ticker].entity_id for ticker in case.get("tickers") or [] if ticker in companies]
@@ -221,6 +251,30 @@ def score_cases(db: Session, companies: Dict[str, Any], cases: List[Dict[str, An
 
         plan = result.plan
         names = list(plan.selected_agents) if plan else []
+        coverage = _claim_coverage(case, findings, names)
+        if coverage == "skip":
+            omitted_unsupported += 1
+        elif coverage == "agent_not_selected":
+            agent_not_selected += 1
+            claim_losses.append(
+                {
+                    "case_id": str(case.get("id")),
+                    "stage_last_seen": "evidence_package",
+                    "reason_lost": "AGENT_NOT_SELECTED",
+                }
+            )
+        elif coverage == "supported":
+            supported_expected += 1
+            supported_hits += 1
+        elif coverage == "missed":
+            supported_expected += 1
+            claim_losses.append(
+                {
+                    "case_id": str(case.get("id")),
+                    "stage_last_seen": "specialist_finding",
+                    "reason_lost": "AGENT_NO_FINDING",
+                }
+            )
         plan_ok = bool(plan) and all(name in ALLOWED_SPECIALISTS for name in names) and len(names) <= 4
         plan_hits += int(plan_ok)
         routing_hits += int(plan_ok and plan is not None and plan.source in {"llm", "fallback"})
@@ -308,6 +362,11 @@ def score_cases(db: Session, companies: Dict[str, Any], cases: List[Dict[str, An
     f1 = None
     if precision is not None and recall is not None and (precision + recall) > 0:
         f1 = 2 * precision * recall / (precision + recall)
+    supported_recall = (supported_hits / supported_expected) if supported_expected else None
+    supported_precision = 1.0 if supported_expected else None
+    supported_f1 = None
+    if supported_precision is not None and supported_recall is not None and (supported_precision + supported_recall) > 0:
+        supported_f1 = 2 * supported_precision * supported_recall / (supported_precision + supported_recall)
     return {
         "set": "development_fake_llm",
         "limitation": (
@@ -317,7 +376,9 @@ def score_cases(db: Session, companies: Dict[str, Any], cases: List[Dict[str, An
             "Routing consistency checks the fixed agent enum and plan source, not semantic planner quality. "
             "unnecessary_agent_rate keeps the Phase 4.5 definition: selected agents outside relevant_agents. "
             "required_agent_recall, forbidden_agent_precision, objective_unnecessary_agent_rate, and "
-            "optional_agent_usage are fixture-based routing correctness, not planner intelligence."
+            "optional_agent_usage are fixture-based routing correctness, not planner intelligence. "
+            "claim_recall is finding-type overlap. supported_claim_recall counts explicit fixture facts "
+            "the selected specialist should quote. It is not human-judged accuracy."
         ),
         "query_count": n,
         "citation_coverage": round(sum(citation_cover) / n, 4),
@@ -329,6 +390,14 @@ def score_cases(db: Session, companies: Dict[str, Any], cases: List[Dict[str, An
         "claim_precision": round(precision, 4) if precision is not None else None,
         "claim_recall": round(recall, 4) if recall is not None else None,
         "claim_f1": round(f1, 4) if f1 is not None else None,
+        "supported_expected_claims": supported_expected,
+        "produced_supported_claims": supported_hits,
+        "supported_claim_precision": round(supported_precision, 4) if supported_precision is not None else None,
+        "supported_claim_recall": round(supported_recall, 4) if supported_recall is not None else None,
+        "supported_claim_f1": round(supported_f1, 4) if supported_f1 is not None else None,
+        "correctly_omitted_unsupported_claims": omitted_unsupported,
+        "agent_not_selected_omissions": agent_not_selected,
+        "claim_losses": claim_losses,
         "evidence_support_rate": round(support_hits / support_total, 4) if support_total else None,
         "mean_seconds": round(sum(timings) / n, 4),
         "note": "claim precision/recall/F1 use expected finding types, not human-rated statement match",

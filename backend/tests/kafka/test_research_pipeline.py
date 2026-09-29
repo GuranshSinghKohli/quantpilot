@@ -118,3 +118,80 @@ def test_outbox_kafka_worker_is_idempotent(kafka_settings, topics, tmp_path):
         producer.close()
         db.close()
         engine.dispose()
+
+
+def test_worker_quotes_accelerator_deployment_and_replay_is_idempotent(kafka_settings, topics, tmp_path):
+    engine = build_engine(f"sqlite:///{tmp_path / 'accel.db'}")
+    upgrade_to_head(engine)
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    world = seed_partnership(db)
+    job = submit_research(
+        db,
+        ResearchRequest(query="Meta data center accelerators", entity_ids=[world["meta"].entity_id]),
+        owner_key="research-api",
+        idempotency_key="kafka-accel",
+        correlation_id="corr-accel",
+        settings=kafka_settings,
+    )
+    db.commit()
+    research_id = job.id
+    producer = EventProducer(
+        producer_config(kafka_settings),
+        policy=RetryPolicy(max_attempts=3, base_delay=0.05, max_delay=0.2, jitter=False),
+    )
+    try:
+        assert publish_pending(
+            db,
+            producer,
+            worker_id="outbox-test",
+            batch=10,
+            lease_seconds=30,
+            max_bytes=kafka_settings.KAFKA_MAX_MESSAGE_BYTES,
+            policy=RetryPolicy(max_attempts=3, base_delay=0.05, max_delay=0.2, jitter=False),
+        ) == 1
+        db.commit()
+        consumer = build_consumer(kafka_settings, kafka_settings.KAFKA_CONSUMER_GROUP_RESEARCH)
+        consumer.subscribe([kafka_settings.KAFKA_TOPIC_RESEARCH_REQUEST])
+        try:
+            assert serve(
+                Session,
+                consumer,
+                producer,
+                kafka_settings,
+                llm=FakeLLMProvider(),
+                embed=FakeEmbeddingProvider(),
+                worker_id="worker-accel",
+                max_messages=1,
+                idle_timeout_s=30,
+            ) == 1
+        finally:
+            consumer.close()
+        check = Session()
+        try:
+            stored = check.get(ResearchJob, research_id)
+            assert stored.status == "succeeded"
+            claims = check.query(ResearchClaim).filter_by(research_job_id=research_id).all()
+            assert claims
+            text = " ".join(row.statement.lower() for row in claims)
+            assert "accelerator" in text and "deploy" in text
+            assert "documented uses" not in text
+            count = len(claims)
+            body = check.query(ResearchJob).filter_by(id=research_id).one()
+            request_event = next(row.payload for row in body.outbox_events if row.kind == "request")
+            run_once(
+                check,
+                json.dumps(request_event).encode(),
+                kafka_settings,
+                worker_id="worker-accel-replay",
+                llm=FakeLLMProvider(),
+                embed=FakeEmbeddingProvider(),
+            )
+            check.commit()
+            assert check.query(ResearchClaim).filter_by(research_job_id=research_id).count() == count
+        finally:
+            check.close()
+    finally:
+        producer.close()
+        db.close()
+        engine.dispose()

@@ -390,6 +390,32 @@ def finalize_result_node(state: ResearchState) -> Dict[str, Any]:
             finding = AgentFinding.model_validate(row)
             finding.verification_status = claim.verification_status
             visible.append(finding)
+    for claim in claims:
+        RESEARCH_METRICS.inc(
+            "research_claims_produced_total",
+            1,
+            finding_type=claim.claim_type.value,
+            agent=claim.agent,
+            verification_status=claim.verification_status.value,
+            component="research",
+        )
+        if claim.verification_status.value == "unsupported":
+            RESEARCH_METRICS.inc(
+                "research_claims_unsupported_total",
+                1,
+                finding_type=claim.claim_type.value,
+                agent=claim.agent,
+                verification_status="unsupported",
+                component="research",
+            )
+            RESEARCH_METRICS.inc(
+                "research_claims_verification_failures_total",
+                1,
+                finding_type=claim.claim_type.value,
+                agent=claim.agent,
+                verification_status="unsupported",
+                component="research",
+            )
     verified = [c for c in claims if c.verification_status.value == "supported"]
     unsupported = [c for c in claims if c.verification_status.value == "unsupported"]
     conflicts = [c for c in claims if c.verification_status.value == "conflicting"]

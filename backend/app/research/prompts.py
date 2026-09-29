@@ -48,7 +48,9 @@ SYSTEM_PROMPTS = {
     "Do not invent revenue, employees, valuation, market share, or unstated partnerships.",
     "technology": _SHARED
     + "Role: TechnologyAgent. Describe technologies as sources describe them. "
-    "A mention is not USES. Only emit a company-technology relationship when a graph_fact or explicit excerpt supports it.",
+    "Quote an excerpt that names a technology, chip, GPU, or accelerator. "
+    "A mention is not USES. Discussion is not USES. "
+    "Only emit a company-technology relationship when a graph_fact or an explicit use, develop, or deploy statement supports it.",
     "market": _SHARED
     + "Role: MarketAgent. Report existing event-impact windows only. "
     "Say 'the stock returned X% over the +N trading-session window' and the benchmark return. "

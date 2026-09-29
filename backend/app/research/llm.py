@@ -301,13 +301,13 @@ def _valid_findings(agent: str, context: Dict[str, Any]) -> List[Dict[str, Any]]
             statement = f"Documented {rel} between {edge.get('from_entity')} and {edge.get('to_entity')}."
             findings.append(_finding(agent, "FACT", statement, cites, "tech relationship"))
         for doc in context.get("documents") or []:
-            excerpt = str(doc.get("excerpt") or "").lower()
-            if "technolog" not in excerpt and "chip" not in excerpt and "gpu" not in excerpt:
+            excerpt = str(doc.get("excerpt") or "")
+            if not _explicit_technology_excerpt(excerpt):
                 continue
             cites = list(doc.get("citation_ids") or [])
             if not cites:
                 continue
-            findings.append(_finding(agent, "FACT", f"Source describes technology: {doc.get('excerpt')}", cites, "doc"))
+            findings.append(_finding(agent, "FACT", f"Source describes technology: {excerpt}", cites, "doc"))
     elif agent == "market":
         for fact in context.get("market_facts") or []:
             cites = list(fact.get("citation_ids") or [])
@@ -327,6 +327,12 @@ def _valid_findings(agent: str, context: Dict[str, Any]) -> List[Dict[str, Any]]
             )
             findings.append(_finding(agent, "OBSERVATION", statement, cites, "market window"))
     return findings[:12]
+
+
+def _explicit_technology_excerpt(excerpt: str) -> bool:
+    """Quote a source only when it names a technology. Do not infer USES."""
+    text = excerpt.lower()
+    return any(term in text for term in ("technolog", "chip", "gpu", "accelerator"))
 
 
 def _finding(agent: str, kind: str, statement: str, citations: List[str], reason: str) -> Dict[str, Any]:

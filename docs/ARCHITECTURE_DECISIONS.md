@@ -525,5 +525,23 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - Selecting a specialist because a document, entity, or market row exists.
 - A new agent, or a change to the async worker.
 
+## ADR-034 — Quote explicit technology text; do not invent a specialist
+
+**Status: Accepted, shipped in Phase 4.7.**
+
+**Problem.** Phase 4.6 finding-type recall fell from 1.0 to 0.8824 on 24 cases and 0.9167 on 50 cases. "Meta data center accelerators" selected technology, and the source says accelerators were deployed, but the fixture reader only quoted excerpts containing "technolog", "chip", or "gpu".
+
+**Decision.**
+- The fixture reader quotes a document when the excerpt names a technology, chip, GPU, or accelerator. The statement is the source text. It does not synthesize USES, a partnership, or a customer edge.
+- A discussion or a co-mention stays a quotation or produces no technology finding. Mention is not USES.
+- "AMD Instinct Meta data centers" selects no specialist because the request has no domain vocabulary. That omission stays in finding-type recall and is recorded as `AGENT_NOT_SELECTED`. The planner is not changed to read package text.
+- `claim_recall` remains finding-type overlap. `supported_claim_recall` counts explicit facts the selected specialist should quote. Empty expectations are correctly omitted unsupported claims.
+- No migration. Alembic stays at `0012`.
+
+**Rejected.**
+- Deleting the Instinct case or clearing its expected FACT type to restore 1.0.
+- Selecting news because the package contains an article.
+- Turning "discussed" or a co-mention into USES or PARTNERED_WITH.
+
 
 
