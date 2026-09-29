@@ -119,16 +119,6 @@ def publish_pending(
     """Publish a batch. Returns how many events were marked published."""
     moment = now or _now()
     rows = claim_pending(db, worker_id, limit=batch, lease_seconds=lease_seconds, now=moment)
-    pending_count = db.scalar(
-        select(func.count()).select_from(ResearchOutbox).where(ResearchOutbox.status == "pending")
-    )
-    RESEARCH_METRICS.set(
-        "research_outbox_pending",
-        float(pending_count or 0),
-        operation="outbox",
-        status="pending",
-        component="research",
-    )
     published = 0
     for row in rows:
         started = moment
@@ -168,6 +158,16 @@ def publish_pending(
             component="research",
         )
     db.flush()
+    pending_count = db.scalar(
+        select(func.count()).select_from(ResearchOutbox).where(ResearchOutbox.status == "pending")
+    )
+    RESEARCH_METRICS.set(
+        "research_outbox_pending",
+        float(pending_count or 0),
+        operation="outbox",
+        status="pending",
+        component="research",
+    )
     return published
 
 

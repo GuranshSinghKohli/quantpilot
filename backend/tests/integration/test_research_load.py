@@ -34,7 +34,7 @@ def test_load_harness_four_requests():
     before = developer_integrity()
     report = run_load(
         database_url="postgresql://quantpilot:quantpilot@localhost:55432/quantpilot_load",
-        kafka_bootstrap=kafka,
+        kafka_bootstrap=os.environ["TEST_KAFKA_BOOTSTRAP"].strip(),
         requests=4,
         concurrency=[2],
         scaling_workers=[],

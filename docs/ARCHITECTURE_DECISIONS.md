@@ -563,5 +563,24 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - Pointing the compose `research-worker` at the developer Postgres or the integration database.
 - Changing lease duration, the research graph, or evaluation labels to improve a load number.
 
+## ADR-036 — Do not redesign the worker from the Phase 4.8 drain time
+
+**Status: Accepted, shipped in Phase 4.9.**
+
+**Problem.** Phase 4.8 showed post-publish wait as the largest p50 stage. That can look like a defect in Kafka, PostgreSQL, or the research graph.
+
+**Decision.**
+- The authoritative baseline is the later full FakeLLM matrix in commit `bd6446076b98d313cfb315b0116dd7d1c0ff1736`. An earlier invocation raised `SyntaxError` in `loadtest.py` before any request was submitted. That invocation is not a latency, throughput, or failure sample.
+- One in-process worker completed 6.628–7.509 jobs/s from concurrency 1 through 100. Execution p50 stayed about 0.055s. Peak Kafka lag returned to 0 after each level. PostgreSQL recorded 0 connection errors, 0 deadlocks, and 0 lock waits.
+- The measured constraint is one `serve()` loop executing one leased job at a time after the outbox has published the batch. Additional worker processes already improved throughput (1.40× at 2 workers, 1.90× at 4 workers, concurrency 10). That is the supported response.
+- In-process concurrency, a partition-count change, a new queue, and a research-graph change are not justified. Two workers already had a free partition and still did not scale linearly, so the default of 3 partitions was not shown to be the sole limit.
+- `research_outbox_pending` is set after the batch status updates, so the gauge matches rows that are still `pending`.
+
+**Rejected.**
+- Treating the pre-request `SyntaxError` as a load-test failure.
+- Adding worker threads inside one Kafka consumer.
+- Raising `KAFKA_RESEARCH_PARTITIONS` from the 4.8 run.
+- Optimizing FakeLLM execution or extrapolating it to OpenAI.
+
 
 

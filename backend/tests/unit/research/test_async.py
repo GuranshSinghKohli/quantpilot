@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from app.core.settings import get_settings
 from app.domain.models import ResearchClaim, ResearchJob, ResearchOutbox
+from app.research.metrics import RESEARCH_METRICS
 from app.pipeline.kafka.producer import DeliveryFailed, OutboundMessage
 from app.repositories.research_jobs import IdempotencyConflict
 from app.research.llm import FakeLLMProvider
@@ -49,6 +50,15 @@ def db(tmp_path):
 
 def _request():
     return ResearchRequest(query="AMD partnership with Meta")
+
+
+def _outbox_pending_gauge() -> float:
+    return RESEARCH_METRICS.value(
+        "research_outbox_pending",
+        operation="outbox",
+        status="pending",
+        component="research",
+    )
 
 
 def _submit(db, key="key-1", query="AMD partnership with Meta"):
@@ -97,6 +107,7 @@ def test_publish_success_failure_and_retry(db):
     assert job.status == "publish_pending"
     row = db.query(ResearchOutbox).filter_by(research_job_id=job.id).one()
     assert row.status == "pending" and row.attempts == 1
+    assert _outbox_pending_gauge() == 1
     row.available_at = datetime.now(timezone.utc) - timedelta(seconds=1)
     ok = MemoryPublisher()
     publish_pending(
@@ -106,6 +117,7 @@ def test_publish_success_failure_and_retry(db):
     assert job.status == "queued"
     assert row.status == "published"
     assert ok.sent[0].key == str(job.id)
+    assert _outbox_pending_gauge() == 0
     again = publish_pending(
         db, ok, worker_id="pub-2", batch=10, lease_seconds=30,
         max_bytes=settings.KAFKA_MAX_MESSAGE_BYTES, policy=_policy(),
