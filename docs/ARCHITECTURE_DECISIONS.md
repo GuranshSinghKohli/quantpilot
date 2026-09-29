@@ -543,5 +543,25 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - Selecting news because the package contains an article.
 - Turning "discussed" or a co-mention into USES or PARTNERED_WITH.
 
+## ADR-035 — Load tests measure the existing worker on disposable infrastructure
+
+**Status: Accepted, shipped in Phase 4.8.**
+
+**Problem.** Async research had no measured concurrency, queue, or failure behavior. A second runner, or a run against the developer database, would not answer that and could destroy local data.
+
+**Decision.**
+- `python -m app.research load` calls `create_research`, the outbox publisher, and `serve()`. It does not add a research execution path.
+- The run uses database `quantpilot_load` on qp-pg-test (`localhost:55432`) and Kafka topics prefixed `test.`. It refuses SQLite, port 5432, and any other database name.
+- The default model is `FakeLLMProvider`. The harness does not call OpenAI.
+- Percentiles are nearest-rank for p50, p95, and p99: `rank = ceil(percentile/100 * n)`.
+- Completion throughput is finished jobs divided by wall-clock time. Submission throughput is reported separately.
+- No migration. Alembic stays at `0012`.
+- A result from this harness is a development measurement. It is not a production capacity guarantee.
+
+**Rejected.**
+- Locust or another external load framework.
+- Pointing the compose `research-worker` at the developer Postgres or the integration database.
+- Changing lease duration, the research graph, or evaluation labels to improve a load number.
+
 
 
