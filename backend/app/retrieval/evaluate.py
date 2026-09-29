@@ -17,6 +17,7 @@ from app.retrieval.eval_data import DOCUMENTS, NOW, QUERIES, companies
 from app.retrieval.package import ResearchRequest, assemble_package
 from app.retrieval.search import search
 from app.retrieval.store import embed_documents
+from app.retrieval.time import as_stored_utc, day_window
 
 
 def _seed(db: Session) -> Dict[str, Any]:
@@ -58,6 +59,49 @@ def _precision_recall(retrieved: Sequence[str], relevant: Set[str], k: int) -> t
     return hit / len(top), hit / len(relevant) if relevant else 0.0
 
 
+def _inside(hit: Any, start: Any, end: Any) -> bool:
+    stamp = as_stored_utc(hit.published_at)
+    if stamp is None:
+        return False
+    if start is not None and stamp < start:
+        return False
+    if end is not None and stamp >= end:
+        return False
+    return True
+
+
+def _window_ok(db: Session, provider: Any, start: Any, end: Any, *, expect_now: bool) -> bool:
+    result = search(
+        db,
+        "NVIDIA partnership",
+        published_after=start,
+        published_before=end,
+        top_k=10,
+        provider=provider,
+    )
+    hits = result["hits"]
+    if not all(_inside(hit, start, end) for hit in hits):
+        return False
+    found = any(as_stored_utc(hit.published_at) == as_stored_utc(NOW) for hit in hits)
+    return found if expect_now else not found
+
+
+def _date_windows_hold(db: Session, provider: Any) -> bool:
+    """Closed probes. Later rows in the same session cannot satisfy an earlier window."""
+    instant = as_stored_utc(NOW)
+    assert instant is not None
+    day_start, day_end = day_window(instant.date(), instant.date())
+    next_start, next_end = day_window(instant.date() + timedelta(days=1), instant.date() + timedelta(days=1))
+    probes = (
+        _window_ok(db, provider, instant, instant + timedelta(microseconds=1), expect_now=True),
+        _window_ok(db, provider, instant + timedelta(microseconds=1), instant + timedelta(days=1), expect_now=False),
+        _window_ok(db, provider, instant - timedelta(days=1), instant, expect_now=False),
+        _window_ok(db, provider, day_start, day_end, expect_now=True),
+        _window_ok(db, provider, next_start, next_end, expect_now=False),
+    )
+    return all(probes)
+
+
 def evaluate_retrieval(db: Session) -> Dict[str, Any]:
     ids = _seed(db)
     index_documents(db)
@@ -91,13 +135,8 @@ def evaluate_retrieval(db: Session) -> Dict[str, Any]:
     nvda = ids.get("NVDA")
     entity_hits = search(db, "NVIDIA partnership", entity_ids=[nvda] if nvda else None, top_k=10, provider=provider)
     entity_ok = bool(entity_hits["hits"]) and all(nvda in hit.entity_ids for hit in entity_hits["hits"])
-    future = search(
-        db, "NVIDIA partnership", published_after=NOW + timedelta(days=1), top_k=10, provider=provider
-    )
-    past = search(
-        db, "NVIDIA partnership", published_before=NOW - timedelta(days=1), top_k=10, provider=provider
-    )
     unknown_event = search(db, "NVIDIA partnership", event_ids=[uuid4()], top_k=10, provider=provider)
+    date_ok = _date_windows_hold(db, provider)
     n = len(QUERIES)
     return {
         "set": "development_lexical_hash",
@@ -116,6 +155,10 @@ def evaluate_retrieval(db: Session) -> Dict[str, Any]:
         "empty_rate": round(empty / n, 4),
         "duplicate_rate": round(dupes / n, 4),
         "entity_filter_accuracy": 1.0 if entity_ok else 0.0,
-        "date_filter_accuracy": 1.0 if not future["hits"] and not past["hits"] else 0.0,
+        "date_filter_accuracy": 1.0 if date_ok else 0.0,
+        "date_filter_note": (
+            "Half-open windows on published_at. Phase 4.5 scored 0.0 because an open-ended "
+            "published_after bound also matched later research-fixture rows in the same session."
+        ),
         "event_filter_accuracy": 1.0 if not unknown_event["hits"] else 0.0,
     }

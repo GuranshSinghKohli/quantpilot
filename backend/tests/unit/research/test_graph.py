@@ -39,8 +39,10 @@ def test_all_agents_succeed(db):
     assert result.verified_claims or result.findings
     assert result.citations
     ran = {m.agent for m in result.agent_metadata if m.status == "succeeded"}
-    assert {"master", "news", "company", "technology", "evidence"} <= ran
-    assert any(m.agent == "market" and m.status == "skipped" for m in result.agent_metadata)
+    assert {"master", "news", "company", "evidence"} <= ran
+    assert "technology" not in ran
+    skipped = {m.agent for m in result.agent_metadata if m.status == "skipped"}
+    assert {"market", "technology"} <= skipped
     assert result.plan is not None and "market" not in result.plan.selected_agents
     assert result.report is not None and result.status == "succeeded"
     assert "buy" not in blob.lower() or "should buy" not in blob.lower()
@@ -55,7 +57,8 @@ def test_one_and_multiple_agent_failures(db):
     assert one.verified_claims or one.findings
     assert any(item.get("stage") == "news" for item in one.errors)
     many = _run(db, world, fail_agents={"news", "technology", "market"})
-    assert {"news", "technology"} <= set(many.unavailable_components)
+    assert "news" in set(many.unavailable_components)
+    assert "technology" not in set(many.unavailable_components)
     assert "market" not in many.unavailable_components
     assert any(m.agent == "evidence" and m.status == "succeeded" for m in many.agent_metadata)
 

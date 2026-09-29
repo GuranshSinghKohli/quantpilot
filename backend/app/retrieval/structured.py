@@ -10,6 +10,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.domain.enums import EventStatus
+from app.retrieval.time import window as utc_window
 from app.domain.models import (
     Company,
     Entity,
@@ -65,10 +66,13 @@ def load_events(
     elif entity_ids:
         linked = select(EventEntity.event_id).where(EventEntity.entity_id.in_(list(entity_ids)))
         stmt = stmt.where(Event.id.in_(linked))
-    if date_from is not None:
-        stmt = stmt.where(Event.occurred_at >= date_from)
-    if date_to is not None:
-        stmt = stmt.where(Event.occurred_at <= date_to)
+    start, end = utc_window(date_from, date_to)
+    if start is not None or end is not None:
+        stmt = stmt.where(Event.occurred_at.is_not(None))
+    if start is not None:
+        stmt = stmt.where(Event.occurred_at >= start)
+    if end is not None:
+        stmt = stmt.where(Event.occurred_at < end)
     events = list(db.scalars(stmt.order_by(Event.occurred_at.desc().nullslast(), Event.id).limit(limit)))
     out = []
     for event in events:

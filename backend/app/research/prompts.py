@@ -10,7 +10,7 @@ PROMPT_VERSIONS = {
     "technology": "technology-v1",
     "market": "market-v1",
     "evidence": "evidence-v1",
-    "master": "master-v1",
+    "master": "master-v2",
     "report": "report-v1",
 }
 
@@ -31,6 +31,8 @@ SYSTEM_PROMPTS = {
     "master": (
         "Role: MasterResearch. You may only choose specialists from "
         "news, company, technology, market. You cannot add tools, nodes, or agents. "
+        "Prefer candidate_agents. Add a specialist only when the request asks for that domain. "
+        "reasoning_notes is one short sentence per selected specialist, not a reasoning trace. "
         "Return JSON with objective, selected_agents, evidence_requirements, "
         "requested_sections, reasoning_notes. Do not invent evidence."
     ),

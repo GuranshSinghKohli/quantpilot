@@ -369,6 +369,97 @@ def extra_cases() -> List[Dict[str, Any]]:
     return rows
 
 
+# Corrected routing labels for the same queries. relevant_agents is unchanged
+# so the Phase 4.5 unnecessary-agent rate stays comparable.
+ROUTING_LABELS: Dict[str, Dict[str, List[str]]] = {
+    "AMD partnership with Meta": {
+        "required_agents": ["news", "company"],
+        "optional_agents": [],
+        "forbidden_agents": ["technology", "market"],
+    },
+    "NVIDIA data-center GPU demand": {
+        "required_agents": ["technology"],
+        "optional_agents": ["news"],
+        "forbidden_agents": ["company", "market"],
+    },
+    "Apple Microsoft conference": {
+        "required_agents": ["news"],
+        "optional_agents": [],
+        "forbidden_agents": ["company", "technology", "market"],
+    },
+    "European airport fog delays": {
+        "required_agents": [],
+        "optional_agents": [],
+        "forbidden_agents": ["news", "company", "technology", "market"],
+    },
+    "Microsoft custom accelerators": {
+        "required_agents": ["technology"],
+        "optional_agents": ["company"],
+        "forbidden_agents": ["news", "market"],
+    },
+    "What is AMD": {
+        "required_agents": ["company"],
+        "optional_agents": [],
+        "forbidden_agents": ["news", "technology", "market"],
+    },
+    "Meta Platforms canonical identity": {
+        "required_agents": ["company"],
+        "optional_agents": [],
+        "forbidden_agents": ["news", "technology", "market"],
+    },
+    "AMD Meta relationship": {
+        "required_agents": ["company"],
+        "optional_agents": ["news"],
+        "forbidden_agents": ["technology", "market"],
+    },
+    "data-center GPU technology": {
+        "required_agents": ["technology"],
+        "optional_agents": ["news"],
+        "forbidden_agents": ["company", "market"],
+    },
+    "AMD event window returns": {
+        "required_agents": ["market"],
+        "optional_agents": [],
+        "forbidden_agents": ["news", "company", "technology"],
+    },
+    "canonical Microsoft company facts": {
+        "required_agents": ["company"],
+        "optional_agents": [],
+        "forbidden_agents": ["news", "technology", "market"],
+    },
+    "NVIDIA GPU demand news": {
+        "required_agents": ["news", "technology"],
+        "optional_agents": [],
+        "forbidden_agents": ["company", "market"],
+    },
+    "weather delays technology impact": {
+        "required_agents": ["technology"],
+        "optional_agents": [],
+        "forbidden_agents": ["news", "company", "market"],
+    },
+    "AMD Instinct Meta data centers": {
+        "required_agents": [],
+        "optional_agents": ["news", "company", "technology"],
+        "forbidden_agents": ["market"],
+    },
+    "Meta data center accelerators": {
+        "required_agents": ["technology"],
+        "optional_agents": ["news", "company"],
+        "forbidden_agents": ["market"],
+    },
+    "AMD Meta announced partnership Instinct": {
+        "required_agents": ["news", "company"],
+        "optional_agents": ["technology"],
+        "forbidden_agents": ["market"],
+    },
+    "Apple Microsoft conference technology": {
+        "required_agents": ["news", "technology"],
+        "optional_agents": [],
+        "forbidden_agents": ["company", "market"],
+    },
+}
+
+
 def all_cases() -> List[Dict[str, Any]]:
     tagged = []
     for case in CASES:

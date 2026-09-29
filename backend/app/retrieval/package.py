@@ -25,8 +25,8 @@ class ResearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     entity_ids: List[uuid.UUID] = Field(default_factory=list)
     event_ids: List[uuid.UUID] = Field(default_factory=list)
-    date_from: Optional[datetime] = None
-    date_to: Optional[datetime] = None
+    date_from: Optional[datetime] = Field(default=None, description="Inclusive UTC bound.")
+    date_to: Optional[datetime] = Field(default=None, description="Exclusive UTC bound. Half-open [date_from, date_to).")
     document_types: List[str] = Field(default_factory=list)
     max_documents: Optional[int] = None
     max_events: Optional[int] = None

@@ -22,6 +22,7 @@ from app.domain.models import (
 )
 from app.retrieval.embeddings import EmbeddingProvider, get_embedding_provider
 from app.retrieval.metrics import RETRIEVAL_METRICS
+from app.retrieval.time import window as utc_window
 
 
 @dataclass
@@ -66,12 +67,16 @@ def _filter_documents(
     published_after: Optional[datetime],
     published_before: Optional[datetime],
 ) -> Select:
+    """``published_before`` is exclusive. Missing ``published_at`` does not match a window."""
     if document_types:
         stmt = stmt.where(RetrievalDocument.document_type.in_(list(document_types)))
-    if published_after is not None:
-        stmt = stmt.where(RetrievalDocument.published_at >= published_after)
-    if published_before is not None:
-        stmt = stmt.where(RetrievalDocument.published_at <= published_before)
+    start, end = utc_window(published_after, published_before)
+    if start is not None or end is not None:
+        stmt = stmt.where(RetrievalDocument.published_at.is_not(None))
+    if start is not None:
+        stmt = stmt.where(RetrievalDocument.published_at >= start)
+    if end is not None:
+        stmt = stmt.where(RetrievalDocument.published_at < end)
     if entity_ids:
         linked = select(DocumentEntity.document_id).where(DocumentEntity.entity_id.in_(list(entity_ids)))
         stmt = stmt.where(RetrievalDocument.id.in_(linked))

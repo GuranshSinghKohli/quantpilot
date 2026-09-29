@@ -324,6 +324,10 @@ def evaluate_suite(db: Session, suite: str) -> Dict[str, Any]:
         report["set"] = "phase45_expanded_fixture"
         report["suite"] = suite
         report["dataset"] = dataset_summary()
+        if suite == "planner":
+            from app.research.plan import score_routing_examples
+
+            report["routing_examples"] = score_routing_examples()
         return report
     if suite == "async":
         return async_checks(db)
@@ -332,11 +336,14 @@ def evaluate_suite(db: Session, suite: str) -> Dict[str, Any]:
         report["configuration"] = configuration_checks()
         return report
     if suite == "all":
+        from app.research.plan import score_routing_examples
+
         return {
             "label": LABEL,
             "dataset": dataset_summary(),
             "baseline": score_cases(db, _seed(db), CASES),
             "expanded": score_cases(db, _seed(db), all_cases()),
+            "routing_examples": score_routing_examples(),
             "retrieval": evaluate_retrieval(db),
             "async": async_checks(db),
             "security": security_checks(db),

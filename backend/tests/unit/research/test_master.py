@@ -55,6 +55,7 @@ def test_router_selects_relevant_and_skips_market():
     selected = select_agents("AMD partnership with Meta", package)
     assert "news" in selected and "company" in selected
     assert "market" not in selected
+    assert "technology" not in selected
     assert set(selected) <= set(ALLOWED_SPECIALISTS)
 
 

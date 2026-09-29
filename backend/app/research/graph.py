@@ -123,10 +123,44 @@ def create_research_plan_node(state: ResearchState) -> Dict[str, Any]:
             component="research",
             error_type=error_type or "invalid_plan",
         )
+        RESEARCH_METRICS.inc(
+            "research_plan_rejected_total",
+            1,
+            operation="plan",
+            status="rejected",
+            source="llm",
+            component="research",
+        )
         plan = fallback_plan(request, package, note="planner output rejected; documented router used")
         status = "fallback"
     else:
         status = "succeeded"
+    RESEARCH_METRICS.inc(
+        "research_plans_total",
+        1,
+        operation="plan",
+        status=status,
+        source=plan.source,
+        component="research",
+    )
+    if status == "fallback":
+        RESEARCH_METRICS.inc(
+            "research_plan_fallback_total",
+            1,
+            operation="plan",
+            status="fallback",
+            source="fallback",
+            component="research",
+        )
+    for agent_name in plan.selected_agents:
+        RESEARCH_METRICS.inc(
+            "research_plan_agent_selected_total",
+            1,
+            agent=agent_name,
+            source=plan.source,
+            status=status,
+            component="research",
+        )
     duration_ms = int((time.perf_counter() - t0) * 1000)
     RESEARCH_METRICS.observe(
         "research_duration_seconds",

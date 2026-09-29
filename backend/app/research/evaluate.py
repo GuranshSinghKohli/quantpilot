@@ -12,7 +12,7 @@ from app.domain.schemas import CompanyIn, EventEntityIn, EventIn, EvidenceIn, So
 from app.graph.resolve import EntityRef
 from app.graph.service import RelationshipCandidate, persist_relationship
 from app.repositories import entities, events, sources
-from app.research.eval_data import CASES, COMPANIES, DOCUMENTS, NOW
+from app.research.eval_data import CASES, COMPANIES, DOCUMENTS, NOW, ROUTING_LABELS
 from app.research.llm import FakeLLMProvider
 from app.research.report import factual_items
 from app.research.schemas import ALLOWED_SPECIALISTS
@@ -161,6 +161,12 @@ def score_cases(db: Session, companies: Dict[str, Any], cases: List[Dict[str, An
     summary_cover: List[float] = []
     unnecessary = 0
     selected_total = 0
+    required_hits = 0
+    required_total = 0
+    forbidden_hits = 0
+    optional_hits = 0
+    optional_total = 0
+    objective_unnecessary = 0
     type_ok = 0
     limitation_hits = 0
     lineage_ok = 0
@@ -219,8 +225,19 @@ def score_cases(db: Session, companies: Dict[str, Any], cases: List[Dict[str, An
         plan_hits += int(plan_ok)
         routing_hits += int(plan_ok and plan is not None and plan.source in {"llm", "fallback"})
         expected_agents = set(case.get("relevant_agents") or [])
+        labels = ROUTING_LABELS.get(str(case["query"]), {})
+        required = set(case.get("required_agents") or labels.get("required_agents") or [])
+        optional = set(case.get("optional_agents") or labels.get("optional_agents") or [])
+        forbidden = set(case.get("forbidden_agents") or labels.get("forbidden_agents") or [])
+        chosen = set(names)
         selected_total += len(names)
-        unnecessary += len(set(names) - expected_agents)
+        unnecessary += len(chosen - expected_agents)
+        required_hits += len(chosen & required)
+        required_total += len(required)
+        forbidden_hits += len(chosen & forbidden)
+        optional_hits += len(chosen & optional)
+        optional_total += len(optional)
+        objective_unnecessary += len(chosen - required - optional)
         if case.get("scenario") in {"bad_plan", "oversized_plan", "malformed"}:
             fallback_total += 1
             fallback_hits += int(plan is not None and plan.source == "fallback")
@@ -297,7 +314,10 @@ def score_cases(db: Session, companies: Dict[str, Any], cases: List[Dict[str, An
             "DEVELOPMENT-ONLY. FAKE LLM. NOT HUMAN-JUDGED. NOT PRODUCTION MODEL QUALITY. "
             "FakeLLMProvider extracts from EvidencePackage fields. "
             "These are not OpenAI semantic quality and not human-judged accuracy. "
-            "Routing consistency checks the fixed agent enum and plan source, not semantic planner quality."
+            "Routing consistency checks the fixed agent enum and plan source, not semantic planner quality. "
+            "unnecessary_agent_rate keeps the Phase 4.5 definition: selected agents outside relevant_agents. "
+            "required_agent_recall, forbidden_agent_precision, objective_unnecessary_agent_rate, and "
+            "optional_agent_usage are fixture-based routing correctness, not planner intelligence."
         ),
         "query_count": n,
         "citation_coverage": round(sum(citation_cover) / n, 4),
@@ -316,6 +336,10 @@ def score_cases(db: Session, companies: Dict[str, Any], cases: List[Dict[str, An
         "limitation_presence_when_partial": round(limitation_hits / n, 4),
         "citation_lineage_integrity": round(lineage_ok / n, 4),
         "unnecessary_agent_rate": round(unnecessary / selected_total, 4) if selected_total else 0.0,
+        "required_agent_recall": round(required_hits / required_total, 4) if required_total else 1.0,
+        "forbidden_agent_precision": round(1.0 - (forbidden_hits / selected_total), 4) if selected_total else 1.0,
+        "objective_unnecessary_agent_rate": round(objective_unnecessary / selected_total, 4) if selected_total else 0.0,
+        "optional_agent_usage": round(optional_hits / optional_total, 4) if optional_total else 0.0,
         "fallback_correctness": round(fallback_hits / fallback_total, 4) if fallback_total else None,
         "fixture_label": "DEVELOPMENT-ONLY. FIXTURE-BASED. NOT HUMAN-JUDGED. NOT PRODUCTION MODEL QUALITY.",
         "report_citation_coverage": round(factual_cited / factual_total, 4) if factual_total else 1.0,

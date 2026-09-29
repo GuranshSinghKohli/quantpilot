@@ -506,5 +506,24 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - Treating FakeLLM or lexical-hash scores as production model quality.
 - A load-test framework. Ten sequential submissions are a fixture timing, not capacity.
 
+## ADR-033 — Date windows and planner routing are explicit
+
+**Status: Accepted, shipped in Phase 4.6.**
+
+**Problem.** Phase 4.5 measured date-filter accuracy 0.0 and an unnecessary-agent rate near 0.55. Both were fixture-scoring bugs in the measurement and the router, not a reason to add another model.
+
+**Decision.**
+- Publication filters use `published_at`. Event filters use `occurred_at`. `retrieved_at` is not a filter column.
+- Windows are half-open UTC: `start <= timestamp < end`. A date-only end covers that whole civil day.
+- Naive API timestamps are rejected. Values read back from SQLite are treated as UTC because the offset is not stored.
+- The deterministic planner classifies the request text. Evidence-package text does not add a specialist.
+- `relevant_agents` remains the Phase 4.5 tag so the old unnecessary-agent rate stays comparable. Required, optional, and forbidden agents are a separate fixture label. Those rates are fixture-based routing correctness, not planner intelligence.
+- No migration. Alembic stays at `0012`.
+
+**Rejected.**
+- Changing the evaluator so the old open-ended date probe would pass.
+- Selecting a specialist because a document, entity, or market row exists.
+- A new agent, or a change to the async worker.
+
 
 
