@@ -275,3 +275,104 @@ CASES: List[Dict[str, Any]] = [
         "relevant_agents": ["news", "company"],
     },
 ]
+
+# Case-type tags for the Phase 4.3/4.4 baseline. Adding a tag does not change scoring.
+CASE_TYPES = {
+    "amd-meta-partnership": "multi_agent",
+    "nvidia-gpu-demand": "technology",
+    "apple-microsoft-conference": "ambiguous_entity",
+    "unrelated-weather": "no_evidence",
+    "microsoft-develops": "company",
+    "amd-company-identity": "company",
+    "meta-company-identity": "company",
+    "multi-entity-amd-meta": "multi_agent",
+    "technology-gpu": "technology",
+    "market-insufficient": "missing_market",
+    "missing-citation-plant": "unsupported",
+    "unsupported-partnership-plant": "unsupported",
+    "conflicting-acquisition-plant": "conflict",
+    "empty-query-entity-only": "company",
+    "nvidia-news-event": "news",
+    "insufficient-unrelated": "no_evidence",
+    "amd-news-only": "news",
+    "meta-news-only": "news",
+    "partial-market-failure": "partial_failure",
+    "all-specialists-news-company": "multi_agent",
+    "technology-no-use-inference": "inference_scenario",
+    "high-confidence-unsupported": "unsupported",
+    "malformed-output": "partial_failure",
+    "transient-then-valid": "async_replay",
+}
+
+# Repeated fixture queries. They widen coverage; they are not new ground truth.
+_EXTRA_ROWS = [
+    ("x-news-amd", "news", "AMD partnership with Meta", ["AMD", "META"], ["FACT"], ["news", "company"]),
+    ("x-news-nvda", "news", "NVIDIA GPU demand news", ["NVDA"], ["FACT"], ["news"]),
+    ("x-news-meta", "news", "Meta data center accelerators", ["META"], ["FACT"], ["news"]),
+    ("x-company-amd", "company", "What is AMD", ["AMD"], ["FACT"], ["company"]),
+    ("x-company-meta", "company", "Meta Platforms canonical identity", ["META"], ["FACT"], ["company"]),
+    ("x-company-msft", "company", "canonical Microsoft company facts", ["MSFT"], ["FACT"], ["company"]),
+    ("x-tech-gpu", "technology", "data-center GPU technology", ["NVDA"], ["FACT"], ["technology", "news"]),
+    ("x-tech-accel", "technology", "Microsoft custom accelerators", ["MSFT"], ["FACT"], ["company", "technology"]),
+    ("x-market-missing", "missing_market", "AMD event window returns", ["AMD"], [], ["market"]),
+    ("x-market-volume", "market", "AMD event window returns", ["AMD"], [], ["market"]),
+    ("x-multi-1", "multi_agent", "AMD Meta relationship", ["AMD", "META"], ["FACT"], ["company", "news"]),
+    ("x-multi-2", "multi_agent", "AMD Meta announced partnership Instinct", ["AMD", "META"], ["FACT"], ["news", "company"]),
+    ("x-none-weather", "no_evidence", "European airport fog delays", [], [], ["news"]),
+    ("x-none-tech", "no_evidence", "weather delays technology impact", [], [], ["technology"]),
+    ("x-ambig-1", "ambiguous_entity", "Apple Microsoft conference", ["AAPL", "MSFT"], ["FACT"], ["news"]),
+    ("x-ambig-2", "ambiguous_entity", "Apple Microsoft conference technology", ["AAPL", "MSFT"], ["FACT"], ["technology", "news"]),
+    ("x-conflict", "conflict", "AMD partnership with Meta", ["AMD", "META"], ["FACT"], ["news"]),
+    ("x-partial-news", "partial_failure", "AMD partnership with Meta", ["AMD", "META"], ["FACT"], ["news", "company"]),
+    ("x-partial-malformed", "partial_failure", "NVIDIA data-center GPU demand", ["NVDA"], [], ["news"]),
+    ("x-unsupported-cite", "unsupported", "AMD partnership with Meta", ["AMD", "META"], [], ["news"]),
+    ("x-unsupported-plant", "unsupported", "Apple Microsoft conference", ["AAPL", "MSFT"], [], ["news"]),
+    ("x-infer", "inference_scenario", "Apple Microsoft conference technology", ["AAPL", "MSFT"], ["FACT"], ["technology", "news"]),
+    ("x-dup-evidence", "duplicate_evidence", "AMD partnership with Meta", ["AMD", "META"], ["FACT"], ["news", "company"]),
+    ("x-dup-doc", "duplicate_documents", "NVIDIA data-center GPU demand", ["NVDA"], ["FACT"], ["news"]),
+    ("x-replay", "async_replay", "AMD partnership with Meta", ["AMD", "META"], ["FACT"], ["news", "company"]),
+    ("x-idem-same", "idempotency", "AMD partnership with Meta", ["AMD", "META"], ["FACT"], ["news", "company"]),
+]
+
+_EXTRA_FLAGS = {
+    "x-market-missing": {"expect_no_market_observation": True},
+    "x-market-volume": {"expect_no_market_observation": True},
+    "x-ambig-1": {"must_not_verify_relationship": True},
+    "x-ambig-2": {"must_not_verify_relationship": True},
+    "x-conflict": {"scenario": "conflicting", "expect_conflict": True},
+    "x-partial-news": {"fail_agents": ["news"], "expect_partial": True},
+    "x-partial-malformed": {"scenario": "malformed", "expect_partial": True},
+    "x-unsupported-cite": {"scenario": "missing_citation", "expect_unsupported": True},
+    "x-unsupported-plant": {"scenario": "unsupported", "expect_unsupported": True},
+    "x-infer": {"must_not_verify_relationship": True},
+    "x-none-weather": {"allow_empty_specialists": True},
+    "x-none-tech": {"allow_empty_specialists": True},
+    "x-replay": {"scenario": "transient"},
+}
+
+
+def extra_cases() -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for case_id, case_type, query, tickers, expected, agents in _EXTRA_ROWS:
+        row: Dict[str, Any] = {
+            "id": case_id,
+            "case_type": case_type,
+            "query": query,
+            "tickers": tickers,
+            "expected_types": expected,
+            "must_cite": bool(expected),
+            "scenario": "valid",
+            "relevant_agents": agents,
+        }
+        row.update(_EXTRA_FLAGS.get(case_id, {}))
+        rows.append(row)
+    return rows
+
+
+def all_cases() -> List[Dict[str, Any]]:
+    tagged = []
+    for case in CASES:
+        row = dict(case)
+        row["case_type"] = CASE_TYPES.get(str(case["id"]), "news")
+        tagged.append(row)
+    return tagged + extra_cases()

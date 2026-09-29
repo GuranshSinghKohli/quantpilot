@@ -486,5 +486,25 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - A second job runner or a second Kafka client stack.
 - Automatic DLQ replay in this phase.
 
+## ADR-032 — Research quality is fixture evaluation, not a new agent
+
+**Status: Accepted, shipped in Phase 4.5.**
+
+**Problem.** The research path needs a repeatable way to see where fixture behavior fails. Adding another agent would not measure that.
+
+**Decision.**
+- Keep the Phase 4.3 graph and the Phase 4.4 outbox worker.
+- `python -m app.research evaluate` still prints the 24-case baseline. `--suite` adds retrieval, claims, reports, planner, async, and security fixture checks.
+- Claim precision, recall, and F1 compare expected finding types. They are not human-judged statement accuracy.
+- Retrieval scores using `FakeEmbeddingProvider` are labeled lexical fixture embeddings.
+- A document that contains instruction-like text stays document text. Tool permissions do not change. This is defense in depth, not a claim of immunity.
+- `/ready` does not depend on the LLM provider.
+- No migration. Alembic stays at `0012`.
+
+**Rejected.**
+- A sentiment, risk, recommendation, forecast, or portfolio agent.
+- Treating FakeLLM or lexical-hash scores as production model quality.
+- A load-test framework. Ten sequential submissions are a fixture timing, not capacity.
+
 
 

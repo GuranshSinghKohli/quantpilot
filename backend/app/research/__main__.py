@@ -8,19 +8,20 @@ import sys
 from typing import List, Optional
 
 
-def _evaluate(_args: argparse.Namespace) -> int:
+def _evaluate(args: argparse.Namespace) -> int:
     from sqlalchemy.orm import sessionmaker
 
     from app.core.db import build_engine
     from app.core.migrations import upgrade_to_head
-    from app.research.evaluate import evaluate_research
+    from app.research.quality import evaluate_suite
 
     engine = build_engine("sqlite://")
     upgrade_to_head(engine)
     Session = sessionmaker(bind=engine)
     db = Session()
     try:
-        print(json.dumps(evaluate_research(db), indent=2, default=str))
+        suite = args.suite or "baseline"
+        print(json.dumps(evaluate_suite(db, suite), indent=2, default=str))
         return 0
     finally:
         db.close()
@@ -51,9 +52,14 @@ def _worker(_args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.research", description="QuantPilot research agents")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("evaluate", help="Development-set research metrics with FakeLLMProvider").set_defaults(
-        func=_evaluate
+    evaluate = sub.add_parser("evaluate", help="Development-set research metrics with FakeLLMProvider")
+    evaluate.add_argument(
+        "--suite",
+        default="baseline",
+        choices=["baseline", "retrieval", "claims", "reports", "planner", "async", "security", "all"],
+        help="baseline keeps the 24-case report; other suites are fixture checks",
     )
+    evaluate.set_defaults(func=_evaluate)
     sub.add_parser(
         "worker",
         help="Publish the research outbox and consume quantpilot.research.request",

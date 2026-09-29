@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any, Dict, List, Sequence, Set
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -17,11 +19,13 @@ from app.retrieval.search import search
 from app.retrieval.store import embed_documents
 
 
-def _seed(db: Session) -> None:
+def _seed(db: Session) -> Dict[str, Any]:
+    ids: Dict[str, Any] = {}
     for row in companies():
-        entities.get_or_create_company(
+        company, _ = entities.get_or_create_company(
             db, CompanyIn(legal_name=row["name"], ticker=row["ticker"], cik=row["cik"])
         )
+        ids[row["ticker"]] = company.entity_id
     for index, doc in enumerate(DOCUMENTS):
         slug = str(doc["title"]).lower().replace(" ", "-")[:40]
         sources.upsert_source(
@@ -36,6 +40,14 @@ def _seed(db: Session) -> None:
                 metadata={"summary": str(doc["summary"]), "tickers": list(doc["tickers"])},
             ),
         )
+    return ids
+
+
+def _mrr(retrieved: Sequence[str], relevant: Set[str]) -> float:
+    for index, title in enumerate(retrieved, start=1):
+        if title in relevant:
+            return 1.0 / index
+    return 0.0
 
 
 def _precision_recall(retrieved: Sequence[str], relevant: Set[str], k: int) -> tuple[float, float]:
@@ -47,7 +59,7 @@ def _precision_recall(retrieved: Sequence[str], relevant: Set[str], k: int) -> t
 
 
 def evaluate_retrieval(db: Session) -> Dict[str, Any]:
-    _seed(db)
+    ids = _seed(db)
     index_documents(db)
     provider = FakeEmbeddingProvider()
     embed_documents(db, provider=provider)
@@ -55,6 +67,7 @@ def evaluate_retrieval(db: Session) -> Dict[str, Any]:
     r5: List[float] = []
     p10: List[float] = []
     r10: List[float] = []
+    reciprocal: List[float] = []
     empty = 0
     dupes = 0
     coverages: List[float] = []
@@ -72,18 +85,37 @@ def evaluate_retrieval(db: Session) -> Dict[str, Any]:
         r5.append(rec5)
         p10.append(prec10)
         r10.append(rec10)
+        reciprocal.append(_mrr(titles, relevant))
         package = assemble_package(db, ResearchRequest(query=str(item["query"])), provider=provider)
         coverages.append(float(package["retrieval_metadata"]["citation_coverage"]))
+    nvda = ids.get("NVDA")
+    entity_hits = search(db, "NVIDIA partnership", entity_ids=[nvda] if nvda else None, top_k=10, provider=provider)
+    entity_ok = bool(entity_hits["hits"]) and all(nvda in hit.entity_ids for hit in entity_hits["hits"])
+    future = search(
+        db, "NVIDIA partnership", published_after=NOW + timedelta(days=1), top_k=10, provider=provider
+    )
+    past = search(
+        db, "NVIDIA partnership", published_before=NOW - timedelta(days=1), top_k=10, provider=provider
+    )
+    unknown_event = search(db, "NVIDIA partnership", event_ids=[uuid4()], top_k=10, provider=provider)
     n = len(QUERIES)
     return {
         "set": "development_lexical_hash",
-        "limitation": "fake embeddings are lexical hashes, not OpenAI semantic quality",
+        "limitation": (
+            "DEVELOPMENT-ONLY. LEXICAL/FIXTURE EMBEDDINGS. NOT HUMAN-JUDGED. "
+            "NOT PRODUCTION MODEL QUALITY. Fake embeddings are lexical hashes, not OpenAI semantic quality."
+        ),
+        "embedding_provider": "FakeEmbeddingProvider",
         "query_count": n,
         "recall_at_5": round(sum(r5) / n, 4),
         "recall_at_10": round(sum(r10) / n, 4),
         "precision_at_5": round(sum(p5) / n, 4),
         "precision_at_10": round(sum(p10) / n, 4),
+        "mrr": round(sum(reciprocal) / n, 4),
         "citation_coverage": round(sum(coverages) / n, 4),
         "empty_rate": round(empty / n, 4),
         "duplicate_rate": round(dupes / n, 4),
+        "entity_filter_accuracy": 1.0 if entity_ok else 0.0,
+        "date_filter_accuracy": 1.0 if not future["hits"] and not past["hits"] else 0.0,
+        "event_filter_accuracy": 1.0 if not unknown_event["hits"] else 0.0,
     }

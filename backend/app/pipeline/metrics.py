@@ -31,7 +31,7 @@ FORBIDDEN_LABELS = frozenset({
     "name", "title", "error", "user_id", "raw_uri", "article", "payload",
     "correlation_id", "investigation_id", "entity_id", "relationship_id",
     "candidate_id", "evidence_id", "symbol", "source_id",
-    "document_id", "chunk_id", "query", "claim_id",
+    "document_id", "chunk_id", "query", "claim_id", "research_id",
 })
 
 DEFAULT_MAX_SERIES = 64

@@ -61,9 +61,9 @@ Full diagram: **[ARCHITECTURE.md](./ARCHITECTURE.md)** · Current state, decisio
 
 **Evidence & retrieval (Phase 4.1):** Canonical sources become `retrieval_documents` + deterministic chunks. Embeddings go through `EmbeddingProvider` (`text-embedding-3-small` or a fake lexical hasher in tests). Postgres pgvector is a derived index (`chunk_embeddings`); SQLite stores JSON. Hybrid search + structured facts assemble a bounded EvidencePackage (`GET /api/search`, `POST /api/research/context`). CLI: `python -m app.retrieval documents|embed|evaluate`. See [docs/PHASE4_1_PLAN.md](./docs/PHASE4_1_PLAN.md).
 
-**Research agents (Phase 4.4):** `POST /api/research` stores a job and an outbox row. A worker publishes `quantpilot.research.request`, then calls the Phase 4.3 `run_research()` graph. `GET /api/research/{id}` reads the durable result. Delivery is at-least-once with idempotent processing. Findings stay `FACT` / `OBSERVATION` / `INFERENCE` / `SCENARIO`. Tests use `FakeLLMProvider`. See [docs/PHASE4_4_PLAN.md](./docs/PHASE4_4_PLAN.md).
+**Research agents (Phase 4.5):** `POST /api/research` stores a job and an outbox row. A worker publishes `quantpilot.research.request`, then calls the Phase 4.3 `run_research()` graph. `GET /api/research/{id}` reads the durable result. Delivery is at-least-once with idempotent processing. Findings stay `FACT` / `OBSERVATION` / `INFERENCE` / `SCENARIO`. `python -m app.research evaluate` scores deterministic fixtures. Those scores are not production-model quality. See [docs/PHASE4_5_PLAN.md](./docs/PHASE4_5_PLAN.md).
 
-**Spec next (not shipped yet):** Master research agent / async job worker, a Spark cluster (only `local[*]` exists) / Airflow, Terraform, AWS, Grafana. Neo4j projection, pgvector retrieval, EvidencePackage research, and Prometheus scrape of `/metrics` are current. Do not treat target tech as shipped.
+**Spec next (not shipped yet):** A Spark cluster (only `local[*]` exists), Airflow, Terraform, AWS, Grafana. Neo4j projection, pgvector retrieval, EvidencePackage research, the async research worker, and Prometheus scrape of `/metrics` are current. Do not treat target tech as shipped.
 
 ---
 

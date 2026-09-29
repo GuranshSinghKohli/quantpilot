@@ -44,6 +44,7 @@ def probe_redis() -> str:
 
 
 def readiness_payload(*, include_pipeline: bool = True, include_graph: bool = True) -> Dict[str, object]:
+    """Database, migrations, and Redis. The LLM provider is not a readiness dependency."""
     database = probe_database()
     db_revision, migrations_current = probe_migrations()
     redis = probe_redis()

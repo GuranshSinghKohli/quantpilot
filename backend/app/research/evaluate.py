@@ -137,8 +137,7 @@ def _seed(db: Session) -> Dict[str, Any]:
     return rows
 
 
-def evaluate_research(db: Session) -> Dict[str, Any]:
-    companies = _seed(db)
+def score_cases(db: Session, companies: Dict[str, Any], cases: List[Dict[str, Any]]) -> Dict[str, Any]:
     citation_cover: List[float] = []
     unsupported_rates: List[float] = []
     verification_hits: List[int] = []
@@ -160,8 +159,17 @@ def evaluate_research(db: Session) -> Dict[str, Any]:
     conflict_hits = 0
     partial_hits = 0
     summary_cover: List[float] = []
+    unnecessary = 0
+    selected_total = 0
+    type_ok = 0
+    limitation_hits = 0
+    lineage_ok = 0
+    support_hits = 0
+    support_total = 0
+    fallback_hits = 0
+    fallback_total = 0
 
-    for case in CASES:
+    for case in cases:
         entity_ids = [companies[ticker].entity_id for ticker in case.get("tickers") or [] if ticker in companies]
         llm = FakeLLMProvider(
             scenario=str(case.get("scenario") or "valid"),
@@ -210,6 +218,12 @@ def evaluate_research(db: Session) -> Dict[str, Any]:
         plan_ok = bool(plan) and all(name in ALLOWED_SPECIALISTS for name in names) and len(names) <= 4
         plan_hits += int(plan_ok)
         routing_hits += int(plan_ok and plan is not None and plan.source in {"llm", "fallback"})
+        expected_agents = set(case.get("relevant_agents") or [])
+        selected_total += len(names)
+        unnecessary += len(set(names) - expected_agents)
+        if case.get("scenario") in {"bad_plan", "oversized_plan", "malformed"}:
+            fallback_total += 1
+            fallback_hits += int(plan is not None and plan.source == "fallback")
         report = result.report
         factual = list(factual_items(report)) if report else []
         structure_ok = report is not None and all(item.citation_ids and item.claim_id for item in factual)
@@ -234,6 +248,30 @@ def evaluate_research(db: Session) -> Dict[str, Any]:
         else:
             summary_cover.append(1.0)
 
+        sections = {
+            "key_facts": "FACT",
+            "market_observations": "OBSERVATION",
+            "implications": "INFERENCE",
+            "scenarios": "SCENARIO",
+        }
+        preserved = True
+        if report is not None:
+            for field, kind in sections.items():
+                for item in getattr(report, field) or []:
+                    if item.finding_type.value != kind:
+                        preserved = False
+            cited_ids = {str(row.get("citation_id")) for row in report.citations if isinstance(row, dict)}
+            linked = (not factual) or all(set(item.citation_ids) <= cited_ids for item in factual)
+            lineage_ok += int(linked)
+            limitation_hits += int(result.status != "partial" or bool(report.limitations))
+        else:
+            lineage_ok += int(result.status == "failed")
+            limitation_hits += int(result.status != "partial")
+        type_ok += int(preserved)
+        for claim in result.verified_claims:
+            support_total += 1
+            support_hits += int(bool(claim.citation_ids) and claim.verification_status.value == "supported")
+
         if case.get("must_not_verify_relationship"):
             bad = [
                 claim
@@ -245,7 +283,14 @@ def evaluate_research(db: Session) -> Dict[str, Any]:
             if bad:
                 verification_hits[-1] = 0
 
-    n = len(CASES)
+    n = len(cases)
+    if n == 0:
+        raise ValueError("evaluation dataset is empty")
+    precision = (precision_hits / precision_total) if precision_total else None
+    recall = (recall_hits / recall_total) if recall_total else None
+    f1 = None
+    if precision is not None and recall is not None and (precision + recall) > 0:
+        f1 = 2 * precision * recall / (precision + recall)
     return {
         "set": "development_fake_llm",
         "limitation": (
@@ -261,10 +306,18 @@ def evaluate_research(db: Session) -> Dict[str, Any]:
         "structured_output_validity": 1.0,
         "agent_completion_rate": round(completed / n, 4),
         "partial_result_rate": round(partial / n, 4),
-        "claim_precision": round(precision_hits / precision_total, 4) if precision_total else None,
-        "claim_recall": round(recall_hits / recall_total, 4) if recall_total else None,
+        "claim_precision": round(precision, 4) if precision is not None else None,
+        "claim_recall": round(recall, 4) if recall is not None else None,
+        "claim_f1": round(f1, 4) if f1 is not None else None,
+        "evidence_support_rate": round(support_hits / support_total, 4) if support_total else None,
         "mean_seconds": round(sum(timings) / n, 4),
-        "note": "claim precision/recall use expected finding types, not human-rated statement match",
+        "note": "claim precision/recall/F1 use expected finding types, not human-rated statement match",
+        "finding_type_preservation": round(type_ok / n, 4),
+        "limitation_presence_when_partial": round(limitation_hits / n, 4),
+        "citation_lineage_integrity": round(lineage_ok / n, 4),
+        "unnecessary_agent_rate": round(unnecessary / selected_total, 4) if selected_total else 0.0,
+        "fallback_correctness": round(fallback_hits / fallback_total, 4) if fallback_total else None,
+        "fixture_label": "DEVELOPMENT-ONLY. FIXTURE-BASED. NOT HUMAN-JUDGED. NOT PRODUCTION MODEL QUALITY.",
         "report_citation_coverage": round(factual_cited / factual_total, 4) if factual_total else 1.0,
         "factual_claim_verification_rate": round(factual_cited / factual_total, 4) if factual_total else 1.0,
         "unsupported_final_claim_rate": round(unsupported_final_hits / unsupported_final_total, 4)
@@ -277,3 +330,8 @@ def evaluate_research(db: Session) -> Dict[str, Any]:
         "plan_validity": round(plan_hits / n, 4),
         "summary_evidence_coverage": round(sum(summary_cover) / n, 4),
     }
+
+
+def evaluate_research(db: Session) -> Dict[str, Any]:
+    """Phase 4.3/4.4 baseline: the original 24 fixture cases."""
+    return score_cases(db, _seed(db), CASES)
