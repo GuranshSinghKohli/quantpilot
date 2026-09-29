@@ -466,10 +466,58 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 
     def validate_for_environment(self) -> None:
-        """Refuse to boot a production process with development-only secrets."""
-        if self.ENVIRONMENT == "production":
-            if self.JWT_SECRET_KEY.get_secret_value() in {"", _DEV_JWT_SECRET}:
-                raise ValueError("JWT_SECRET_KEY must be set in production")
+        """Refuse to boot production on development defaults.
+
+        Development and tests are unchanged. ``ENVIRONMENT=production`` must
+        name a real Postgres, a non-local Kafka, S3 via IAM, and a real model
+        key. FakeLLM stays available for tests.
+        """
+        if self.ENVIRONMENT != "production":
+            return
+        errors: List[str] = []
+        if self.JWT_SECRET_KEY.get_secret_value() in {"", _DEV_JWT_SECRET}:
+            errors.append("JWT_SECRET_KEY must be set in production")
+        if self.is_sqlite or self.DATABASE_URL.endswith("quantpilot.db"):
+            errors.append("DATABASE_URL must be PostgreSQL in production, not SQLite")
+        elif _host_is_local(_database_host(self.DATABASE_URL)):
+            errors.append("DATABASE_URL must not use localhost in production")
+        if self.LLM_PROVIDER == "fake" or self.EMBEDDING_PROVIDER == "fake":
+            errors.append("LLM_PROVIDER and EMBEDDING_PROVIDER cannot be fake in production")
+        if self.LLM_PROVIDER == "openai" and not self.OPENAI_API_KEY.get_secret_value().strip():
+            errors.append("OPENAI_API_KEY is required when LLM_PROVIDER=openai")
+        if self.EMBEDDING_PROVIDER == "openai" and not self.OPENAI_API_KEY.get_secret_value().strip():
+            errors.append("OPENAI_API_KEY is required when EMBEDDING_PROVIDER=openai")
+        if any(_host_is_local(_broker_host(part)) for part in self.KAFKA_BOOTSTRAP_SERVERS.split(",")):
+            errors.append("KAFKA_BOOTSTRAP_SERVERS must not use localhost in production")
+        if self.LAKE_BACKEND != "s3":
+            errors.append("LAKE_BACKEND must be s3 in production")
+        if self.LAKE_ENDPOINT_URL:
+            errors.append("LAKE_ENDPOINT_URL must be empty in production so S3 uses IAM")
+        if self.auto_migrate:
+            errors.append("DB_AUTO_MIGRATE must be false in production; run make prod-migrate before startup")
+        origins = self.allowed_origins
+        if not origins:
+            errors.append("ALLOWED_ORIGINS is required in production")
+        for origin in origins:
+            if not origin.startswith("https://") or _host_is_local(urlsplit(origin).hostname or ""):
+                errors.append(f"ALLOWED_ORIGINS must be https and not local, got {origin}")
+        if errors:
+            raise ValueError("; ".join(errors))
+
+
+def _host_is_local(host: str) -> bool:
+    return host.strip().lower() in {"", "localhost", "127.0.0.1", "::1"}
+
+
+def _database_host(url: str) -> str:
+    return urlsplit(url).hostname or ""
+
+
+def _broker_host(part: str) -> str:
+    part = part.strip()
+    if part.startswith("["):
+        return part[1:].split("]", 1)[0]
+    return part.rsplit(":", 1)[0]
 
 
 def _env_aliases() -> dict:

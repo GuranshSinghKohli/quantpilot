@@ -7,7 +7,20 @@ from app.core.settings import Settings
 
 
 def _settings(monkeypatch, **env) -> Settings:
-    for key in ("DATABASE_URL", "ENVIRONMENT", "DB_AUTO_MIGRATE", "SENTRY_ENVIRONMENT"):
+    for key in (
+        "DATABASE_URL",
+        "ENVIRONMENT",
+        "DB_AUTO_MIGRATE",
+        "SENTRY_ENVIRONMENT",
+        "JWT_SECRET_KEY",
+        "OPENAI_API_KEY",
+        "KAFKA_BOOTSTRAP_SERVERS",
+        "LAKE_BACKEND",
+        "LAKE_ENDPOINT_URL",
+        "ALLOWED_ORIGINS",
+        "LLM_PROVIDER",
+        "EMBEDDING_PROVIDER",
+    ):
         monkeypatch.delenv(key, raising=False)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
@@ -51,8 +64,45 @@ def test_secrets_are_not_printed(monkeypatch):
     assert s.JWT_SECRET_KEY.get_secret_value() == "super-secret-value"
 
 
+def _production(**extra: str) -> dict:
+    values = {
+        "ENVIRONMENT": "production",
+        "JWT_SECRET_KEY": "x" * 40,
+        "DATABASE_URL": "postgresql://quantpilot:secret@qp.internal:5432/quantpilot",
+        "OPENAI_API_KEY": "sk-example",
+        "KAFKA_BOOTSTRAP_SERVERS": "kafka.internal:9092",
+        "LAKE_BACKEND": "s3",
+        "DB_AUTO_MIGRATE": "false",
+        "ALLOWED_ORIGINS": "https://app.example.com",
+        "LLM_PROVIDER": "openai",
+        "EMBEDDING_PROVIDER": "openai",
+    }
+    values.update(extra)
+    return values
+
+
 def test_production_refuses_dev_jwt_secret(monkeypatch):
     monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
-    with pytest.raises(ValueError):
-        _settings(monkeypatch, ENVIRONMENT="production").validate_for_environment()
-    _settings(monkeypatch, ENVIRONMENT="production", JWT_SECRET_KEY="x" * 40).validate_for_environment()
+    with pytest.raises(ValueError, match="JWT_SECRET_KEY"):
+        _settings(monkeypatch, **_production(JWT_SECRET_KEY="dev-only-change-me-quantpilot")).validate_for_environment()
+    _settings(monkeypatch, **_production()).validate_for_environment()
+
+
+@pytest.mark.parametrize(
+    "override,match",
+    [
+        ({"DATABASE_URL": "sqlite:////tmp/quantpilot.db"}, "PostgreSQL"),
+        ({"DATABASE_URL": "postgresql://quantpilot:secret@localhost:5432/quantpilot"}, "localhost"),
+        ({"LLM_PROVIDER": "fake"}, "fake"),
+        ({"EMBEDDING_PROVIDER": "fake"}, "fake"),
+        ({"OPENAI_API_KEY": ""}, "OPENAI_API_KEY"),
+        ({"KAFKA_BOOTSTRAP_SERVERS": "127.0.0.1:9092"}, "localhost"),
+        ({"LAKE_BACKEND": "local"}, "LAKE_BACKEND"),
+        ({"LAKE_ENDPOINT_URL": "http://minio:9000"}, "LAKE_ENDPOINT_URL"),
+        ({"DB_AUTO_MIGRATE": "true"}, "DB_AUTO_MIGRATE"),
+        ({"ALLOWED_ORIGINS": "http://localhost:3000"}, "ALLOWED_ORIGINS"),
+    ],
+)
+def test_production_refuses_development_defaults(monkeypatch, override, match):
+    with pytest.raises(ValueError, match=match):
+        _settings(monkeypatch, **_production(**override)).validate_for_environment()

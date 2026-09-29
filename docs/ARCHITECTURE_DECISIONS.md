@@ -582,5 +582,26 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - Raising `KAFKA_RESEARCH_PARTITIONS` from the 4.8 run.
 - Optimizing FakeLLM execution or extrapolating it to OpenAI.
 
+## ADR-037 — Production deployment architecture
+
+**Status: Accepted as configuration. Not applied to an AWS account.**
+
+**Problem.** The research path ran in local Docker and on a developer machine. It had no reproducible AWS boundary, and production could still boot on SQLite, FakeLLM, or localhost.
+
+**Decision.**
+- AWS is the deployment target described in `infra/terraform/`: one VPC, an ALB, ECS Fargate for the API, Next.js, and the existing research worker, RDS PostgreSQL 16, one Kafka EC2 node, and a private S3 bucket.
+- PostgreSQL stays the system of record. pgvector stays the derived embedding index created by the existing migrations. Neo4j stays outside this stack and is still a projection.
+- Kafka stays the event backbone. This layout is one broker, replication factor 1, plaintext inside the private network. That is not a highly available Kafka cluster. Partition count stays 3.
+- The worker stays a separate process running `python -m app.research worker`. Worker count is an ECS desired count. Phase 4.8 did not measure ECS, and its in-process scaling was not linear.
+- S3 is the lake. The existing object-store code is unchanged. Task roles replace static AWS keys.
+- `ENVIRONMENT=production` refuses SQLite, FakeLLM, localhost brokers, MinIO endpoints, and startup migrations.
+- GitHub Actions may plan on demand and may apply only through a `production` environment using OIDC. Applying was not run.
+- Not in this stack: a Spark cluster, Airflow, Grafana, a second Kafka broker, Multi-AZ RDS, and a managed Neo4j service.
+
+**Rejected.**
+- Rewriting the worker or the research graph in order to deploy them.
+- Amazon MSK or a multi-broker cluster as a default. One broker matches the current replication factor and does not pretend to be highly available.
+- Putting database passwords or API keys in Terraform source or images.
+
 
 

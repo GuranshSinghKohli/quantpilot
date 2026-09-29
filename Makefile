@@ -35,7 +35,8 @@ LAKE_ENV = LAKE_BACKEND=s3 LAKE_ENDPOINT_URL=http://localhost:$(MINIO_PORT) \
         graph-up graph-down graph-test-up graph-test-down graph-status graph-project \
         graph-reconcile graph-repair graph-quality graph-check graph-seed test-neo4j \
         market-events-from-news market-impact market-quality \
-        retrieval-documents retrieval-embed retrieval-evaluate research-evaluate research-worker
+	retrieval-documents retrieval-embed retrieval-evaluate research-evaluate research-worker \
+	prod-migrate
 
 help:
 	@echo "up                compose stack (postgres, redis, migrate, backend, frontend)"
@@ -121,6 +122,12 @@ db:
 
 migrate:
 	cd backend && ../$(ALEMBIC) upgrade head
+
+# Production and staging. DATABASE_URL must already point at the target Postgres.
+# The API and worker do not migrate on startup when ENVIRONMENT=production.
+prod-migrate:
+	@test -n "$(DATABASE_URL)" || (echo 'DATABASE_URL is required' && exit 1)
+	cd backend && DATABASE_URL='$(DATABASE_URL)' ../$(ALEMBIC) upgrade head
 
 revision:
 	@test -n "$(m)" || (echo 'usage: make revision m="describe change"' && exit 1)

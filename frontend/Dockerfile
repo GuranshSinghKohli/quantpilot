@@ -14,9 +14,10 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app/.next ./.next
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/node_modules ./node_modules
-RUN mkdir -p public
+COPY --from=build --chown=node:node /app/.next ./.next
+COPY --from=build --chown=node:node /app/package.json ./package.json
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+RUN mkdir -p public && chown node:node public
+USER node
 EXPOSE 3000
 CMD ["npm", "run", "start"]

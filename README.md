@@ -63,7 +63,7 @@ Full diagram: **[ARCHITECTURE.md](./ARCHITECTURE.md)** · Current state, decisio
 
 **Research agents (Phase 4.7):** `POST /api/research` stores a job and an outbox row. A worker publishes `quantpilot.research.request`, then calls the Phase 4.3 `run_research()` graph. `GET /api/research/{id}` reads the durable result. Delivery is at-least-once with idempotent processing. Findings stay `FACT` / `OBSERVATION` / `INFERENCE` / `SCENARIO`. Document date filters are half-open UTC on `published_at`. The planner routes from the request. A technology finding quotes an excerpt that names a technology; a mention is not USES. `python -m app.research evaluate` scores deterministic fixtures. Those scores are not production-model quality. `python -m app.research load` measures the same submit, outbox, and worker path under FakeLLM on disposable Postgres and `test.*` Kafka topics. Those timings are not production capacity. Phase 4.9 kept that path: the measured wait is one worker draining a published batch, and the code change is the outbox pending gauge, which now counts rows still pending after the batch. See [docs/PHASE4_7_PLAN.md](./docs/PHASE4_7_PLAN.md), [docs/PHASE4_8_PLAN.md](./docs/PHASE4_8_PLAN.md), and [docs/PHASE4_9_RESULTS.md](./docs/PHASE4_9_RESULTS.md).
 
-**Spec next (not shipped yet):** A Spark cluster (only `local[*]` exists), Airflow, Terraform, AWS, Grafana. Neo4j projection, pgvector retrieval, EvidencePackage research, the async research worker, and Prometheus scrape of `/metrics` are current. Do not treat target tech as shipped.
+**Deployment (Phase 5):** Terraform under `infra/terraform/` describes a single-VPC AWS layout: ALB, ECS for the API, Next.js, and `python -m app.research worker`, RDS PostgreSQL 16, one Kafka EC2 node, and a private S3 lake. `ENVIRONMENT=production` refuses SQLite, FakeLLM, and localhost. Migrations run as `make prod-migrate` or the one-shot migrate task, not on API startup. This repository contains that configuration. It has not been applied to an AWS account from this phase. Neo4j stays an external endpoint. A Spark cluster, Airflow, and Grafana are still not shipped. See [docs/PHASE5_DEPLOYMENT.md](./docs/PHASE5_DEPLOYMENT.md).
 
 ---
 
@@ -118,6 +118,10 @@ cd .. && make migrate && make api       # alembic upgrade head, then uvicorn --r
 ```
 
 Schema changes go through Alembic (`backend/alembic/versions/`); the API never runs `create_all`. In development the API also migrates on startup (`DB_AUTO_MIGRATE`). `GET /ready` reports `db_revision` and `migrations_current`.
+
+### AWS configuration
+
+Local `make api` is unchanged. The AWS shape is documented in [docs/PHASE5_ARCHITECTURE.md](./docs/PHASE5_ARCHITECTURE.md) and [docs/PHASE5_DEPLOYMENT.md](./docs/PHASE5_DEPLOYMENT.md). Production startup refuses development defaults (`backend/app/core/settings.py`). Apply Terraform only from the manual **Deploy** workflow, and run `make prod-migrate` with `DATABASE_URL` set before starting the API. Variable names are in `.env.production.example`. Neo4j is not created by Terraform.
 
 **Tests.** `make test` runs the full suite on a throwaway SQLite file. `make db && make test-integration` runs the Postgres tier (`backend/tests/integration/`: migration drift, core repositories) against `quantpilot_test`, which the compose Postgres creates on first boot.
 

@@ -38,6 +38,11 @@ def _worker(_args: argparse.Namespace) -> int:
     from app.research.worker import serve
 
     settings = get_settings()
+    settings.validate_for_environment()
+    from app.observability.instrumentation import configure_langsmith, configure_opentelemetry
+
+    configure_langsmith()
+    configure_opentelemetry(None)
     producer = EventProducer(producer_config(settings), policy=RetryPolicy.from_settings(settings))
     consumer = build_consumer(settings, settings.KAFKA_CONSUMER_GROUP_RESEARCH)
     consumer.subscribe([settings.KAFKA_TOPIC_RESEARCH_REQUEST])

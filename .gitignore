@@ -4,6 +4,19 @@
 .env.production
 .env.*.local
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+# Provider checksums are resolved in CI. A lock generated on this machine only
+# covered darwin_amd64 and would fail linux runners.
+.terraform.lock.hcl
+
 # Python
 __pycache__/
 *.py[cod]
