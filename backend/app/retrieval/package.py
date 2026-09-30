@@ -18,6 +18,31 @@ from app.retrieval.structured import load_entities, load_events, load_graph_fact
 
 logger = get_logger("retrieval")
 
+# Document, event, and graph citations come from a Source row. A listing or a
+# calculated market window does not. URL coverage uses only the first group.
+_URL_CITATION_KINDS = frozenset({"document_excerpt", "event_fact", "graph_fact"})
+
+
+def http_source_url(value: Any) -> Optional[str]:
+    """Return a stored http(s) URL. Anything else stays absent. Nothing is invented."""
+    text = str(value or "").strip()
+    if text.startswith("https://") or text.startswith("http://"):
+        return text
+    return None
+
+
+def citation_url_coverage(citations: Sequence[Dict[str, Any]]) -> Optional[float]:
+    """Share of URL-requiring citations that carry a real http(s) URL.
+
+    Null when the package has no document, event, or graph citation. A null URL
+    is not counted as covered, and this is not citation-object coverage.
+    """
+    requiring = [item for item in citations if item.get("kind") in _URL_CITATION_KINDS]
+    if not requiring:
+        return None
+    valid = sum(1 for item in requiring if http_source_url(item.get("source_url")))
+    return round(valid / len(requiring), 4)
+
 
 class ResearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -93,7 +118,7 @@ def _cite_event(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "document_id": None,
         "chunk_id": None,
         "evidence_id": item.get("evidence_id"),
-        "source_url": item.get("source_url"),
+        "source_url": http_source_url(item.get("source_url")),
         "title": item.get("title"),
         "published_at": item.get("published_at"),
         "locator": {"event_id": item["event_id"]},
@@ -110,7 +135,7 @@ def _cite_graph(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "document_id": None,
         "chunk_id": None,
         "evidence_id": item["evidence_id"],
-        "source_url": None,
+        "source_url": http_source_url(item.get("source_url")),
         "title": item["relationship"],
         "published_at": None,
         "locator": {"relationship_id": item["relationship_id"]},
@@ -145,7 +170,7 @@ def _cite_document(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "document_id": item["document_id"],
         "chunk_id": item["chunk_id"],
         "evidence_id": None,
-        "source_url": item.get("source_url"),
+        "source_url": http_source_url(item.get("source_url")),
         "title": item.get("title"),
         "published_at": item.get("published_at"),
         "locator": item.get("locator") or {},
@@ -210,6 +235,7 @@ def assemble_package(db: Session, request: ResearchRequest, *, provider=None) ->
             "citation_coverage": 1.0
             if not (entities or events or graph_facts or market_facts or documents)
             else round(len(citations) / max(1, len(kept_entities) + len(kept_events) + len(kept_graph) + len(kept_market) + len(kept_docs)), 4),
+            "citation_url_coverage": citation_url_coverage(citations),
             "limits": limits,
         },
     }

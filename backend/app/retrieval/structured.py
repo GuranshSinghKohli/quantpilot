@@ -114,6 +114,7 @@ def load_graph_facts(db: Session, entity_ids: Sequence[uuid.UUID], *, limit: int
             continue
         link = min(links, key=lambda item: str(item.evidence_id))
         record = db.get(EvidenceRecord, link.evidence_id)
+        source = db.get(Source, record.source_id) if record is not None else None
         source_id = str(record.source_id) if record is not None else None
         out.append(
             {
@@ -124,6 +125,7 @@ def load_graph_facts(db: Session, entity_ids: Sequence[uuid.UUID], *, limit: int
                 "status": edge.status,
                 "source_id": source_id,
                 "evidence_id": str(link.evidence_id),
+                "source_url": source.url if source is not None else None,
             }
         )
         if len(out) >= limit:

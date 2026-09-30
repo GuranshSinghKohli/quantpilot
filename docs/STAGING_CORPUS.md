@@ -16,11 +16,13 @@ Five company listings from the SEC file `https://www.sec.gov/files/company_ticke
 
 The SEC payload said `Nasdaq`. The canonical loader stored `NASDAQ`. Each row's source is `sec.company_tickers`.
 
-Not loaded, because no adapter was configured:
+Not loaded. Phase 8 rechecked on 2026-09-30: `NEWS_API_KEY` and `MARKET_API_KEY` are unset in the developer environment and are not secrets on the staging API or worker tasks. Neo4j URI on the staging task is empty.
 
-- News articles and events. `NEWS_API_KEY` is unset.
-- Market bars. `MARKET_API_KEY` is unset.
+- News articles and events. `NEWS_API unavailable; news corpus not populated.`
+- Market bars. Market analytics remain unexercised.
 - Technology entities, relationship edges, and retrieval documents.
+
+No news ingest, Spark news job, event build, or embedding job was run in Phase 8. Inventing articles or prices was not a substitute.
 
 No prices, articles, partnerships, or technology descriptions were invented.
 

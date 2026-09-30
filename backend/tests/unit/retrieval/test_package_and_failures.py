@@ -71,8 +71,16 @@ def test_package_is_bounded_cited_and_serializable(db):
     blob = json.dumps(package, default=str)
     assert "NVIDIA" in blob
     assert package["retrieval_metadata"]["citation_coverage"] == 1.0
+    assert package["retrieval_metadata"]["citation_url_coverage"] == 1.0
     for item in package["citations"]:
         assert item["citation_id"]
+    by_kind = {}
+    for item in package["citations"]:
+        by_kind.setdefault(item["kind"], []).append(item)
+    assert by_kind["structured_fact"][0]["source_url"] is None
+    for kind in ("document_excerpt", "event_fact", "graph_fact"):
+        assert by_kind[kind]
+        assert all(item["source_url"] == "https://example.com/p1" for item in by_kind[kind])
     assert all(doc.get("source_url") for doc in package["documents"])
     with pytest.raises(RequestOversized):
         assemble_package(db, ResearchRequest(query="x", max_documents=9999), provider=provider)
@@ -82,6 +90,29 @@ def test_graph_edge_without_evidence_is_excluded(db):
     nvda = company(db, "NVIDIA Corporation", "NVDA", "1045810")
     package = assemble_package(db, ResearchRequest(query="anything", entity_ids=[nvda.entity_id]))
     assert package["graph_facts"] == []
+
+
+def test_listing_citation_does_not_count_as_url_coverage(db):
+    nvda = company(db, "NVIDIA Corporation", "NVDA", "1045810")
+    package = assemble_package(db, ResearchRequest(query="What is the canonical identity of this company?", entity_ids=[nvda.entity_id]))
+    assert package["citations"]
+    assert package["citations"][0]["kind"] == "structured_fact"
+    assert package["citations"][0]["source_url"] is None
+    assert package["retrieval_metadata"]["citation_url_coverage"] is None
+
+
+def test_url_coverage_excludes_null_and_non_http():
+    from app.retrieval.package import citation_url_coverage
+
+    citations = [
+        {"kind": "document_excerpt", "source_url": "https://example.com/a"},
+        {"kind": "event_fact", "source_url": None},
+        {"kind": "graph_fact", "source_url": "not-a-url"},
+        {"kind": "structured_fact", "source_url": None},
+        {"kind": "market_fact", "source_url": None},
+    ]
+    assert citation_url_coverage(citations) == round(1 / 3, 4)
+    assert citation_url_coverage([{"kind": "structured_fact", "source_url": None}]) is None
 
 
 def test_semantic_unavailable_still_returns_structured(db):
