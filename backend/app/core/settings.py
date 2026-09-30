@@ -73,6 +73,8 @@ class Settings(BaseSettings):
     JWT_EXPIRE_DAYS: int = Field(7, ge=1)
 
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+    # Staging without an ACM certificate serves HTTP. Localhost is still refused.
+    ALLOW_HTTP_ORIGINS: bool = False
     QUOTE_CACHE_TTL_SECONDS: int = Field(60, ge=0)
 
     # Browser MCP / OpenClaw document retrieval
@@ -278,6 +280,7 @@ class Settings(BaseSettings):
         "RATE_LIMIT_ENABLED",
         "LANGSMITH_TRACING",
         "OTEL_ENABLED",
+        "ALLOW_HTTP_ORIGINS",
         mode="before",
     )
     @classmethod
@@ -499,7 +502,14 @@ class Settings(BaseSettings):
         if not origins:
             errors.append("ALLOWED_ORIGINS is required in production")
         for origin in origins:
-            if not origin.startswith("https://") or _host_is_local(urlsplit(origin).hostname or ""):
+            host = urlsplit(origin).hostname or ""
+            if _host_is_local(host):
+                errors.append(f"ALLOWED_ORIGINS must not be local, got {origin}")
+            elif origin.startswith("https://"):
+                continue
+            elif origin.startswith("http://") and self.ALLOW_HTTP_ORIGINS:
+                continue
+            else:
                 errors.append(f"ALLOWED_ORIGINS must be https and not local, got {origin}")
         if errors:
             raise ValueError("; ".join(errors))

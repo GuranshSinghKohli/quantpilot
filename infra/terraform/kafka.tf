@@ -26,4 +26,6 @@ resource "aws_instance" "kafka" {
     encrypted   = true
     volume_size = 30
   }
+
+  depends_on = [aws_nat_gateway.this]
 }

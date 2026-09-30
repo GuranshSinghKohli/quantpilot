@@ -1,0 +1,19 @@
+# Non-secret staging values applied in Phase 6.
+# Copy to staging.tfvars (gitignored) before plan/apply.
+# vpc_cidr 10.42.0.0/16 keeps this VPC off the 10.40.0.0/16 range already used
+# by another stack in the same account.
+
+aws_region            = "us-east-1"
+environment           = "staging"
+project_name          = "quantpilot"
+vpc_cidr              = "10.42.0.0/16"
+acm_certificate_arn   = ""
+research_worker_count = 1
+start_services        = true
+neo4j_uri             = ""
+allowed_origins       = "http://quantpilot-staging-1583627039.us-east-1.elb.amazonaws.com"
+github_repository     = ""
+lake_bucket_name      = "quantpilot-staging-lake-ACCOUNT_ID"
+api_image             = "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/quantpilot-staging-api:phase6-worker"
+worker_image          = "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/quantpilot-staging-worker:phase6-worker"
+frontend_image        = "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/quantpilot-staging-frontend:phase6"

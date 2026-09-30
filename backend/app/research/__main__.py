@@ -47,7 +47,9 @@ def _worker(_args: argparse.Namespace) -> int:
     consumer = build_consumer(settings, settings.KAFKA_CONSUMER_GROUP_RESEARCH)
     consumer.subscribe([settings.KAFKA_TOPIC_RESEARCH_REQUEST])
     try:
-        serve(SessionLocal, consumer, producer, settings)
+        # idle_timeout_s=0 keeps the ECS task running when the request topic is empty.
+        # The default of 30s is for tests and the load harness, which pass their own timeout.
+        serve(SessionLocal, consumer, producer, settings, idle_timeout_s=0)
     finally:
         consumer.close()
         producer.close()

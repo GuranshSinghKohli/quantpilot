@@ -44,6 +44,7 @@ locals {
     { name = "KAFKA_BOOTSTRAP_SERVERS", value = "${aws_instance.kafka.private_ip}:9092" },
     { name = "KAFKA_REPLICATION_FACTOR", value = "1" },
     { name = "ALLOWED_ORIGINS", value = var.allowed_origins },
+    { name = "ALLOW_HTTP_ORIGINS", value = var.acm_certificate_arn == "" ? "true" : "false" },
     { name = "NEO4J_URI", value = var.neo4j_uri },
     { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = var.otel_endpoint },
     { name = "OTEL_ENABLED", value = var.otel_endpoint == "" ? "false" : "true" },
@@ -233,7 +234,23 @@ resource "aws_lb_listener_rule" "api" {
 
   condition {
     path_pattern {
-      values = ["/api/*", "/health", "/ready", "/metrics", "/docs", "/redoc", "/openapi.json"]
+      values = ["/api/*", "/health", "/ready", "/metrics"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "api_docs" {
+  listener_arn = local.listener_arn
+  priority     = 11
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/docs", "/redoc", "/openapi.json"]
     }
   }
 }
@@ -257,7 +274,7 @@ resource "aws_ecs_service" "api" {
     container_port   = 8000
   }
 
-  depends_on = [aws_lb_listener_rule.api]
+  depends_on = [aws_lb_listener_rule.api, aws_lb_listener_rule.api_docs]
 }
 
 resource "aws_ecs_service" "frontend" {

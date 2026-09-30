@@ -1,6 +1,6 @@
 # Phase 5 deployment
 
-Production deployment configuration is in this repository. It has not been applied. No AWS account was changed in this phase.
+Production deployment configuration is in this repository. Phase 5 did not apply it. Phase 6 applied an isolated `quantpilot-staging` stack and recorded the measurements in [PHASE6_RESULTS.md](./PHASE6_RESULTS.md). That staging stack is not a production environment.
 
 ## Local development
 
@@ -54,10 +54,13 @@ The API container listens with uvicorn, proxy headers enabled, as user `quantpil
 
 Point the ECS service at the previous task definition and set the desired count. That does not roll back a database migration. A migration rollback is `alembic downgrade` and was not run against RDS in this phase. Do not downgrade `0012` as part of a normal deploy; no new migration was added.
 
-## What was not executed
+## What Phase 5 did not execute
 
-- `terraform apply`
-- image push
-- an AWS smoke test
-- a restore test
-- a container vulnerability scan beyond ECR `scan_on_push` being set in the configuration
+Phase 5 stopped at configuration. Phase 6 later ran `terraform apply`, image push, and staging smoke tests against `quantpilot-staging` only. See [PHASE6_RESULTS.md](./PHASE6_RESULTS.md).
+
+Still not done:
+
+- the GitHub `deploy.yml` workflow (Phase 6 used local Terraform against the staging state)
+- an ACM certificate, so the staging listener is HTTP
+- a container vulnerability scan beyond ECR `scan_on_push` being set
+- any production-environment apply

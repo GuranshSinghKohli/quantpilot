@@ -3,6 +3,14 @@ set -euo pipefail
 dnf install -y docker
 systemctl enable --now docker
 mkdir -p /var/lib/kafka/data
+# apache/kafka runs as uid 1000. A root-owned bind mount fails format with
+# AccessDeniedException and the broker never listens.
+chown 1000:1000 /var/lib/kafka/data
+# The first pull through the NAT gateway can time out. Retry before giving up.
+for _ in 1 2 3 4 5; do
+  docker pull apache/kafka:4.3.1 && break
+  sleep 20
+done
 TOKEN="$(curl -sS -X PUT 'http://169.254.169.254/latest/api/token' -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600')"
 IP="$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)"
 docker run -d --name kafka --restart unless-stopped \

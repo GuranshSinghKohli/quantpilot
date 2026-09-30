@@ -20,6 +20,7 @@ def _settings(monkeypatch, **env) -> Settings:
         "ALLOWED_ORIGINS",
         "LLM_PROVIDER",
         "EMBEDDING_PROVIDER",
+        "ALLOW_HTTP_ORIGINS",
     ):
         monkeypatch.delenv(key, raising=False)
     for key, value in env.items():
@@ -101,8 +102,21 @@ def test_production_refuses_dev_jwt_secret(monkeypatch):
         ({"LAKE_ENDPOINT_URL": "http://minio:9000"}, "LAKE_ENDPOINT_URL"),
         ({"DB_AUTO_MIGRATE": "true"}, "DB_AUTO_MIGRATE"),
         ({"ALLOWED_ORIGINS": "http://localhost:3000"}, "ALLOWED_ORIGINS"),
+        ({"ALLOWED_ORIGINS": "http://staging.example.com"}, "https"),
     ],
 )
 def test_production_refuses_development_defaults(monkeypatch, override, match):
     with pytest.raises(ValueError, match=match):
         _settings(monkeypatch, **_production(**override)).validate_for_environment()
+
+
+def test_staging_http_origin_requires_explicit_flag(monkeypatch):
+    with pytest.raises(ValueError, match="local"):
+        _settings(
+            monkeypatch,
+            **_production(ALLOWED_ORIGINS="http://127.0.0.1:3000", ALLOW_HTTP_ORIGINS="true"),
+        ).validate_for_environment()
+    _settings(
+        monkeypatch,
+        **_production(ALLOWED_ORIGINS="http://quantpilot-staging.example.com", ALLOW_HTTP_ORIGINS="true"),
+    ).validate_for_environment()
