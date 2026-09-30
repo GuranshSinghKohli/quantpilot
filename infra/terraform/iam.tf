@@ -56,7 +56,17 @@ resource "aws_iam_role_policy" "api" {
 
 data "aws_iam_policy_document" "worker_task" {
   statement {
-    actions   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:GetBucketVersioning"]
+    # DeleteObject and AbortMultipartUpload are required by the existing Spark
+    # S3A commit: it writes a staging prefix, then renames by copy and delete.
+    # Scope stays this lake bucket. The API role remains read-only.
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+      "s3:AbortMultipartUpload",
+      "s3:ListBucket",
+      "s3:GetBucketVersioning",
+    ]
     resources = [aws_s3_bucket.lake.arn, "${aws_s3_bucket.lake.arn}/*"]
   }
 }

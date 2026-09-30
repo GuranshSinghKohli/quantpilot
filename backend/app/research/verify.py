@@ -78,6 +78,8 @@ def _verify_one(
         kind = ClaimKind.INFERENCE
     if _is_relationship_fact(finding, kind) and not _relationship_supported(finding, package, resolved):
         issues.append("unsupported_relationship")
+    if _structured_fact_ungrounded(finding.statement, package, resolved):
+        issues.append("ungrounded_structured_fact")
 
     status = _status(kind, issues, valid_ids)
     return VerifiedClaim(
@@ -99,6 +101,7 @@ def _status(kind: ClaimKind, issues: Sequence[str], valid_ids: Sequence[str]) ->
         "missing_citation",
         "unknown_citation",
         "unsupported_relationship",
+        "ungrounded_structured_fact",
         "investment_language",
         "causal_claim",
     }
@@ -109,6 +112,43 @@ def _status(kind: ClaimKind, issues: Sequence[str], valid_ids: Sequence[str]) ->
     if "classification_inference_as_fact" in issues:
         return VerificationStatus.UNCERTAIN
     return VerificationStatus.SUPPORTED
+
+
+# Words that describe a listing. They are not evidence. A token outside this
+# set and outside the cited entity's recorded attributes is not supported.
+_LISTING_WORDS = frozenset({
+    "the", "a", "an", "of", "for", "on", "in", "is", "are", "was", "were",
+    "be", "been", "and", "or", "with", "this", "its", "their", "company",
+    "legal", "name", "ticker", "symbol", "cik", "exchange", "listed",
+    "listing", "recorded", "sec", "identity", "canonical",
+})
+
+
+def _structured_fact_ungrounded(
+    statement: str,
+    package: Dict[str, Any],
+    resolved: Sequence[Dict[str, Any]],
+) -> bool:
+    """A structured listing citation does not support words it does not record."""
+    if not resolved or any(row.get("kind") != "structured_fact" for row in resolved):
+        return False
+    titles = {str(row.get("title") or "").strip().lower() for row in resolved if row.get("title")}
+    allowed = set(_LISTING_WORDS)
+    for entity in package.get("entities") or []:
+        name = str(entity.get("canonical_name") or entity.get("legal_name") or "").strip().lower()
+        if titles and name not in titles:
+            continue
+        for value in (
+            entity.get("canonical_name"),
+            entity.get("legal_name"),
+            entity.get("ticker"),
+            entity.get("cik"),
+            entity.get("exchange"),
+            entity.get("entity_type"),
+        ):
+            allowed.update(re.findall(r"[a-z0-9]+", str(value or "").lower()))
+    tokens = [tok for tok in re.findall(r"[a-z0-9]+", statement.lower()) if len(tok) > 1]
+    return any(tok not in allowed for tok in tokens)
 
 
 def _is_relationship_fact(finding: AgentFinding, kind: ClaimKind) -> bool:

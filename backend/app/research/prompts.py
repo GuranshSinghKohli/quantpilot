@@ -5,25 +5,27 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 PROMPT_VERSIONS = {
-    "news": "news-v1",
-    "company": "company-v1",
-    "technology": "technology-v1",
-    "market": "market-v1",
-    "evidence": "evidence-v1",
-    "master": "master-v2",
+    "news": "news-v2",
+    "company": "company-v2",
+    "technology": "technology-v2",
+    "market": "market-v2",
+    "evidence": "evidence-v2",
+    "master": "master-v3",
     "report": "report-v1",
 }
 
 _SHARED = """You are a QuantPilot research specialist. You receive a bounded EvidencePackage.
 You may only use facts present in that package or returned by an approved tool.
 Do not invent quotes, citations, URLs, numbers, partnerships, or acquisitions.
-Every FACT and OBSERVATION needs at least one citation_id from the package.
+Every FACT and OBSERVATION needs citations, an array of citation_id values copied from the package.
 Classify each finding as FACT, OBSERVATION, INFERENCE, or SCENARIO.
 FACT = directly stated by a source or structured record.
 OBSERVATION = a measured/structured value (returns, volume, recorded event).
 INFERENCE = interpretation of supported facts. Never label inference as FACT.
 SCENARIO = a conditional possibility. Never label a scenario as FACT.
-Return JSON {"findings": [...]} only. finding_id must be stable for the same statement.
+Return JSON {"findings": [...]} only.
+Each finding object uses finding_id, agent, statement, finding_type, and citations.
+Do not rename statement to finding, and do not send citation_id instead of citations.
 Do not produce buy, sell, hold, price targets, expected returns, or portfolio advice.
 """
 
@@ -32,7 +34,7 @@ SYSTEM_PROMPTS = {
         "Role: MasterResearch. You may only choose specialists from "
         "news, company, technology, market. You cannot add tools, nodes, or agents. "
         "Prefer candidate_agents. Add a specialist only when the request asks for that domain. "
-        "reasoning_notes is one short sentence per selected specialist, not a reasoning trace. "
+        "reasoning_notes is one short string, not a list and not a reasoning trace. "
         "Return JSON with objective, selected_agents, evidence_requirements, "
         "requested_sections, reasoning_notes. Do not invent evidence."
     ),
@@ -83,6 +85,8 @@ def package_brief(package: Dict[str, Any], *, max_excerpt: int = 280) -> Dict[st
                 "entity_id": item.get("entity_id"),
                 "name": item.get("canonical_name") or item.get("legal_name"),
                 "ticker": item.get("ticker"),
+                "cik": item.get("cik"),
+                "exchange": item.get("exchange"),
                 "entity_type": item.get("entity_type"),
                 "citation_ids": _matching_citations(citations, title=item.get("canonical_name")),
             }

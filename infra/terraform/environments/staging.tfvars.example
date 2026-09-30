@@ -15,5 +15,5 @@ allowed_origins       = "http://quantpilot-staging-1583627039.us-east-1.elb.amaz
 github_repository     = ""
 lake_bucket_name      = "quantpilot-staging-lake-ACCOUNT_ID"
 api_image             = "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/quantpilot-staging-api:phase6-worker"
-worker_image          = "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/quantpilot-staging-worker:phase6-worker"
+worker_image          = "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/quantpilot-staging-worker:phase7-grounded"
 frontend_image        = "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/quantpilot-staging-frontend:phase6"

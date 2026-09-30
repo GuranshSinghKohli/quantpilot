@@ -584,7 +584,7 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 
 ## ADR-037 — Production deployment architecture
 
-**Status: Accepted as configuration. Not applied to an AWS account.**
+**Status: Accepted as configuration. Phase 6 applied it as `quantpilot-staging`. That apply is not a production deployment.**
 
 **Problem.** The research path ran in local Docker and on a developer machine. It had no reproducible AWS boundary, and production could still boot on SQLite, FakeLLM, or localhost.
 
@@ -602,6 +602,25 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - Rewriting the worker or the research graph in order to deploy them.
 - Amazon MSK or a multi-broker cluster as a default. One broker matches the current replication factor and does not pretend to be highly available.
 - Putting database passwords or API keys in Terraform source or images.
+
+## ADR-038 — Staging evidence uses the existing ingestion path
+
+**Status: Accepted. Applied to `quantpilot-staging` only.**
+
+**Problem.** Phase 6 research jobs finished with zero claims because the staging lake and Postgres had no corpus. A second seeding path would not show that the ingestion pipeline can support a report.
+
+**Decision.**
+- Staging company rows come from the existing SEC company adapter, Kafka topic `quantpilot.company.raw`, lake writer, Spark `process company`, and canonical company loader. Five tickers: AAPL, MSFT, NVDA, AMD, META.
+- News and market stay unloaded. `NEWS_API_KEY` and `MARKET_API_KEY` are not configured. No synthetic prices, articles, relationships, or events were inserted.
+- Company listings do not become retrieval documents. Semantic search and pgvector stay empty until a document source exists. Structured entity facts are the evidence the research package can cite.
+- Neo4j stays unconfigured in staging. No public Neo4j endpoint was created.
+- The worker role may `s3:DeleteObject` and `s3:AbortMultipartUpload` on the staging lake bucket only. Spark's S3A commit renames by copy and delete. The API role stays read-only.
+- OpenAI structured output is coerced only for field aliases the model already returned (`finding` to `statement`, `citation_id` to `citations`, numeric `finding_id`, list `reasoning_notes`). The planner user message includes the bounded plan context. A `structured_fact` citation supports a statement only when the statement's words are in that entity's recorded attributes or a fixed listing vocabulary. That check does not apply to document, event, market, or graph citations.
+
+**Rejected.**
+- Inserting companies, claims, or citations directly into research tables.
+- Fabricating news, prices, partnerships, or technology facts so a demo has more sections.
+- Standing up a public Neo4j instance for staging.
 
 
 

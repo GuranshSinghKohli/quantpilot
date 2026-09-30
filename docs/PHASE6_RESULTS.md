@@ -269,7 +269,7 @@ That state does not include the other VPC in this account. Do not destroy resour
 - Phase 4.8 remains the only formal load matrix. These smoke calls are functional checks.
 - No RPO or RTO.
 - Neo4j was not configured, so graph projection was not part of the path. `/ready` reported `neo4j=unconfigured`.
-- The staging lake and Postgres had no ingested market, news, or company corpus. Research jobs finished with zero claims and zero citations.
+- The staging lake and Postgres had no ingested market, news, or company corpus when these smoke tests ran. Research jobs finished with zero claims and zero citations. Phase 7 later loaded five SEC company listings through the existing pipeline. See [PHASE7_RESULTS.md](./PHASE7_RESULTS.md).
 - The first research request finished `partial` because the company agent failed `malformed`. Four later requests finished `succeeded` with the same empty evidence limitation.
 - Worker lease reclaim of a job killed mid-flight was not observed.
 - HTTPS is not enabled.

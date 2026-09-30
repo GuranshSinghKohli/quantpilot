@@ -34,7 +34,7 @@ Retries: transient timeout / rate-limit / temporary provider errors use bounded 
 
 ## Prompts
 
-`master-v1`, `news-v1`, `company-v1`, `technology-v1`, `market-v1`, `evidence-v1`, `report-v1`. Change the version string when wording changes. Raw prompts and raw completions are not persisted. The report prompt may only repeat statements already on the verified set.
+`master-v3`, `news-v2`, `company-v2`, `technology-v2`, `market-v2`, `evidence-v2`, `report-v1`. Change the version string when wording changes. Raw prompts and raw completions are not persisted. The report prompt may only repeat statements already on the verified set.
 
 ## Later jobs
 

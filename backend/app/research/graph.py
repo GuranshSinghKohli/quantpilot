@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, TypedDict
@@ -97,7 +98,7 @@ def create_research_plan_node(state: ResearchState) -> Dict[str, Any]:
         provider = research_llm.get() or get_llm_provider()
         response = provider.generate_structured(
             system=SYSTEM_PROMPTS["master"],
-            user="plan",
+            user=json.dumps(context, default=str),
             schema=MasterPlanPayload,
             prompt_name="master",
             prompt_version=PROMPT_VERSIONS["master"],

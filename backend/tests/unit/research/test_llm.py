@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from app.research.llm import FakeLLMProvider, LLMError, OpenAILLMProvider
-from app.research.schemas import AgentFindingsPayload
+from app.research.llm import FakeLLMProvider, LLMError, OpenAILLMProvider, _coerce_structured
+from app.research.schemas import AgentFindingsPayload, MasterPlanPayload
 
 
 def _gen(provider, agent="news", context=None):
@@ -66,6 +66,68 @@ def test_transient_then_succeeds():
         _gen(provider)
     ok = _gen(provider)
     assert isinstance(ok.data, AgentFindingsPayload)
+
+
+def test_coerce_finding_aliases_without_inventing_text():
+    raw = {
+        "findings": [
+            {
+                "finding_id": "1",
+                "finding_type": "FACT",
+                "finding": "Apple Inc. is listed with the ticker symbol AAPL.",
+                "citation_id": "82c812849e298302",
+                "notes": "drop me",
+            }
+        ]
+    }
+    parsed = _coerce_structured(raw, AgentFindingsPayload, "company")
+    data = AgentFindingsPayload.model_validate(parsed)
+    assert data.findings[0].statement == "Apple Inc. is listed with the ticker symbol AAPL."
+    assert data.findings[0].citations == ["82c812849e298302"]
+    assert data.findings[0].agent == "company"
+    assert "notes" not in parsed["findings"][0]
+
+
+def test_coerce_numeric_finding_id():
+    parsed = _coerce_structured(
+        {
+            "findings": [
+                {
+                    "finding_id": 1,
+                    "agent": "company",
+                    "statement": "Apple Inc. ticker is AAPL.",
+                    "finding_type": "FACT",
+                    "citations": "82c812849e298302",
+                }
+            ]
+        },
+        AgentFindingsPayload,
+        "company",
+    )
+    data = AgentFindingsPayload.model_validate(parsed)
+    assert data.findings[0].finding_id == "1"
+    assert data.findings[0].citations == ["82c812849e298302"]
+
+
+def test_coerce_does_not_invent_a_statement():
+    parsed = _coerce_structured({"findings": [{"finding_type": "FACT"}]}, AgentFindingsPayload, "company")
+    with pytest.raises(Exception):
+        AgentFindingsPayload.model_validate(parsed)
+
+
+def test_coerce_planner_notes_list():
+    parsed = _coerce_structured(
+        {
+            "objective": "Identify the listed company.",
+            "selected_agents": ["company"],
+            "reasoning_notes": ["Company identity requested."],
+        },
+        MasterPlanPayload,
+        "master",
+    )
+    data = MasterPlanPayload.model_validate(parsed)
+    assert data.reasoning_notes == "Company identity requested."
+    assert data.selected_agents == ["company"]
 
 
 def test_openai_provider_requires_key(monkeypatch):

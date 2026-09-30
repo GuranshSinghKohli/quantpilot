@@ -166,9 +166,49 @@ def test_investment_and_causal_market_rejected():
     assert all(c.verification_status is VerificationStatus.UNSUPPORTED for c in claims)
 
 
+def test_structured_listing_does_not_support_an_invented_announcement():
+    package = {
+        "entities": [
+            {
+                "canonical_name": "Apple Inc.",
+                "legal_name": "Apple Inc.",
+                "ticker": "AAPL",
+                "cik": "0000320193",
+                "exchange": "NASDAQ",
+                "entity_type": "company",
+            }
+        ],
+        "citations": [
+            {
+                "citation_id": "82c812849e298302",
+                "kind": "structured_fact",
+                "title": "Apple Inc.",
+                "locator": {"record": "companies", "source": "sec.company_tickers"},
+            }
+        ],
+    }
+    grounded = _finding(
+        agent="company",
+        statement="The CIK for the company is 0000320193.",
+        citations=["82c812849e298302"],
+        evidence_refs=["82c812849e298302"],
+    )
+    invented = _finding(
+        finding_id="f2",
+        agent="company",
+        statement="Apple Inc. announced the iPhone 15 series on September 29, 2026.",
+        citations=["82c812849e298302"],
+        evidence_refs=["82c812849e298302"],
+    )
+    claims = {item.finding_id: item for item in verify_findings([grounded, invented], package)}
+    assert claims["f1"].verification_status is VerificationStatus.SUPPORTED
+    assert claims["f2"].verification_status is VerificationStatus.UNSUPPORTED
+    assert "ungrounded_structured_fact" in claims["f2"].issues
+
+
 def test_evidence_agent_wrapper_records_metadata():
     claims, meta = run_evidence_agent([_finding()], _package())
     assert claims
     assert meta.agent == "evidence"
     assert meta.model == "deterministic-guard"
-    assert meta.prompt_version == "evidence-v1"
+    assert meta.prompt_version == "evidence-v2"

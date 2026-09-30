@@ -61,6 +61,65 @@ def _estimate_cost(input_tokens: int, output_tokens: int) -> Optional[float]:
     return round((input_tokens / 1_000_000) * inp + (output_tokens / 1_000_000) * out, 8)
 
 
+_FINDING_FIELDS = frozenset(AgentFinding.model_fields)
+
+
+def _coerce_structured(parsed: Any, schema: Type[BaseModel], prompt_name: str) -> Any:
+    """Rename fields the model commonly emits before schema validation.
+
+    This does not invent statements or citation ids. Unknown finding keys are
+    dropped so extra=forbid does not reject an otherwise usable object.
+    """
+    if not isinstance(parsed, dict):
+        return parsed
+    if schema.__name__ == "MasterPlanPayload":
+        notes = parsed.get("reasoning_notes")
+        if isinstance(notes, list):
+            text = " ".join(str(item).strip() for item in notes if str(item).strip())
+            return {**parsed, "reasoning_notes": text[:500]}
+        return parsed
+    if schema.__name__ != "AgentFindingsPayload":
+        return parsed
+    findings = parsed.get("findings")
+    if not isinstance(findings, list):
+        return parsed
+    cleaned: List[Any] = []
+    for item in findings:
+        if not isinstance(item, dict):
+            cleaned.append(item)
+            continue
+        row = dict(item)
+        if not str(row.get("statement") or "").strip() and isinstance(row.get("finding"), str):
+            row["statement"] = row["finding"]
+        if "citations" not in row:
+            single = row.get("citation_id")
+            many = row.get("citation_ids")
+            if isinstance(single, str) and single.strip():
+                row["citations"] = [single.strip()]
+            elif isinstance(many, list):
+                row["citations"] = [str(cid).strip() for cid in many if str(cid).strip()]
+        if not str(row.get("agent") or "").strip() and prompt_name:
+            row["agent"] = prompt_name
+        if row.get("finding_id") is not None and not isinstance(row.get("finding_id"), str):
+            row["finding_id"] = str(row["finding_id"]).strip()
+        if isinstance(row.get("citations"), str) and row["citations"].strip():
+            row["citations"] = [row["citations"].strip()]
+        statement = str(row.get("statement") or "").strip()
+        if not str(row.get("finding_id") or "").strip() and statement:
+            cites = row.get("citations") if isinstance(row.get("citations"), list) else []
+            row["finding_id"] = _deterministic_id(str(row.get("agent") or prompt_name), statement, [str(cid) for cid in cites])
+        cleaned.append({key: value for key, value in row.items() if key in _FINDING_FIELDS})
+    return {"findings": cleaned}
+
+
+def _validation_hint(exc: ValidationError) -> str:
+    parts = []
+    for err in exc.errors()[:3]:
+        loc = ".".join(str(item) for item in err.get("loc") or ())
+        parts.append(f"{loc}:{err.get('type')}")
+    return "; ".join(parts)[:180]
+
+
 def _deterministic_id(agent: str, statement: str, citations: List[str]) -> str:
     import hashlib
 
@@ -372,7 +431,7 @@ class OpenAILLMProvider:
         prompt_version: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
-        del prompt_name, prompt_version
+        del prompt_version
         last: Optional[LLMError] = None
         for attempt in range(self._retries + 1):
             started = time.perf_counter()
@@ -394,10 +453,15 @@ class OpenAILLMProvider:
                 continue
             content = (response.choices[0].message.content or "").strip()
             try:
-                parsed = json.loads(content)
+                parsed = _coerce_structured(json.loads(content), schema, prompt_name)
                 data = schema.model_validate(parsed)
             except (json.JSONDecodeError, ValidationError) as exc:
-                last = LLMError("invalid structured output", retryable=attempt < self._retries, error_type="malformed")
+                hint = _validation_hint(exc) if isinstance(exc, ValidationError) else "json"
+                last = LLMError(
+                    f"invalid structured output ({hint})",
+                    retryable=attempt < self._retries,
+                    error_type="malformed",
+                )
                 if not last.retryable:
                     raise last from exc
                 time.sleep(min(2**attempt, 8))

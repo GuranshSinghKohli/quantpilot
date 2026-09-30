@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from app.research.agents import run_specialist
 from app.research.llm import FakeLLMProvider
+from app.research.prompts import PROMPT_VERSIONS
 from app.retrieval.embeddings import FakeEmbeddingProvider
 from app.retrieval.package import ResearchRequest, assemble_package
 from tests.unit.research.helpers import close_db, db_session, package_with_market, seed_partnership
@@ -35,7 +36,7 @@ def test_valid_and_empty_and_failures(db, agent):
     findings, meta, err = run_specialist(agent, package, provider=FakeLLMProvider())
     assert err is None
     assert meta.status == "succeeded"
-    assert meta.prompt_version.endswith("-v1")
+    assert meta.prompt_version == PROMPT_VERSIONS[agent]
     if agent in {"news", "company"}:
         assert findings
         assert all(item.citations for item in findings)
