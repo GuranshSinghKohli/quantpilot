@@ -369,7 +369,7 @@ class EventImpactCalculator:
         event_vol = float(event_bar.volume)
         if len(prior) < VOLUME_LOOKBACK:
             return {"event_day_volume": event_vol, "pre_event_average_volume": None, "volume_ratio": None}
-        average = sum(bar.volume for bar in prior) / len(prior)
+        average = sum(float(bar.volume) for bar in prior) / len(prior)
         if average <= 0:
             return {"event_day_volume": event_vol, "pre_event_average_volume": float(average), "volume_ratio": None}
         return {

@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.pipeline_context import pipeline_bind
-from app.domain.enums import CandidateStatus, EntityType, EventEntityRole, EventStatus, EventType
+from app.domain.enums import CandidateStatus, EntityType, EventEntityRole, EventStatus, EventType, ResolutionStatus
 from app.domain.identity import event_evidence_identity, event_source_identity
 from app.domain.ingestion_models import NewsArticle
 from app.domain.models import Event, EventCandidate, EventEntity, EvidenceRecord, Source
@@ -354,6 +354,55 @@ def propose_news_candidates(db: Session) -> dict:
     return {
         "created": created,
         "skipped": skipped,
+        "failed": failed,
+        "duration_seconds": round(duration, 3),
+    }
+
+
+def accept_resolved_news_candidates(db: Session) -> dict:
+    """Confirm pending NEWS candidates whose provider tickers resolve to an entity.
+
+    Event type stays NEWS. A candidate with no resolved ticker stays PENDING.
+    This does not infer a partnership, acquisition, product launch, or technology use.
+    """
+    started = datetime.now(timezone.utc)
+    service = EventCandidateService()
+    accepted = left_pending = failed = 0
+    rows = list(
+        db.scalars(
+            select(EventCandidate).where(
+                EventCandidate.status == CandidateStatus.PENDING.value,
+                EventCandidate.event_type == EventType.NEWS.value,
+            )
+        )
+    )
+    with pipeline_bind(component="market", operation="accept-resolved-news"):
+        for row in rows:
+            article = db.get(NewsArticle, row.source_id)
+            tickers = [str(t).upper().strip() for t in ((article.tickers if article else None) or []) if str(t).strip()]
+            if not any(_resolve_ticker(db, ticker).status == ResolutionStatus.RESOLVED for ticker in tickers):
+                left_pending += 1
+                continue
+            try:
+                service.accept(db, row.id)
+                accepted += 1
+            except Exception:
+                failed += 1
+                log_event(
+                    logger,
+                    40,
+                    "EVENT_CANDIDATE_ACCEPT_FAILED",
+                    component="market",
+                    operation="accept-resolved-news",
+                    status="failed",
+                    event_type=EventType.NEWS.value,
+                )
+        db.flush()
+    duration = (datetime.now(timezone.utc) - started).total_seconds()
+    return {
+        "examined": len(rows),
+        "accepted": accepted,
+        "left_pending": left_pending,
         "failed": failed,
         "duration_seconds": round(duration, 3),
     }

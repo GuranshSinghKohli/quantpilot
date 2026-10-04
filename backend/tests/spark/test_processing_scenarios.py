@@ -116,7 +116,7 @@ def test_news_quality_checks(env, run, mutate, code):
     (dict(open="abc"), "invalid_numeric"),
     (dict(close="1e5"), "invalid_numeric"),
     (dict(volume="-5"), "invalid_volume"),
-    (dict(volume="12.5"), "invalid_volume"),
+    (dict(volume="1e5"), "invalid_volume"),
     (dict(low="0"), "non_positive_price"),
     (dict(adj_close="-1"), "non_positive_price"),
     (dict(high="90.0"), "high_below_low"),

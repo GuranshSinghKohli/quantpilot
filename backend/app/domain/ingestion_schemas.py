@@ -49,7 +49,7 @@ class MarketBarIn(_Row):
     low: Decimal
     close: Decimal
     adj_close: Optional[Decimal] = None
-    volume: int = Field(ge=0)
+    volume: Decimal = Field(ge=0)
     currency: Optional[str] = Field(default=None, max_length=3)
     source: str = Field(min_length=1, max_length=64)
 

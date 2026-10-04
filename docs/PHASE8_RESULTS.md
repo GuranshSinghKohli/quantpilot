@@ -175,7 +175,6 @@ No production database, bucket, or Kafka cluster was addressed. No secret, `.tfs
 
 ## W. Deferred work
 
-- Set `NEWS_API_KEY` and `MARKET_API_KEY` on the staging task, then run the commands in the corpus plan.
-- Roll a worker image that includes the citation URL pass-through after those documents exist.
+- `NEWS_API_KEY` and `MARKET_API_KEY` were added to the staging tasks on 2026-10-03. Phase 9 then loaded the bounded corpus and rolled worker image `phase9-worker`, which includes the citation URL pass-through. See [phases/phase9-results.md](phases/phase9-results.md).
 - A private Neo4j URI, if one is actually available.
 - ACM, then HTTPS.

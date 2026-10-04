@@ -13,7 +13,7 @@ def test_market_record_normalizes_numbers_and_symbol():
     r = market_record(symbol=" synth ", open=100.1234567, volume=1000.0)
     assert r.symbol == "SYNTH"
     assert r.open == Decimal("100.123457")
-    assert r.volume == 1000 and isinstance(r.volume, int)
+    assert r.volume == Decimal("1000.000000")
 
 
 def test_timestamps_are_converted_to_utc():
@@ -36,7 +36,6 @@ def test_naive_timestamps_are_rejected():
         {"low": -1.0},
         {"high": 0},
         {"volume": -5},
-        {"volume": 10.5},
         {"open": True},
         {"high": 99.0},  # high below open/close
         {"low": 106.0},  # low above open/close

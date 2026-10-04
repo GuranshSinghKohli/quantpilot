@@ -134,17 +134,19 @@ def weekdays(start: date, count: int, skip: set[date] | None = None) -> list[dat
     return out
 
 
-def seed_news(db: Session, *, tickers: list[str], external_id: str = "news-1", url: str = "https://example.com/a") -> None:
+def seed_news(
+    db: Session, *, tickers: list[str], external_id: str = "news-1", url: str = "https://example.com/a", n: int = 1
+) -> None:
     env = Env(db, "massive.news")
     upsert_news(
         db,
         [
             NewsArticleIn(
                 source_ingested_at=NOW,
-                event_id=env.event(1),
+                event_id=env.event(n),
                 processing_job_id=env.job.id,
-                raw_uri="s3://lake/raw/news/1.json",
-                content_hash=_hex(50_000),
+                raw_uri=f"s3://lake/raw/news/{n}.json",
+                content_hash=_hex(50_000 + n),
                 source_key="massive.news",
                 external_id=external_id,
                 url=url,

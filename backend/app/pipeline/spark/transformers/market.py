@@ -28,7 +28,7 @@ from app.pipeline.spark.transformers.common import (
 )
 
 DECIMAL = r"^-?\d+(\.\d+)?$"
-WHOLE = r"^\d{1,18}$"
+VOLUME = r"^\d+(\.\d+)?$"
 PRICES = ("open", "high", "low", "close")
 MAX_PRICE = "1e14"  # DECIMAL(20,6) keeps 14 integer digits
 
@@ -48,7 +48,7 @@ def columns(ctx: Context) -> Dict[str, Column]:
         "trading_date": F.when(r("trading_date").rlike(ISO_DATE), F.to_date(r("trading_date"), "yyyy-MM-dd")),
         "bar_timestamp": instant(r("timestamp")),
         **{name: _decimal(r(name)) for name in (*PRICES, "adj_close")},
-        "volume": F.when(r("volume").rlike(WHOLE), r("volume").cast("bigint")),
+        "volume": F.when(r("volume").rlike(VOLUME), r("volume").cast("decimal(20,6)")),
         "currency": r("currency"),
     }
 
@@ -71,7 +71,7 @@ def rules(ctx: Context) -> List[Rule]:
         Rule("non_positive_price", any_of([p <= 0 for p in prices] + [col("adj_close") <= 0]
                                           + [p >= F.lit(MAX_PRICE).cast("decimal(20,6)") for p in prices]),
              "prices must be > 0 and below 1e14"),
-        Rule("invalid_volume", col("volume").isNull(), F.concat(F.lit("volume "), r("volume"), F.lit(" is not a non-negative whole number"))),
+        Rule("invalid_volume", col("volume").isNull(), F.concat(F.lit("volume "), r("volume"), F.lit(" is not a non-negative decimal fitting DECIMAL(20,6)"))),
         Rule("high_below_low", col("high") < col("low"), F.concat(F.lit("high "), col("high"), F.lit(" < low "), col("low"))),
         Rule("ohlc_inconsistent", any_of([col("open") < col("low"), col("open") > col("high"),
                                           col("close") < col("low"), col("close") > col("high")]),

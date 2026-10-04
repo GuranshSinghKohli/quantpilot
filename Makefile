@@ -34,7 +34,7 @@ LAKE_ENV = LAKE_BACKEND=s3 LAKE_ENDPOINT_URL=http://localhost:$(MINIO_PORT) \
         retry-load reprocess-job retry-ingestion metrics-up metrics \
         graph-up graph-down graph-test-up graph-test-down graph-status graph-project \
         graph-reconcile graph-repair graph-quality graph-check graph-seed test-neo4j \
-        market-events-from-news market-impact market-quality \
+        market-events-from-news market-accept-resolved-news market-impact market-quality \
 	retrieval-documents retrieval-embed retrieval-evaluate research-evaluate research-worker \
 	prod-migrate
 
@@ -100,6 +100,7 @@ help:
 	@echo "graph-seed        deterministic evidenced relationship fixtures"
 	@echo "test-neo4j        isolated Neo4j tier (TEST_NEO4J_URI=localhost:17687; never :7687)"
 	@echo "market-events-from-news  propose NEWS candidates from canonical articles with tickers"
+	@echo "market-accept-resolved-news  confirm pending NEWS candidates with a resolved ticker"
 	@echo "market-impact     event-window v1 metrics  [EVENT= | SINCE= UNTIL=]"
 	@echo "market-quality    read-only event/market/impact checks"
 	@echo "retrieval-documents  normalize sources into retrieval documents"
@@ -341,6 +342,9 @@ test-neo4j:
 
 market-events-from-news:
 	cd backend && ../$(PY) -m app.market events-from-news
+
+market-accept-resolved-news:
+	cd backend && ../$(PY) -m app.market accept-resolved-news
 
 market-impact:
 	cd backend && ../$(PY) -m app.market impact \

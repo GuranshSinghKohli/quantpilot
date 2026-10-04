@@ -152,14 +152,22 @@ def _price(value: Decimal) -> Decimal:
     return value
 
 
-def _volume(value: Any) -> Any:
+def _volume(value: Any) -> Decimal:
+    """Keep the provider's share volume, including a fractional aggregate.
+
+    Massive daily bars send ``v`` as a non-integer float. Rounding it to a
+    whole share would invent a count, so the value is stored at DECIMAL(20,6).
+    """
     if isinstance(value, bool):
         raise ValueError("boolean is not a volume")
-    if isinstance(value, float):
-        if not math.isfinite(value) or value != int(value):
-            raise ValueError("volume must be a whole number")
-        return int(value)
-    return value
+    number = value if isinstance(value, Decimal) else _decimal(value)
+    if isinstance(value, Decimal):
+        number = value.quantize(_SIX_DP, rounding=ROUND_HALF_EVEN)
+    if number < 0:
+        raise ValueError("volume must be >= 0")
+    if number >= _PRICE_LIMIT:
+        raise ValueError("volume out of range")
+    return number
 
 
 def _tickers(values: Any) -> Tuple[str, ...]:
@@ -175,7 +183,7 @@ UtcDatetime = Annotated[AwareDatetime, AfterValidator(_to_utc)]
 Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 Symbol = Annotated[str, AfterValidator(_symbol)]
 Price = Annotated[Decimal, BeforeValidator(_decimal), AfterValidator(_price)]
-Volume = Annotated[int, BeforeValidator(_volume), Field(ge=0)]
+Volume = Annotated[Decimal, BeforeValidator(_volume), Field(ge=0)]
 Tickers = Annotated[Tuple[str, ...], BeforeValidator(_tickers)]
 Text = Annotated[Optional[str], AfterValidator(_collapse)]
 

@@ -53,6 +53,18 @@ def _events_from_news(_args: argparse.Namespace) -> int:
         db.close()
 
 
+def _accept_resolved_news(_args: argparse.Namespace) -> int:
+    from app.market.candidates import accept_resolved_news_candidates
+
+    db = _sessions()()
+    try:
+        report = accept_resolved_news_candidates(db)
+        db.commit()
+        return _dump(report)
+    finally:
+        db.close()
+
+
 def _impact(args: argparse.Namespace) -> int:
     from app.market.calculator import EventImpactCalculator
 
@@ -94,6 +106,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("events-from-news", help="Propose NEWS candidates from canonical articles with tickers").set_defaults(
         func=_events_from_news
     )
+    sub.add_parser(
+        "accept-resolved-news",
+        help="Confirm pending NEWS candidates whose provider tickers resolve to an existing entity",
+    ).set_defaults(func=_accept_resolved_news)
     impact = sub.add_parser("impact", help="Calculate event-window analytics for confirmed events")
     impact.add_argument("event_id", nargs="?", help="confirmed event UUID")
     impact.add_argument("--since", help="UTC date or timestamp inclusive lower bound")

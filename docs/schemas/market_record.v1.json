@@ -113,9 +113,17 @@
       "type": "string"
     },
     "volume": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
       "ge": 0,
-      "title": "Volume",
-      "type": "integer"
+      "title": "Volume"
     }
   },
   "required": [

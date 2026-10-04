@@ -100,7 +100,7 @@ DOMAIN_COLUMNS: Dict[str, Tuple[Col, ...]] = {
         Col("low", "decimal(20,6)", True, "unadjusted"),
         Col("close", "decimal(20,6)", True, "unadjusted"),
         Col("adj_close", "decimal(20,6)", False, "null: not supplied by the current provider"),
-        Col("volume", "bigint", True, "shares traded"),
+        Col("volume", "decimal(20,6)", True, "provider share volume, including a fractional aggregate"),
         Col("currency", "string", False, "null: not supplied by the current provider"),
     ),
     "company": (

@@ -235,7 +235,7 @@ class MarketBar(_CanonicalLineage, Base):
     low: Mapped[Decimal] = mapped_column(PRICE, nullable=False)
     close: Mapped[Decimal] = mapped_column(PRICE, nullable=False)
     adj_close: Mapped[Optional[Decimal]] = mapped_column(PRICE)
-    volume: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    volume: Mapped[Decimal] = mapped_column(PRICE, nullable=False)
     currency: Mapped[Optional[str]] = mapped_column(String(3))
     source: Mapped[str] = mapped_column(String(64), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)

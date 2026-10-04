@@ -46,7 +46,7 @@ class SessionBar:
     high: Decimal
     low: Decimal
     close: Decimal
-    volume: int
+    volume: Decimal
 
 
 def bar_is_valid(bar: SessionBar) -> bool:
@@ -78,7 +78,7 @@ def load_sessions(db: Session, symbol: str, *, interval: str = DAILY_INTERVAL) -
             high=row.high,
             low=row.low,
             close=row.close,
-            volume=int(row.volume),
+            volume=Decimal(row.volume),
         )
     return [seen[day] for day in sorted(seen)]
 

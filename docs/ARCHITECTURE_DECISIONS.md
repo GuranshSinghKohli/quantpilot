@@ -611,7 +611,7 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 
 **Decision.**
 - Staging company rows come from the existing SEC company adapter, Kafka topic `quantpilot.company.raw`, lake writer, Spark `process company`, and canonical company loader. Five tickers: AAPL, MSFT, NVDA, AMD, META.
-- News and market stay unloaded. `NEWS_API_KEY` and `MARKET_API_KEY` are not configured. No synthetic prices, articles, relationships, or events were inserted.
+- Phase 7 left news and market unloaded. Phase 9 configured `NEWS_API_KEY` and `MARKET_API_KEY` on the staging API and worker tasks and loaded a bounded Massive corpus through the existing path. See [phases/phase9-results.md](phases/phase9-results.md). No synthetic prices, articles, relationships, or events were inserted.
 - Company listings do not become retrieval documents. Semantic search and pgvector stay empty until a document source exists. Structured entity facts are the evidence the research package can cite.
 - Neo4j stays unconfigured in staging. No public Neo4j endpoint was created.
 - The worker role may `s3:DeleteObject` and `s3:AbortMultipartUpload` on the staging lake bucket only. Spark's S3A commit renames by copy and delete. The API role stays read-only.
@@ -624,7 +624,7 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 
 ## ADR-039 — Citation URL coverage is not citation-object coverage
 
-**Status: Accepted. Not exercised on new staging documents, because news and market keys are unset.**
+**Status: Accepted. Exercised on the Phase 9 Massive news corpus. See [phases/phase9-results.md](phases/phase9-results.md).**
 
 **Problem.** Phase 7 reports had citation objects and a package `citation_coverage` of 1.0, and every `source_url` was null. Graph evidence already points at a `sources` row with a required URL, and the package dropped that URL.
 
@@ -632,7 +632,7 @@ Standardize on **Python 3.11** locally, in Docker, and in CI. That removes the 3
 - `citation_coverage` remains the share of package items that have a citation object.
 - `citation_url_coverage` is the share of document, event, and graph citations whose `source_url` is an http(s) URL already stored on the source. It is null when the package has none of those citations. A null URL is not counted as covered. Listing facts and calculated market windows are not in the denominator.
 - Graph facts copy `sources.url`. Document and event citations already did. No URL is built from a title, a ticker, or a search query.
-- News and market staging loads wait for `NEWS_API_KEY` and `MARKET_API_KEY`. Those keys are not in the staging task. No parallel corpus and no synthetic articles or prices.
+- Phase 9 ran that ingest. `NEWS_API_KEY` and `MARKET_API_KEY` are on the staging API and worker tasks. No parallel corpus and no synthetic articles or prices.
 
 **Rejected.**
 - Treating `citation_coverage = 1.0` as URL coverage.

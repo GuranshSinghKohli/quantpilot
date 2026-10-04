@@ -16,15 +16,7 @@ Five company listings from the SEC file `https://www.sec.gov/files/company_ticke
 
 The SEC payload said `Nasdaq`. The canonical loader stored `NASDAQ`. Each row's source is `sec.company_tickers`.
 
-Not loaded. Phase 8 rechecked on 2026-09-30: `NEWS_API_KEY` and `MARKET_API_KEY` are unset in the developer environment and are not secrets on the staging API or worker tasks. Neo4j URI on the staging task is empty.
-
-- News articles and events. `NEWS_API unavailable; news corpus not populated.`
-- Market bars. Market analytics remain unexercised.
-- Technology entities, relationship edges, and retrieval documents.
-
-No news ingest, Spark news job, event build, or embedding job was run in Phase 8. Inventing articles or prices was not a substitute.
-
-No prices, articles, partnerships, or technology descriptions were invented.
+Phase 9 added a bounded Massive corpus on top of those listings. Counts measured after the load: 72 news articles, 264 daily bars (44 each for AAPL, MSFT, NVDA, AMD, META, and SPY), 72 retrieval documents, 72 chunks, 72 `text-embedding-3-small` embeddings (dimension 1536), 72 confirmed `NEWS` events, 144 `event_impacts` rows, and 0 relationships. News publication window `2026-09-15` through `2026-10-03`. Bar window `2026-08-03` through `2026-10-03`. Every news source URL stored is `https`. Neo4j is still empty. Details and task ids are in [phases/phase9-results.md](phases/phase9-results.md).
 
 ## How it was ingested
 

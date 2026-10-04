@@ -25,6 +25,8 @@ data "aws_iam_policy_document" "ecs_execution_secrets" {
       aws_secretsmanager_secret.database_url.arn,
       aws_secretsmanager_secret.openai_api_key.arn,
       aws_secretsmanager_secret.jwt_secret.arn,
+      aws_secretsmanager_secret.news_api_key.arn,
+      aws_secretsmanager_secret.market_api_key.arn,
       try(aws_secretsmanager_secret.neo4j_password[0].arn, ""),
     ])
   }

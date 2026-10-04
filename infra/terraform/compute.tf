@@ -53,6 +53,8 @@ locals {
     { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn },
     { name = "OPENAI_API_KEY", valueFrom = aws_secretsmanager_secret.openai_api_key.arn },
     { name = "JWT_SECRET_KEY", valueFrom = aws_secretsmanager_secret.jwt_secret.arn },
+    { name = "NEWS_API_KEY", valueFrom = aws_secretsmanager_secret.news_api_key.arn },
+    { name = "MARKET_API_KEY", valueFrom = aws_secretsmanager_secret.market_api_key.arn },
   ]
 }
 

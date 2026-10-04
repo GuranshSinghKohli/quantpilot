@@ -14,7 +14,13 @@ from app.domain.models import Event, EventCandidate, EventEntity
 from app.domain.schemas import CompanyIn
 from app.graph.errors import AmbiguousEntity, ProvenanceRequired, UnresolvedEntity
 from app.graph.resolve import EntityRef
-from app.market.candidates import EventAssociationIn, EventCandidateProposal, EventCandidateService, propose_news_candidates
+from app.market.candidates import (
+    EventAssociationIn,
+    EventCandidateProposal,
+    EventCandidateService,
+    accept_resolved_news_candidates,
+    propose_news_candidates,
+)
 from app.repositories import entities
 from tests.unit.market.helpers import close_db, company, evidence, migrated_db, seed_news, source
 
@@ -59,6 +65,25 @@ def test_news_with_tickers_is_pending_and_idempotent(db):
     assert row.status == CandidateStatus.PENDING.value
     assert row.event_type == EventType.NEWS.value
     assert db.scalar(select(Event)) is None
+
+
+def test_accept_resolved_news_confirms_only_a_resolved_ticker(db):
+    company(db, "NVIDIA Corporation", "NVDA", "1045810")
+    seed_news(db, tickers=["NVDA"], external_id="nvda-news", url="https://example.com/nvda", n=1)
+    seed_news(db, tickers=["NOSUCH"], external_id="other-news", url="https://example.com/other", n=2)
+    propose_news_candidates(db)
+    first = accept_resolved_news_candidates(db)
+    second = accept_resolved_news_candidates(db)
+    assert first == {"examined": 2, "accepted": 1, "left_pending": 1, "failed": 0, "duration_seconds": first["duration_seconds"]}
+    assert second["examined"] == 1
+    assert second["accepted"] == 0
+    assert second["left_pending"] == 1
+    confirmed = list(db.scalars(select(Event)))
+    assert len(confirmed) == 1
+    assert confirmed[0].status == EventStatus.CONFIRMED.value
+    assert confirmed[0].event_type == EventType.NEWS.value
+    pending = db.scalars(select(EventCandidate).where(EventCandidate.status == CandidateStatus.PENDING.value)).all()
+    assert len(pending) == 1
 
 
 def test_accept_resolves_first_ticker_as_subject(db):

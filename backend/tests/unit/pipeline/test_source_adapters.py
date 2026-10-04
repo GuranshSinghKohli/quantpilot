@@ -135,6 +135,12 @@ def test_market_sample_normalizes_to_exchange_session_dates(source_env):
     assert (first.adj_close, first.currency) == (None, None)  # not provided → not guessed
 
 
+def test_fractional_provider_volume_is_kept(source_env):
+    record = source_env.adapter("market").normalize(
+        SourceItem({"ticker": "AAPL", "bar": bar(date(2026, 9, 1), v=53167388.094327)}, "x"), ingested_at=T)
+    assert record.volume == Decimal("53167388.094327")
+
+
 def test_market_summer_bars_use_edt_session_dates(source_env):
     record = source_env.adapter("market").normalize(
         SourceItem({"ticker": "AAPL", "bar": bar(date(2026, 9, 1))}, "x"), ingested_at=T)
@@ -142,7 +148,7 @@ def test_market_summer_bars_use_edt_session_dates(source_env):
     assert record.trading_date == date(2026, 9, 1)
 
 
-@pytest.mark.parametrize("over,field", [({"v": None}, "v"), ({"v": 10.5}, "volume"), ({"t": "yesterday"}, "t"),
+@pytest.mark.parametrize("over,field", [({"v": None}, "v"), ({"t": "yesterday"}, "t"),
                                         ({"l": 500}, None), ({"o": -1}, "open")])
 def test_market_bad_bars_are_rejected_not_repaired(source_env, over, field):
     raw = {"ticker": "AAPL", "bar": {k: v for k, v in bar(date(2026, 9, 1), **over).items() if v is not None}}

@@ -45,7 +45,7 @@ CHECKS: Dict[str, Check] = {
         Check("invalid_interval", "bar interval is not 1d"),
         Check("invalid_numeric", "a price is not a plain decimal that fits DECIMAL(20,6)"),
         Check("non_positive_price", "a price is <= 0 (the contract requires > 0)"),
-        Check("invalid_volume", "volume is not a non-negative whole number"),
+        Check("invalid_volume", "volume is not a non-negative decimal fitting DECIMAL(20,6)"),
         Check("high_below_low", "high < low"),
         Check("ohlc_inconsistent", "open or close outside [low, high]"),
         Check("trading_date_mismatch", "bar timestamp more than one calendar day from trading_date"),
