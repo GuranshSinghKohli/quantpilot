@@ -9,7 +9,8 @@ from typing import Any, Dict, List, Optional, Protocol, Type
 from pydantic import BaseModel, ValidationError
 
 from app.core.settings import get_settings
-from app.research.schemas import AgentFinding, AgentFindingsPayload
+from app.research.plan import REQUESTED_SECTIONS
+from app.research.schemas import ALLOWED_SPECIALISTS, AgentFinding, AgentFindingsPayload
 
 
 class LLMError(RuntimeError):
@@ -34,6 +35,7 @@ class LLMResponse(BaseModel):
     model_version: str
     usage: TokenUsage
     latency_ms: int
+    retries: int = 0
 
 
 class LLMProvider(Protocol):
@@ -49,6 +51,7 @@ class LLMProvider(Protocol):
         prompt_name: str,
         prompt_version: str,
         context: Optional[Dict[str, Any]] = None,
+        attempts: Optional[int] = None,
     ) -> LLMResponse: ...
 
 
@@ -73,11 +76,12 @@ def _coerce_structured(parsed: Any, schema: Type[BaseModel], prompt_name: str) -
     if not isinstance(parsed, dict):
         return parsed
     if schema.__name__ == "MasterPlanPayload":
-        notes = parsed.get("reasoning_notes")
+        row = dict(parsed)
+        notes = row.get("reasoning_notes")
         if isinstance(notes, list):
             text = " ".join(str(item).strip() for item in notes if str(item).strip())
-            return {**parsed, "reasoning_notes": text[:500]}
-        return parsed
+            row["reasoning_notes"] = text[:500]
+        return row
     if schema.__name__ != "AgentFindingsPayload":
         return parsed
     findings = parsed.get("findings")
@@ -110,6 +114,52 @@ def _coerce_structured(parsed: Any, schema: Type[BaseModel], prompt_name: str) -
             row["finding_id"] = _deterministic_id(str(row.get("agent") or prompt_name), statement, [str(cid) for cid in cites])
         cleaned.append({key: value for key, value in row.items() if key in _FINDING_FIELDS})
     return {"findings": cleaned}
+
+
+def master_response_format() -> Dict[str, Any]:
+    """Strict planner schema. json_object mode does not enforce array fields."""
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "MasterPlanPayload",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "objective": {"type": "string"},
+                    "selected_agents": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": list(ALLOWED_SPECIALISTS)},
+                    },
+                    "evidence_requirements": {"type": "array", "items": {"type": "string"}},
+                    "requested_sections": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": list(REQUESTED_SECTIONS)},
+                    },
+                    "reasoning_notes": {"type": "string"},
+                },
+                "required": [
+                    "objective",
+                    "selected_agents",
+                    "evidence_requirements",
+                    "requested_sections",
+                    "reasoning_notes",
+                ],
+            },
+        },
+    }
+
+
+def _response_format(schema: Type[BaseModel]) -> Dict[str, Any]:
+    if schema.__name__ == "MasterPlanPayload":
+        return master_response_format()
+    return {"type": "json_object"}
+
+
+def _schema_format_rejected(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "response_format" in text or "json_schema" in text
 
 
 def _validation_hint(exc: ValidationError) -> str:
@@ -156,12 +206,22 @@ class FakeLLMProvider:
         prompt_name: str,
         prompt_version: str,
         context: Optional[Dict[str, Any]] = None,
+        attempts: Optional[int] = None,
     ) -> LLMResponse:
-        del system, user, prompt_version
+        del system, user, prompt_version, attempts
         self.calls += 1
         started = time.perf_counter()
         agent = prompt_name
         self._maybe_fail(agent)
+        if self.scenario == "plan_retry" and agent == "master":
+            seen = self._failures.get("master-plan", 0)
+            if seen < 1:
+                self._failures["master-plan"] = seen + 1
+                raise LLMError(
+                    "invalid structured output (evidence_requirements:list_type)",
+                    retryable=True,
+                    error_type="malformed",
+                )
         if self.scenario == "malformed":
             raise LLMError("malformed structured output", retryable=False, error_type="malformed")
         payload = self._payload(agent, context or {})
@@ -183,6 +243,7 @@ class FakeLLMProvider:
                 estimated_cost=_estimate_cost(tokens_in, tokens_out),
             ),
             latency_ms=latency_ms,
+            retries=0,
         )
 
     def _maybe_fail(self, agent: str) -> None:
@@ -430,24 +491,36 @@ class OpenAILLMProvider:
         prompt_name: str,
         prompt_version: str,
         context: Optional[Dict[str, Any]] = None,
+        attempts: Optional[int] = None,
     ) -> LLMResponse:
         del prompt_version
+        budget = self._retries if attempts is None else max(0, attempts - 1)
         last: Optional[LLMError] = None
-        for attempt in range(self._retries + 1):
+        response_format = _response_format(schema)
+        format_fallback = False
+        for attempt in range(budget + 1):
             started = time.perf_counter()
             try:
                 response = self._client.chat.completions.create(
                     model=self.model_name,
                     temperature=0.2,
-                    response_format={"type": "json_object"},
+                    response_format=response_format,
                     messages=[
                         {"role": "system", "content": system},
                         {"role": "user", "content": user},
                     ],
                 )
             except Exception as exc:
+                if (
+                    schema.__name__ == "MasterPlanPayload"
+                    and not format_fallback
+                    and _schema_format_rejected(exc)
+                ):
+                    response_format = {"type": "json_object"}
+                    format_fallback = True
+                    continue
                 last = _classify_openai(exc)
-                if not last.retryable or attempt >= self._retries:
+                if not last.retryable or attempt >= budget:
                     raise last from exc
                 time.sleep(min(2**attempt, 8))
                 continue
@@ -480,6 +553,7 @@ class OpenAILLMProvider:
                     estimated_cost=_estimate_cost(tokens_in, tokens_out),
                 ),
                 latency_ms=int((time.perf_counter() - started) * 1000),
+                retries=attempt,
             )
         raise last or LLMError("provider failed", retryable=False, error_type="provider")
 

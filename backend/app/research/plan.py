@@ -35,6 +35,7 @@ _SECTIONS = (
     "conflicts",
     "limitations",
 )
+REQUESTED_SECTIONS = _SECTIONS
 
 
 def _tokens(text: str) -> Set[str]:

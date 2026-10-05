@@ -87,6 +87,7 @@ def load_events(
                 "source_id": str(event.primary_source_id) if event.primary_source_id else None,
                 "evidence_id": str(event.evidence_id) if event.evidence_id else None,
                 "source_url": source.url if source is not None else None,
+                "publisher": source.publisher if source is not None else None,
             }
         )
     return out
@@ -126,6 +127,7 @@ def load_graph_facts(db: Session, entity_ids: Sequence[uuid.UUID], *, limit: int
                 "source_id": source_id,
                 "evidence_id": str(link.evidence_id),
                 "source_url": source.url if source is not None else None,
+                "publisher": source.publisher if source is not None else None,
             }
         )
         if len(out) >= limit:

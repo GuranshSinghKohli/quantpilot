@@ -612,6 +612,21 @@ export async function markAlertRead(eventId: number): Promise<AlertEvent> {
   });
 }
 
+export async function submitResearchJob(query: string): Promise<{
+  research_id: string;
+  status: string;
+  status_url: string;
+}> {
+  return apiFetch("/api/research", {
+    method: "POST",
+    body: JSON.stringify({ query }),
+  });
+}
+
+export async function fetchResearchJob(researchId: string): Promise<Record<string, unknown>> {
+  return apiFetch<Record<string, unknown>>(`/api/research/${encodeURIComponent(researchId)}`);
+}
+
 export async function setAlertFeedback(
   eventId: number,
   feedback: "useful" | "not_useful" | ""

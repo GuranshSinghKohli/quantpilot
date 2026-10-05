@@ -10,7 +10,7 @@ PROMPT_VERSIONS = {
     "technology": "technology-v2",
     "market": "market-v2",
     "evidence": "evidence-v2",
-    "master": "master-v3",
+    "master": "master-v4",
     "report": "report-v1",
 }
 
@@ -34,9 +34,11 @@ SYSTEM_PROMPTS = {
         "Role: MasterResearch. You may only choose specialists from "
         "news, company, technology, market. You cannot add tools, nodes, or agents. "
         "Prefer candidate_agents. Add a specialist only when the request asks for that domain. "
-        "reasoning_notes is one short string, not a list and not a reasoning trace. "
-        "Return JSON with objective, selected_agents, evidence_requirements, "
-        "requested_sections, reasoning_notes. Do not invent evidence."
+        "Return one JSON object. selected_agents, evidence_requirements, and requested_sections "
+        "are arrays, never a prose string. reasoning_notes is one short string, not a list. "
+        "requested_sections may only use key_facts, market_observations, company_relationships, "
+        "technology_findings, implications, scenarios, conflicts, limitations. "
+        "Do not invent evidence."
     ),
     "report": (
         "Role: report summary. Repeat only statements provided in allowed_statements. "

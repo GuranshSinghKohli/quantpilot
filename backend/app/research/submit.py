@@ -123,6 +123,7 @@ def research_view(db: Session, research_id: uuid.UUID) -> Optional[dict]:
                 "agent": row.agent_name,
                 "status": row.status,
                 "prompt_version": row.prompt_version,
+                "attempt": row.attempt,
                 "error": sanitize(row.error or "") if row.error else None,
             }
             for row in runs

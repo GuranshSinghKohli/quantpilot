@@ -40,6 +40,7 @@ class RetrievalHit:
     event_ids: List[uuid.UUID]
     start_offset: int
     end_offset: int
+    publisher: Optional[str] = None
 
 
 def cosine(a: Sequence[float], b: Sequence[float]) -> float:
@@ -180,6 +181,7 @@ def search(
                 event_ids=list(event_rows),
                 start_offset=chunk.start_offset,
                 end_offset=chunk.end_offset,
+                publisher=document.publisher,
             )
         )
     RETRIEVAL_METRICS.inc("retrieval_results_total", len(hits), operation="search", result="ok")
@@ -194,6 +196,7 @@ def hit_payload(hit: RetrievalHit) -> Dict[str, Any]:
         "title": hit.title,
         "source_id": str(hit.source_id),
         "source_url": hit.source_url,
+        "publisher": hit.publisher,
         "published_at": hit.published_at.isoformat() if hit.published_at else None,
         "excerpt": hit.excerpt,
         "document_type": hit.document_type,

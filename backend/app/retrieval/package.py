@@ -120,6 +120,7 @@ def _cite_event(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "evidence_id": item.get("evidence_id"),
         "source_url": http_source_url(item.get("source_url")),
         "title": item.get("title"),
+        "publisher": item.get("publisher"),
         "published_at": item.get("published_at"),
         "locator": {"event_id": item["event_id"]},
     }
@@ -137,6 +138,7 @@ def _cite_graph(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "evidence_id": item["evidence_id"],
         "source_url": http_source_url(item.get("source_url")),
         "title": item["relationship"],
+        "publisher": item.get("publisher"),
         "published_at": None,
         "locator": {"relationship_id": item["relationship_id"]},
     }
@@ -154,9 +156,18 @@ def _cite_market(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "chunk_id": None,
         "evidence_id": None,
         "source_url": None,
-        "title": f"{item.get('symbol')} {source['calculation_version']}",
+        "title": f"{item.get('symbol') or (item.get('asset') or {}).get('symbol')} {source['calculation_version']}",
         "published_at": None,
         "locator": source,
+        "market": {
+            "symbol": item.get("symbol") or (item.get("asset") or {}).get("symbol"),
+            "configured_benchmark_symbol": get_settings().MARKET_BENCHMARK_SYMBOL,
+            "event_trading_date": item.get("event_trading_date"),
+            "windows": item.get("windows") or {},
+            "volume": item.get("volume") or {},
+            "volatility": item.get("volatility") or {},
+            "method": "session return relative to the configured benchmark; not a causal effect",
+        },
     }
 
 
@@ -172,6 +183,7 @@ def _cite_document(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "evidence_id": None,
         "source_url": http_source_url(item.get("source_url")),
         "title": item.get("title"),
+        "publisher": item.get("publisher"),
         "published_at": item.get("published_at"),
         "locator": item.get("locator") or {},
     }

@@ -82,6 +82,19 @@ def _blocked(state: ResearchState) -> bool:
     return any(item.get("error_type") in {"invalid_request", "oversized"} for item in state.get("errors") or [])
 
 
+def _plan_user(context: Dict[str, Any], hint: str) -> str:
+    body = json.dumps(context, default=str)
+    if not hint:
+        return body
+    return (
+        body
+        + "\nPrevious output was rejected: "
+        + hint[:300]
+        + ". Return one JSON object. selected_agents, evidence_requirements, and requested_sections "
+        + "must be arrays. reasoning_notes must be a string. Agents must be news, company, technology, or market."
+    )
+
+
 def create_research_plan_node(state: ResearchState) -> Dict[str, Any]:
     if _blocked(state):
         return {}
@@ -94,27 +107,59 @@ def create_research_plan_node(state: ResearchState) -> Dict[str, Any]:
     context = bounded_plan_context(request, package)
     plan = None
     error_type = None
+    model = "unavailable"
+    model_version = "v1"
+    tokens_in = tokens_out = 0
+    retries = 0
+    hint = ""
     try:
         provider = research_llm.get() or get_llm_provider()
-        response = provider.generate_structured(
-            system=SYSTEM_PROMPTS["master"],
-            user=json.dumps(context, default=str),
-            schema=MasterPlanPayload,
-            prompt_name="master",
-            prompt_version=PROMPT_VERSIONS["master"],
-            context=context,
-        )
-        plan = accept_plan(response.data if isinstance(response.data, MasterPlanPayload) else MasterPlanPayload.model_validate(response.data), request, package)
-        model = response.model
-        model_version = response.model_version
-        tokens_in = response.usage.input_tokens
-        tokens_out = response.usage.output_tokens
     except LLMError as exc:
-        plan = None
+        provider = None
         error_type = exc.error_type
-        model = "unavailable"
-        model_version = "v1"
-        tokens_in = tokens_out = 0
+        hint = str(exc)[:300]
+    if provider is not None:
+        for attempt in range(2):
+            try:
+                response = provider.generate_structured(
+                    system=SYSTEM_PROMPTS["master"],
+                    user=_plan_user(context, hint),
+                    schema=MasterPlanPayload,
+                    prompt_name="master",
+                    prompt_version=PROMPT_VERSIONS["master"],
+                    context=context,
+                    attempts=1,
+                )
+                plan = accept_plan(
+                    response.data if isinstance(response.data, MasterPlanPayload) else MasterPlanPayload.model_validate(response.data),
+                    request,
+                    package,
+                )
+                model = response.model
+                model_version = response.model_version
+                tokens_in = response.usage.input_tokens
+                tokens_out = response.usage.output_tokens
+                error_type = None if plan is not None else "invalid_plan"
+            except LLMError as exc:
+                plan = None
+                error_type = exc.error_type
+                hint = str(exc)[:300]
+            if plan is not None:
+                break
+            if attempt == 0 and error_type in {"malformed", "invalid_plan"}:
+                retries += 1
+                if not hint:
+                    hint = "plan rejected by the research plan contract"
+                RESEARCH_METRICS.inc(
+                    "research_plan_retries_total",
+                    1,
+                    operation="plan",
+                    status="retry",
+                    error_type=error_type,
+                    component="research",
+                )
+                continue
+            break
     if plan is None:
         RESEARCH_METRICS.inc(
             "research_plan_failures_total",
@@ -182,6 +227,7 @@ def create_research_plan_node(state: ResearchState) -> Dict[str, Any]:
             input_tokens=tokens_in,
             output_tokens=tokens_out,
             total_tokens=tokens_in + tokens_out,
+            retry_count=retries,
             status="succeeded",
             error_type=None if status == "succeeded" else (error_type or "invalid_plan"),
         ).model_dump(mode="json")
