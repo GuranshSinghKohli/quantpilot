@@ -1,5 +1,7 @@
 # Phase 10 results — planner schema and research desk
 
+Code commit: `c830fe5fe3af0953f47eafaae5aab1ce02da214d`. This file's hash line was added in the following commit.
+
 ## Facts
 
 ### Planner root cause
