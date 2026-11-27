@@ -248,11 +248,15 @@ Keying by `portfolio_id` keeps all orders for one portfolio in order on one part
 
 ## 6. Data model (PostgreSQL)
 
-All League tables live in schema `league`. Migrations live in `backend/alembic_league/` and record their revision in `league.alembic_version`. That env's metadata is only the League `MetaData`. It never alters `public`.
+All League tables live in schema `league`. Migrations live in `backend/alembic_league/` and record their revision in `league.alembic_version`. The env metadata is the League tables plus a one-column stub of `public.users`, so `players.user_id` resolves for `alembic check`. `include_object` ignores every object whose schema is not `league`, and the migration never alters `public`.
+
+Both offline and online modes refuse before any SQL unless the URL's database name is `quantpilot`. Online mode then connects and also refuses unless `current_database()` is `quantpilot` and `public.users` exists. Only then does it create schema `league`. A localhost URL pointed at another database, such as `roadsafety`, is refused and leaves no `league` schema.
 
 League models declare `MetaData(schema="league")` and use the existing sync engine and session factory (`app.db.session`, psycopg2). There is no second engine and no `asyncpg`.
 
 All League reads and writes go through `backend/app/league/repo/`. The fill engine and the risk engine are pure functions: values in, values out, no session. The simulator worker loads rows through the repository, calls those functions, and writes the results back through the repository.
+
+The repository step adds `record_fill(order_id, fill)`. It sets `orders.status` to `filled` and inserts the `fills` row in one transaction. The test for that step shows no other code path can set `status = 'filled'`. Hypothesis property tests for cash, quantity, and equity start with the fill engine, not with this schema step.
 
 `league.portfolios` is the paper cash book. It has nothing to do with `public.portfolios`, which is the existing watchlist.
 
@@ -268,35 +272,53 @@ league.players          (id UUID PK,
 league.leagues          (id UUID PK, name TEXT, is_public BOOL, invite_code TEXT UNIQUE NULL,
                          owner_id UUID FK players, max_members INT DEFAULT 50, created_at)
 league.seasons          (id UUID PK, league_id UUID FK, number INT, starts_at TIMESTAMPTZ,
-                         ends_at TIMESTAMPTZ, starting_cash NUMERIC DEFAULT 1000,
+                         ends_at TIMESTAMPTZ, starting_cash NUMERIC(14,4) DEFAULT 1000,
                          status TEXT CHECK (status IN ('upcoming','active','finished')))
 league.league_members   (league_id FK, player_id UUID FK players, joined_at,
                          PRIMARY KEY (league_id, player_id))
 league.agents           (id UUID PK, player_id UUID FK players, league_id FK, name TEXT, risk_level TEXT,
-                         style TEXT, interests TEXT[], excluded_tickers TEXT[],
-                         excluded_sectors TEXT[], mode TEXT CHECK (mode IN ('autopilot','approve')),
+                         style TEXT, interests TEXT[] DEFAULT '{}', excluded_tickers TEXT[] DEFAULT '{}',
+                         excluded_sectors TEXT[] DEFAULT '{}', mode TEXT CHECK (mode IN ('autopilot','approve')),
                          config_version INT, created_at, UNIQUE (player_id, league_id))
-league.agent_config_history (id, agent_id FK, config JSONB, effective_from TIMESTAMPTZ)
+league.agent_config_history (id UUID PK, agent_id FK, config JSONB, effective_from TIMESTAMPTZ)
 league.portfolios       (id UUID PK, agent_id FK, season_id FK, kind TEXT CHECK (kind IN ('actual','ghost')),
-                         cash NUMERIC(14,4), created_at, UNIQUE (agent_id, season_id, kind))
-league.positions        (portfolio_id FK, ticker TEXT, qty NUMERIC(18,6), avg_cost NUMERIC(14,4),
+                         cash NUMERIC(14,4) CHECK (cash >= 0), created_at,
+                         UNIQUE (agent_id, season_id, kind))
+league.positions        (portfolio_id FK, ticker TEXT, qty NUMERIC(18,6) CHECK (qty > 0),
+                         avg_cost NUMERIC(14,4) CHECK (avg_cost >= 0),
                          updated_at, PRIMARY KEY (portfolio_id, ticker))
 league.orders           (id UUID PK, portfolio_id FK, ticker TEXT, side TEXT CHECK (side IN ('buy','sell')),
                          notional_usd NUMERIC(14,4) NULL, qty NUMERIC(18,6) NULL,
+                         CHECK ((notional_usd IS NULL OR notional_usd > 0)
+                                AND (qty IS NULL OR qty > 0)
+                                AND (notional_usd IS NOT NULL OR qty IS NOT NULL)),
                          source TEXT CHECK (source IN ('agent','player')),
                          status TEXT CHECK (status IN ('pending_approval','accepted','rejected',
                                 'queued','filled','expired','cancelled')),
-                         reject_reason TEXT NULL, rationale_id UUID NULL, cycle_id UUID NULL,
+                         reject_reason TEXT NULL,
+                         rationale_id UUID NULL FK rationales,
+                         CHECK (source <> 'agent' OR rationale_id IS NOT NULL),
+                         cycle_id UUID NULL,
                          created_at TIMESTAMPTZ, game_time TIMESTAMPTZ)
-league.fills            (id UUID PK, order_id FK UNIQUE, price NUMERIC(14,4), qty NUMERIC(18,6),
+league.fills            (id UUID PK, order_id FK UNIQUE, price NUMERIC(14,4) CHECK (price > 0),
+                         qty NUMERIC(18,6) CHECK (qty > 0),
                          slippage_bps NUMERIC(6,2), bar_time TIMESTAMPTZ, filled_at TIMESTAMPTZ)
-league.rationales       (id UUID PK, cycle_id UUID, summary TEXT, confidence NUMERIC(3,2),
-                         news_ids TEXT[], graph_path JSONB, validated BOOL,
-                         system BOOLEAN NOT NULL DEFAULT false, created_at)
+league.rationales       (id UUID PK, cycle_id UUID NULL, summary TEXT, confidence NUMERIC(3,2),
+                         news_ids TEXT[] DEFAULT '{}', graph_path JSONB, validated BOOL,
+                         system BOOLEAN NOT NULL DEFAULT false, created_at,
+                         CHECK (confidence >= 0 AND confidence <= 1),
+                         CHECK (system OR (cardinality(news_ids) > 0
+                                AND array_position(news_ids, NULL) IS NULL
+                                AND NOT ('' = ANY(news_ids)))),
+                         CHECK (system OR jsonb_array_length(graph_path) > 0),
+                         CHECK (system = true OR cycle_id IS NOT NULL))
 league.agent_cycles     (id UUID PK, agent_id FK, trigger TEXT, event_id TEXT NULL,
-                         started_at, finished_at, status TEXT, tokens_in INT, tokens_out INT,
-                         cost_usd NUMERIC(8,4), error TEXT NULL)
-league.equity_snapshots (portfolio_id FK, t TIMESTAMPTZ, equity NUMERIC(14,4), cash NUMERIC(14,4),
+                         started_at, finished_at TIMESTAMPTZ NULL, status TEXT,
+                         tokens_in INT DEFAULT 0, tokens_out INT DEFAULT 0,
+                         cost_usd NUMERIC(8,4) DEFAULT 0, error TEXT NULL)
+league.equity_snapshots (portfolio_id FK, t TIMESTAMPTZ,
+                         equity NUMERIC(14,4) CHECK (equity >= 0),
+                         cash NUMERIC(14,4) CHECK (cash >= 0),
                          PRIMARY KEY (portfolio_id, t))
                          -- every 5 min during market hours + daily close
 league.achievements     (id TEXT PK, name TEXT, description TEXT, xp INT, icon TEXT)
@@ -313,18 +335,29 @@ league.bars             (ticker TEXT, t TIMESTAMPTZ,
 
 `user_achievements.season_id` is nullable, so it cannot be part of the primary key (Postgres primary-key columns are `NOT NULL`). The row has its own `id UUID` primary key. Uniqueness is `UNIQUE (player_id, achievement_id, season_id) NULLS NOT DISTINCT`, which treats two rows with a null season as the same key. That clause exists in Postgres 15 and newer. The local Compose database reports `server_version` 16.15 (`PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2)`). RDS `engine_version` is `16`. A server older than 15 would use two partial unique indexes instead: one on `(player_id, achievement_id) WHERE season_id IS NULL`, and one on `(player_id, achievement_id, season_id) WHERE season_id IS NOT NULL`.
 
-`league.rationales.system` defaults to false. Only the simulator, through the risk engine, may insert a row with `system = true` (a stop-loss sell). Agent and LLM code paths must not set it. A test covers that ban.
+`league.rationales.system` defaults to false. Who may set `system = true` is an application rule: only the stop-loss path. That ban is tested when the agent code exists (week 2). The database does not enforce it. `cycle_id` is nullable. The database requires `system = true OR cycle_id IS NOT NULL`, so a stop-loss row can omit the cycle and an agent rationale cannot.
 
-An empty `graph_path` and empty `news_ids` are allowed only when `system = true`. Every `system = false` rationale must pass the section 8.4 checks. A system rationale is inserted with `validated = true`, so the "every agent order has a validated rationale" invariant still holds. The UI labels these trades "Auto stop-loss" and does not draw a graph for them.
+A non-system rationale must have at least one news id, and none of those ids may be null or blank. Postgres enforces that with `system OR (cardinality(news_ids) > 0 AND array_position(news_ids, NULL) IS NULL AND NOT ('' = ANY(news_ids)))`. `graph_path` must be a non-empty JSON array unless `system` is true: `system OR jsonb_array_length(graph_path) > 0`. Checking each edge against Neo4j stays in application code (week 2). `validated = true` on an agent rationale is also an application rule. The UI labels system trades "Auto stop-loss" and does not draw a graph for them.
+
+`agent_cycles.finished_at` is nullable while the cycle is running. `tokens_in` and `tokens_out` default to 0. `cost_usd` defaults to 0. The text arrays `interests`, `excluded_tickers`, `excluded_sectors`, and `news_ids` default to `'{}'`.
 
 `league.bars` is the durable 1-minute bar store. The marketdata poller upserts each fetched bar with `ON CONFLICT (ticker, t) DO NOTHING`. The repository reads this table for fills (section 7.4). Redis does not store the bar history.
 
-Invariants (enforced in the simulator and tested):
+Invariants enforced by Postgres:
 
-- `portfolios.cash >= 0` always (no margin).
-- `positions.qty > 0` (a position at 0 is deleted; no shorting).
-- Every `filled` order has exactly one `fills` row.
-- Every `source='agent'` order has a `rationale_id` whose `validated = true`.
+- `portfolios.cash >= 0`. `equity_snapshots.cash >= 0` and `equity_snapshots.equity >= 0`.
+- `positions.qty > 0` and `positions.avg_cost >= 0`. A position at 0 is deleted by the simulator; the database also rejects storing it.
+- `fills.price > 0` and `fills.qty > 0`. At most one fill row per order (`order_id` is unique).
+- An order has `notional_usd`, `qty`, or both. Each value that is present is `> 0`.
+- `rationales.confidence` is from 0 through 1.
+- `source = 'agent'` requires `rationale_id`, and that id references `league.rationales`. A player order may omit it.
+
+Invariants enforced by application code, not by a constraint:
+
+- `status = 'filled'` exists only together with its fill row. The repository step exposes `record_fill(order_id, fill)`, which sets `status = 'filled'` and inserts the fill in one transaction. A test must show that no code path sets `status = 'filled'` without that function.
+- `source = 'agent'` implies the referenced rationale has `validated = true`. Week 2.
+- Only the stop-loss path sets `rationales.system = true`. Week 2.
+- Each `graph_path` element is a real Neo4j edge. Week 2. The database only requires a non-empty array when `system` is false.
 
 ### 6.1 Existing auth (reused later, not in Week 1)
 

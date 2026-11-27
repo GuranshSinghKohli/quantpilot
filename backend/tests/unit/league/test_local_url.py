@@ -8,7 +8,11 @@ import pytest
 from alembic import command
 from alembic.config import Config
 
-from app.league.local_url import LeagueDatabaseRefused, assert_localhost_database_url
+from app.league.local_url import (
+    LeagueDatabaseRefused,
+    assert_league_database,
+    assert_localhost_database_url,
+)
 
 INI = Path(__file__).resolve().parents[3] / "alembic_league.ini"
 
@@ -35,6 +39,29 @@ def test_localhost_urls_pass() -> None:
 def test_non_local_urls_are_refused(url: str) -> None:
     with pytest.raises(LeagueDatabaseRefused):
         assert_localhost_database_url(url)
+
+
+class _Scalar:
+    def __init__(self, value: object) -> None:
+        self._value = value
+
+    def scalar(self) -> object:
+        return self._value
+
+
+class _Conn:
+    """Returns a database name, then the public.users probe. No network."""
+
+    def __init__(self, name: str, users: object) -> None:
+        self._answers = [_Scalar(name), _Scalar(users)]
+
+    def execute(self, _statement: object) -> _Scalar:
+        return self._answers.pop(0)
+
+
+def test_quantpilot_without_public_users_is_refused() -> None:
+    with pytest.raises(LeagueDatabaseRefused, match="public.users"):
+        assert_league_database(_Conn("quantpilot", None))
 
 
 def test_alembic_refuses_an_rds_url_before_connecting() -> None:

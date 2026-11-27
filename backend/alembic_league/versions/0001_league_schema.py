@@ -86,9 +86,24 @@ def upgrade() -> None:
         sa.Column("name", sa.Text(), nullable=False),
         sa.Column("risk_level", sa.Text(), nullable=False),
         sa.Column("style", sa.Text(), nullable=False),
-        sa.Column("interests", postgresql.ARRAY(sa.Text()), nullable=False),
-        sa.Column("excluded_tickers", postgresql.ARRAY(sa.Text()), nullable=False),
-        sa.Column("excluded_sectors", postgresql.ARRAY(sa.Text()), nullable=False),
+        sa.Column(
+            "interests",
+            postgresql.ARRAY(sa.Text()),
+            server_default=sa.text("'{}'::text[]"),
+            nullable=False,
+        ),
+        sa.Column(
+            "excluded_tickers",
+            postgresql.ARRAY(sa.Text()),
+            server_default=sa.text("'{}'::text[]"),
+            nullable=False,
+        ),
+        sa.Column(
+            "excluded_sectors",
+            postgresql.ARRAY(sa.Text()),
+            server_default=sa.text("'{}'::text[]"),
+            nullable=False,
+        ),
         sa.Column("mode", sa.Text(), nullable=False),
         sa.Column("config_version", sa.Integer(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
@@ -120,6 +135,7 @@ def upgrade() -> None:
         sa.Column("cash", sa.Numeric(14, 4), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.CheckConstraint("kind IN ('actual', 'ghost')", name="ck_portfolios_kind"),
+        sa.CheckConstraint("cash >= 0", name="ck_portfolios_cash_nonnegative"),
         sa.ForeignKeyConstraint(["agent_id"], ["league.agents.id"], name="fk_portfolios_agent_id"),
         sa.ForeignKeyConstraint(["season_id"], ["league.seasons.id"], name="fk_portfolios_season_id"),
         sa.PrimaryKeyConstraint("id", name="pk_portfolios"),
@@ -133,6 +149,8 @@ def upgrade() -> None:
         sa.Column("qty", sa.Numeric(18, 6), nullable=False),
         sa.Column("avg_cost", sa.Numeric(14, 4), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.CheckConstraint("qty > 0", name="ck_positions_qty_positive"),
+        sa.CheckConstraint("avg_cost >= 0", name="ck_positions_avg_cost_nonnegative"),
         sa.ForeignKeyConstraint(
             ["portfolio_id"], ["league.portfolios.id"], name="fk_positions_portfolio_id"
         ),
@@ -160,6 +178,16 @@ def upgrade() -> None:
             "status IN ('pending_approval', 'accepted', 'rejected', 'queued', 'filled', 'expired', 'cancelled')",
             name="ck_orders_status",
         ),
+        sa.CheckConstraint(
+            "(notional_usd IS NULL OR notional_usd > 0)"
+            " AND (qty IS NULL OR qty > 0)"
+            " AND (notional_usd IS NOT NULL OR qty IS NOT NULL)",
+            name="ck_orders_size_positive",
+        ),
+        sa.CheckConstraint(
+            "source <> 'agent' OR rationale_id IS NOT NULL",
+            name="ck_orders_agent_rationale",
+        ),
         sa.ForeignKeyConstraint(["portfolio_id"], ["league.portfolios.id"], name="fk_orders_portfolio_id"),
         sa.PrimaryKeyConstraint("id", name="pk_orders"),
         schema=SCHEMA,
@@ -173,6 +201,8 @@ def upgrade() -> None:
         sa.Column("slippage_bps", sa.Numeric(6, 2), nullable=False),
         sa.Column("bar_time", sa.DateTime(timezone=True), nullable=False),
         sa.Column("filled_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.CheckConstraint("price > 0", name="ck_fills_price_positive"),
+        sa.CheckConstraint("qty > 0", name="ck_fills_qty_positive"),
         sa.ForeignKeyConstraint(["order_id"], ["league.orders.id"], name="fk_fills_order_id"),
         sa.PrimaryKeyConstraint("id", name="pk_fills"),
         sa.UniqueConstraint("order_id", name="uq_fills_order_id"),
@@ -181,16 +211,48 @@ def upgrade() -> None:
     op.create_table(
         "rationales",
         sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("cycle_id", sa.Uuid(), nullable=False),
+        sa.Column("cycle_id", sa.Uuid(), nullable=True),
         sa.Column("summary", sa.Text(), nullable=False),
         sa.Column("confidence", sa.Numeric(3, 2), nullable=False),
-        sa.Column("news_ids", postgresql.ARRAY(sa.Text()), nullable=False),
+        sa.Column(
+            "news_ids",
+            postgresql.ARRAY(sa.Text()),
+            server_default=sa.text("'{}'::text[]"),
+            nullable=False,
+        ),
         sa.Column("graph_path", postgresql.JSONB(), nullable=False),
         sa.Column("validated", sa.Boolean(), nullable=False),
         sa.Column("system", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_rationales_confidence",
+        ),
+        sa.CheckConstraint(
+            "system OR (cardinality(news_ids) > 0"
+            " AND array_position(news_ids, NULL) IS NULL"
+            " AND NOT ('' = ANY(news_ids)))",
+            name="ck_rationales_news_or_system",
+        ),
+        sa.CheckConstraint(
+            "system OR jsonb_array_length(graph_path) > 0",
+            name="ck_rationales_graph_or_system",
+        ),
+        sa.CheckConstraint(
+            "system = true OR cycle_id IS NOT NULL",
+            name="ck_rationales_cycle_or_system",
+        ),
         sa.PrimaryKeyConstraint("id", name="pk_rationales"),
         schema=SCHEMA,
+    )
+    op.create_foreign_key(
+        "fk_orders_rationale_id",
+        "orders",
+        "rationales",
+        ["rationale_id"],
+        ["id"],
+        source_schema=SCHEMA,
+        referent_schema=SCHEMA,
     )
     op.create_table(
         "agent_cycles",
@@ -199,11 +261,11 @@ def upgrade() -> None:
         sa.Column("trigger", sa.Text(), nullable=False),
         sa.Column("event_id", sa.Text(), nullable=True),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("finished_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("status", sa.Text(), nullable=False),
-        sa.Column("tokens_in", sa.Integer(), nullable=False),
-        sa.Column("tokens_out", sa.Integer(), nullable=False),
-        sa.Column("cost_usd", sa.Numeric(8, 4), nullable=False),
+        sa.Column("tokens_in", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("tokens_out", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("cost_usd", sa.Numeric(8, 4), server_default="0", nullable=False),
         sa.Column("error", sa.Text(), nullable=True),
         sa.ForeignKeyConstraint(["agent_id"], ["league.agents.id"], name="fk_agent_cycles_agent_id"),
         sa.PrimaryKeyConstraint("id", name="pk_agent_cycles"),
@@ -215,6 +277,8 @@ def upgrade() -> None:
         sa.Column("t", sa.DateTime(timezone=True), nullable=False),
         sa.Column("equity", sa.Numeric(14, 4), nullable=False),
         sa.Column("cash", sa.Numeric(14, 4), nullable=False),
+        sa.CheckConstraint("cash >= 0", name="ck_equity_snapshots_cash_nonnegative"),
+        sa.CheckConstraint("equity >= 0", name="ck_equity_snapshots_equity_nonnegative"),
         sa.ForeignKeyConstraint(
             ["portfolio_id"], ["league.portfolios.id"], name="fk_equity_snapshots_portfolio_id"
         ),
@@ -279,9 +343,9 @@ def downgrade() -> None:
         "achievements",
         "equity_snapshots",
         "agent_cycles",
-        "rationales",
         "fills",
         "orders",
+        "rationales",
         "positions",
         "portfolios",
         "agent_config_history",

@@ -1,7 +1,8 @@
-"""League migrations against local Compose Postgres. Refuses any other host.
+"""League migrations against local Compose Postgres.
 
-The default URL is the Compose mapping in docker-compose.yml (localhost:5432).
-Set LEAGUE_TEST_DATABASE_URL when that port is held by a different database.
+The default URL is 127.0.0.1:5433, the published port of this Compose Postgres
+while 5432 is held by another local database. Set LEAGUE_TEST_DATABASE_URL to
+override it. The override must still be localhost and database quantpilot.
 """
 
 from __future__ import annotations
@@ -14,13 +15,18 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import OperationalError
 
-from app.league.local_url import assert_localhost_database_url
+from app.league.local_url import (
+    LeagueDatabaseRefused,
+    assert_league_database,
+    assert_localhost_database_url,
+)
 from app.league.models import LeagueBase
 
 INI = Path(__file__).resolve().parents[3] / "alembic_league.ini"
-DEFAULT_URL = "postgresql://quantpilot:quantpilot@127.0.0.1:5432/quantpilot"
+DEFAULT_URL = "postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot"
 LEAGUE_TABLES = {
     "players",
     "leagues",
@@ -160,11 +166,13 @@ def _print_public(label: str, fingerprint: dict) -> None:
 
 
 def test_metadata_contains_only_league_tables() -> None:
-    schemas = {table.schema for table in LeagueBase.metadata.tables.values()}
-    names = {table.name for table in LeagueBase.metadata.tables.values()}
-    assert schemas == {"league"}
-    assert names == LEAGUE_TABLES
-    assert "users" not in names
+    by_schema: dict[str, set[str]] = {}
+    for table in LeagueBase.metadata.tables.values():
+        by_schema.setdefault(table.schema or "", set()).add(table.name)
+    assert by_schema["league"] == LEAGUE_TABLES
+    assert by_schema["public"] == {"users"}
+    stub = LeagueBase.metadata.tables["public.users"]
+    assert [column.name for column in stub.columns] == ["id"]
 
 
 def test_public_tables_unchanged_across_upgrade_downgrade_upgrade() -> None:
@@ -180,11 +188,14 @@ def test_public_tables_unchanged_across_upgrade_downgrade_upgrade() -> None:
         print(f"database: {database}")
         assert str(server_version).startswith("16."), server_version
         assert database == "quantpilot"
+        with engine.connect() as conn:
+            assert_league_database(conn)
 
         before = _fingerprint(engine)
         _print_public("before", before)
         assert _columns_for(before, "users")
         assert _columns_for(before, "portfolios")
+        assert before["alembic_version"] == ("0013",)
 
         command.upgrade(cfg, "head")
         upgraded = _fingerprint(engine)
@@ -218,5 +229,63 @@ def test_public_tables_unchanged_across_upgrade_downgrade_upgrade() -> None:
         assert again == before
         assert _league_tables(engine) == LEAGUE_TABLES | {"alembic_version"}
         print("\npublic fingerprint identical at every stage")
+        print("public.alembic_version stayed at 0013")
     finally:
         engine.dispose()
+
+
+def test_alembic_check_reports_no_drift() -> None:
+    url = _url()
+    engine = _engine(url)
+    cfg = _config(url)
+    try:
+        with engine.connect() as conn:
+            assert_league_database(conn)
+        command.upgrade(cfg, "head")
+        command.check(cfg)
+    finally:
+        engine.dispose()
+
+
+def test_other_local_database_is_refused_and_has_no_league_schema() -> None:
+    quantpilot = make_url(_url())
+    assert quantpilot.host in {"localhost", "127.0.0.1", "::1"}
+    assert quantpilot.database == "quantpilot"
+    other_url = quantpilot.set(database="roadsafety").render_as_string(hide_password=False)
+    admin = create_engine(_url(), isolation_level="AUTOCOMMIT")
+    other = create_engine(other_url)
+    try:
+        with admin.connect() as conn:
+            conn.execute(text("DROP DATABASE IF EXISTS roadsafety"))
+            conn.execute(text("CREATE DATABASE roadsafety"))
+        with other.connect() as conn:
+            with pytest.raises(LeagueDatabaseRefused, match="roadsafety"):
+                assert_league_database(conn)
+        with pytest.raises(LeagueDatabaseRefused, match="roadsafety"):
+            command.upgrade(_config(other_url), "head")
+        with other.connect() as conn:
+            schema = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM information_schema.schemata
+                    WHERE schema_name = 'league'
+                    """
+                )
+            ).scalar()
+        assert schema is None
+        print("roadsafety: migration refused, schema league absent")
+    finally:
+        other.dispose()
+        with admin.connect() as conn:
+            conn.execute(
+                text(
+                    """
+                    SELECT pg_terminate_backend(pid)
+                    FROM pg_stat_activity
+                    WHERE datname = 'roadsafety' AND pid <> pg_backend_pid()
+                    """
+                )
+            )
+            conn.execute(text("DROP DATABASE IF EXISTS roadsafety"))
+        admin.dispose()

@@ -1,9 +1,11 @@
-"""League tables. Metadata is schema `league` only, so it cannot map `public`.
+"""League tables. League rows live in schema `league`.
 
-`agent_config_history.id` is a UUID primary key. The spec names the column `id`
-without a type; every other League id is a UUID. `seasons.starting_cash` is
-NUMERIC(14,4) because section 6 says all money uses that precision. The sketch
-writes it as NUMERIC DEFAULT 1000.
+`public.users` is a one-column stub on this metadata so `players.user_id` can
+reference it. The league Alembic env ignores every object outside schema
+`league`, so that stub is never migrated.
+
+`agent_config_history.id` is a UUID primary key. `seasons.starting_cash` is
+NUMERIC(14,4).
 """
 
 from __future__ import annotations
@@ -17,15 +19,18 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Column,
     DateTime,
     ForeignKey,
     Integer,
     MetaData,
     Numeric,
+    Table,
     Text,
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -33,6 +38,15 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class LeagueBase(DeclarativeBase):
     metadata = MetaData(schema="league")
+
+
+# Same MetaData so the foreign key resolves. schema="public" keeps it out of league.
+public_users = Table(
+    "users",
+    LeagueBase.metadata,
+    Column("id", Integer, primary_key=True),
+    schema="public",
+)
 
 
 def _uuid_pk() -> Mapped[uuid.UUID]:
@@ -43,12 +57,21 @@ def _ts() -> Mapped[datetime]:
     return mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
+def _text_array() -> Mapped[List[str]]:
+    return mapped_column(
+        ARRAY(Text), nullable=False, server_default=text("'{}'::text[]")
+    )
+
+
 class Player(LeagueBase):
     __tablename__ = "players"
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("public.users.id"), unique=True, nullable=False
+        Integer,
+        ForeignKey("public.users.id", name="fk_players_user_id"),
+        unique=True,
+        nullable=False,
     )
     display_name: Mapped[str] = mapped_column(Text, nullable=False)
     avatar_id: Mapped[str] = mapped_column(Text, nullable=False)
@@ -113,9 +136,9 @@ class Agent(LeagueBase):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     risk_level: Mapped[str] = mapped_column(Text, nullable=False)
     style: Mapped[str] = mapped_column(Text, nullable=False)
-    interests: Mapped[List[str]] = mapped_column(ARRAY(Text), nullable=False)
-    excluded_tickers: Mapped[List[str]] = mapped_column(ARRAY(Text), nullable=False)
-    excluded_sectors: Mapped[List[str]] = mapped_column(ARRAY(Text), nullable=False)
+    interests: Mapped[List[str]] = _text_array()
+    excluded_tickers: Mapped[List[str]] = _text_array()
+    excluded_sectors: Mapped[List[str]] = _text_array()
     mode: Mapped[str] = mapped_column(Text, nullable=False)
     config_version: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = _ts()
@@ -135,6 +158,7 @@ class Portfolio(LeagueBase):
     __table_args__ = (
         UniqueConstraint("agent_id", "season_id", "kind", name="uq_portfolios_agent_season_kind"),
         CheckConstraint("kind IN ('actual', 'ghost')", name="ck_portfolios_kind"),
+        CheckConstraint("cash >= 0", name="ck_portfolios_cash_nonnegative"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -147,6 +171,10 @@ class Portfolio(LeagueBase):
 
 class Position(LeagueBase):
     __tablename__ = "positions"
+    __table_args__ = (
+        CheckConstraint("qty > 0", name="ck_positions_qty_positive"),
+        CheckConstraint("avg_cost >= 0", name="ck_positions_avg_cost_nonnegative"),
+    )
 
     portfolio_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("portfolios.id"), primary_key=True
@@ -166,6 +194,16 @@ class Order(LeagueBase):
             "status IN ('pending_approval', 'accepted', 'rejected', 'queued', 'filled', 'expired', 'cancelled')",
             name="ck_orders_status",
         ),
+        CheckConstraint(
+            "(notional_usd IS NULL OR notional_usd > 0)"
+            " AND (qty IS NULL OR qty > 0)"
+            " AND (notional_usd IS NOT NULL OR qty IS NOT NULL)",
+            name="ck_orders_size_positive",
+        ),
+        CheckConstraint(
+            "source <> 'agent' OR rationale_id IS NOT NULL",
+            name="ck_orders_agent_rationale",
+        ),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -179,7 +217,9 @@ class Order(LeagueBase):
     source: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
     reject_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    rationale_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, nullable=True)
+    rationale_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid, ForeignKey("rationales.id", name="fk_orders_rationale_id"), nullable=True
+    )
     cycle_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, nullable=True)
     created_at: Mapped[datetime] = _ts()
     game_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -187,6 +227,10 @@ class Order(LeagueBase):
 
 class Fill(LeagueBase):
     __tablename__ = "fills"
+    __table_args__ = (
+        CheckConstraint("price > 0", name="ck_fills_price_positive"),
+        CheckConstraint("qty > 0", name="ck_fills_qty_positive"),
+    )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
     order_id: Mapped[uuid.UUID] = mapped_column(
@@ -201,12 +245,32 @@ class Fill(LeagueBase):
 
 class Rationale(LeagueBase):
     __tablename__ = "rationales"
+    __table_args__ = (
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_rationales_confidence",
+        ),
+        CheckConstraint(
+            "system OR (cardinality(news_ids) > 0"
+            " AND array_position(news_ids, NULL) IS NULL"
+            " AND NOT ('' = ANY(news_ids)))",
+            name="ck_rationales_news_or_system",
+        ),
+        CheckConstraint(
+            "system OR jsonb_array_length(graph_path) > 0",
+            name="ck_rationales_graph_or_system",
+        ),
+        CheckConstraint(
+            "system = true OR cycle_id IS NOT NULL",
+            name="ck_rationales_cycle_or_system",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
-    cycle_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    cycle_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, nullable=True)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[Decimal] = mapped_column(Numeric(3, 2), nullable=False)
-    news_ids: Mapped[List[str]] = mapped_column(ARRAY(Text), nullable=False)
+    news_ids: Mapped[List[str]] = _text_array()
     graph_path: Mapped[Any] = mapped_column(JSONB, nullable=False)
     validated: Mapped[bool] = mapped_column(Boolean, nullable=False)
     system: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
@@ -221,16 +285,20 @@ class AgentCycle(LeagueBase):
     trigger: Mapped[str] = mapped_column(Text, nullable=False)
     event_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    tokens_in: Mapped[int] = mapped_column(Integer, nullable=False)
-    tokens_out: Mapped[int] = mapped_column(Integer, nullable=False)
-    cost_usd: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False)
+    tokens_in: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    tokens_out: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default="0")
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class EquitySnapshot(LeagueBase):
     __tablename__ = "equity_snapshots"
+    __table_args__ = (
+        CheckConstraint("cash >= 0", name="ck_equity_snapshots_cash_nonnegative"),
+        CheckConstraint("equity >= 0", name="ck_equity_snapshots_equity_nonnegative"),
+    )
 
     portfolio_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("portfolios.id"), primary_key=True

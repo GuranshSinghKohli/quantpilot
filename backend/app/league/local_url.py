@@ -6,6 +6,7 @@ hostname, or any other host is refused before a connection is opened.
 
 from __future__ import annotations
 
+from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
 
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
@@ -31,4 +32,33 @@ def assert_localhost_database_url(url: str) -> str:
         raise LeagueDatabaseRefused(
             f"League migrations refuse host {host!r}. Only localhost is allowed; RDS and other hosts are not."
         )
+    if parsed.database != "quantpilot":
+        raise LeagueDatabaseRefused(
+            f"League migrations refuse database {parsed.database!r}. Only quantpilot is allowed."
+        )
     return url
+
+
+def assert_league_database(connection) -> None:
+    """Refuse anything other than the local quantpilot database that already has public.users.
+
+    Call this after connecting and before CREATE SCHEMA league.
+    """
+    name = connection.execute(text("SELECT current_database()")).scalar()
+    if name != "quantpilot":
+        raise LeagueDatabaseRefused(
+            f"League migrations refuse database {name!r}. Only quantpilot is allowed."
+        )
+    users = connection.execute(
+        text(
+            """
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = 'users'
+            """
+        )
+    ).scalar()
+    if users != 1:
+        raise LeagueDatabaseRefused(
+            "League migrations require public.users. Refusing before creating schema league."
+        )
