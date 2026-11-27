@@ -140,8 +140,8 @@ def test_zero_and_negative_position_qty_are_rejected(league_conn) -> None:
             league_conn,
             "ck_positions_qty_positive",
             """
-            INSERT INTO league.positions (portfolio_id, ticker, qty, avg_cost)
-            VALUES (:portfolio, :ticker, :qty, 10)
+            INSERT INTO league.positions (portfolio_id, ticker, qty, avg_cost, cost_basis)
+            VALUES (:portfolio, :ticker, :qty, 10, 10)
             """,
             {"ticker": f"Q{qty}", "qty": qty, **ids},
         )
@@ -153,8 +153,8 @@ def test_negative_avg_cost_is_rejected(league_conn) -> None:
         league_conn,
         "ck_positions_avg_cost_nonnegative",
         """
-        INSERT INTO league.positions (portfolio_id, ticker, qty, avg_cost)
-        VALUES (:portfolio, 'AAPL', 1, -0.0001)
+        INSERT INTO league.positions (portfolio_id, ticker, qty, avg_cost, cost_basis)
+        VALUES (:portfolio, 'AAPL', 1, -0.0001, 10)
         """,
         ids,
     )
@@ -272,8 +272,8 @@ def test_allowed_edges_and_column_defaults(league_conn) -> None:
     league_conn.execute(
         text(
             """
-            INSERT INTO league.positions (portfolio_id, ticker, qty, avg_cost)
-            VALUES (:portfolio, 'MSFT', 0.000001, 0)
+            INSERT INTO league.positions (portfolio_id, ticker, qty, avg_cost, cost_basis)
+            VALUES (:portfolio, 'MSFT', 0.000001, 0, 0)
             """
         ),
         ids,

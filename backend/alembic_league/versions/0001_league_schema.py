@@ -148,9 +148,11 @@ def upgrade() -> None:
         sa.Column("ticker", sa.Text(), nullable=False),
         sa.Column("qty", sa.Numeric(18, 6), nullable=False),
         sa.Column("avg_cost", sa.Numeric(14, 4), nullable=False),
+        sa.Column("cost_basis", sa.Numeric(28, 10), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.CheckConstraint("qty > 0", name="ck_positions_qty_positive"),
         sa.CheckConstraint("avg_cost >= 0", name="ck_positions_avg_cost_nonnegative"),
+        sa.CheckConstraint("cost_basis >= 0", name="ck_positions_cost_basis_nonnegative"),
         sa.ForeignKeyConstraint(
             ["portfolio_id"], ["league.portfolios.id"], name="fk_positions_portfolio_id"
         ),

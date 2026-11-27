@@ -174,6 +174,7 @@ class Position(LeagueBase):
     __table_args__ = (
         CheckConstraint("qty > 0", name="ck_positions_qty_positive"),
         CheckConstraint("avg_cost >= 0", name="ck_positions_avg_cost_nonnegative"),
+        CheckConstraint("cost_basis >= 0", name="ck_positions_cost_basis_nonnegative"),
     )
 
     portfolio_id: Mapped[uuid.UUID] = mapped_column(
@@ -182,6 +183,7 @@ class Position(LeagueBase):
     ticker: Mapped[str] = mapped_column(Text, primary_key=True)
     qty: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     avg_cost: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    cost_basis: Mapped[Decimal] = mapped_column(Numeric(28, 10), nullable=False)
     updated_at: Mapped[datetime] = _ts()
 
 

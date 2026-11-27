@@ -57,8 +57,8 @@ def test_updating_cash_or_qty_below_the_bound_is_rejected(league_conn) -> None:
     league_conn.execute(
         text(
             """
-            INSERT INTO league.positions (portfolio_id, ticker, qty, avg_cost)
-            VALUES (:portfolio, 'AAPL', 1, 10)
+            INSERT INTO league.positions (portfolio_id, ticker, qty, avg_cost, cost_basis)
+            VALUES (:portfolio, 'AAPL', 1, 10, 10)
             """
         ),
         ids,

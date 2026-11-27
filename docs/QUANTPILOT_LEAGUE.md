@@ -256,7 +256,7 @@ League models declare `MetaData(schema="league")` and use the existing sync engi
 
 All League reads and writes go through `backend/app/league/repo/`. The fill engine and the risk engine are pure functions: values in, values out, no session. The simulator worker loads rows through the repository, calls those functions, and writes the results back through the repository.
 
-The repository step adds `record_fill(order_id, fill)`. It sets `orders.status` to `filled` and inserts the `fills` row in one transaction. The test for that step shows no other code path can set `status = 'filled'`. Hypothesis property tests for cash, quantity, and equity start with the fill engine, not with this schema step.
+Week 1 repository functions, all taking the caller's `Session` and none of them committing: `upsert_bars`, `first_bar_after`, `create_portfolio`, `get_portfolio`, `create_order`, `set_order_status`, and `record_fill(order_id, fill, commission)`. `record_fill` is the only public function that changes cash or positions. `_apply_fill` is private. Inside `session.begin_nested()` it locks the order, then the portfolio (`SELECT ... FOR UPDATE`, that order), inserts the fill, sets `status` to `filled`, and applies the section 7.4 cash formulas. The caller commits. Before any cash math, `record_fill` quantizes `qty` to 6 decimal places with `ROUND_DOWN` for both buys and sells, and `price` to 4 decimal places with `ROUND_CEILING` on a buy and `ROUND_FLOOR` on a sell. If either quantized value is `<= 0`, it raises `FillNotPositive` and writes nothing. A raw `price <= 0` or `qty <= 0`, a `bar_time <= game_time`, and a negative commission (`InvalidCommission`) are also rejected before any write. Cash then uses those quantized inputs. Debits quantize to 4 decimal places with `ROUND_CEILING` and credits with `ROUND_FLOOR`. `positions.cost_basis` stores the unrounded product `qty * price` of those inputs. A buy adds that product. A partial sell sets `cost_basis` to `cost_basis * new_qty / old_qty`, kept at 10 decimal places. `avg_cost` is `cost_basis / qty`, `ROUND_HALF_EVEN` to 4 decimal places, recomputed from `cost_basis` on every fill. `filled`, `rejected`, `expired`, and `cancelled` are terminal. `set_order_status` may move `accepted` to `queued`, `rejected`, `expired`, or `cancelled`, and `queued` to `accepted`, `expired`, or `cancelled`. Any other move raises `StatusTransitionNotAllowed`. Only `record_fill` may set `filled`. `create_order` does not accept `pending_approval` until approve mode (week 3). A Hypothesis test of `record_fill` checks cash, quantity, and `avg_cost` on random buy and sell sequences.
 
 `league.portfolios` is the paper cash book. It has nothing to do with `public.portfolios`, which is the existing watchlist.
 
@@ -286,6 +286,7 @@ league.portfolios       (id UUID PK, agent_id FK, season_id FK, kind TEXT CHECK 
                          UNIQUE (agent_id, season_id, kind))
 league.positions        (portfolio_id FK, ticker TEXT, qty NUMERIC(18,6) CHECK (qty > 0),
                          avg_cost NUMERIC(14,4) CHECK (avg_cost >= 0),
+                         cost_basis NUMERIC(28,10) NOT NULL CHECK (cost_basis >= 0),
                          updated_at, PRIMARY KEY (portfolio_id, ticker))
 league.orders           (id UUID PK, portfolio_id FK, ticker TEXT, side TEXT CHECK (side IN ('buy','sell')),
                          notional_usd NUMERIC(14,4) NULL, qty NUMERIC(18,6) NULL,
@@ -346,7 +347,7 @@ A non-system rationale must have at least one news id, and none of those ids may
 Invariants enforced by Postgres:
 
 - `portfolios.cash >= 0`. `equity_snapshots.cash >= 0` and `equity_snapshots.equity >= 0`.
-- `positions.qty > 0` and `positions.avg_cost >= 0`. A position at 0 is deleted by the simulator; the database also rejects storing it.
+- `positions.qty > 0`, `positions.avg_cost >= 0`, and `positions.cost_basis >= 0`. `record_fill` deletes a position whose quantity reaches 0. The database also rejects storing `qty <= 0`.
 - `fills.price > 0` and `fills.qty > 0`. At most one fill row per order (`order_id` is unique).
 - An order has `notional_usd`, `qty`, or both. Each value that is present is `> 0`.
 - `rationales.confidence` is from 0 through 1.
@@ -354,7 +355,7 @@ Invariants enforced by Postgres:
 
 Invariants enforced by application code, not by a constraint:
 
-- `status = 'filled'` exists only together with its fill row. The repository step exposes `record_fill(order_id, fill)`, which sets `status = 'filled'` and inserts the fill in one transaction. A test must show that no code path sets `status = 'filled'` without that function.
+- `status = 'filled'` exists only together with its fill row. Only `record_fill` sets that status, and only inside the savepoint that also inserts the fill and updates cash and the position. `filled`, `rejected`, `expired`, and `cancelled` do not change again. `create_order` and `set_order_status` reject `filled`.
 - `source = 'agent'` implies the referenced rationale has `validated = true`. Week 2.
 - Only the stop-loss path sets `rationales.system = true`. Week 2.
 - Each `graph_path` element is a real Neo4j edge. Week 2. The database only requires a non-empty array when `system` is false.
@@ -438,7 +439,7 @@ Given an order accepted at game time `T`:
 2. If no row matches and the poller may be lagging, the repository fetches that ticker's window from Alpaca once, upserts into `league.bars` (`ON CONFLICT DO NOTHING`), and calls the fill function once more. The fill function itself does not perform this fetch.
 3. Base price = that bar's open.
 4. Slippage: buys pay `open × (1 + SLIPPAGE_BPS/10000)`, sells receive `open × (1 − SLIPPAGE_BPS/10000)`. Default `SLIPPAGE_BPS = 5`.
-5. Commission is `COMMISSION_USD`, default 0. A buy changes cash by `cash -= qty * fill_price + COMMISSION_USD`. A sell changes cash by `cash += qty * fill_price - COMMISSION_USD`. The risk engine resizes a buy whose total would exceed available cash before the fill runs. One test uses a non-zero commission.
+5. Commission is `COMMISSION_USD`, default 0. A buy changes cash by `cash -= qty * fill_price + COMMISSION_USD`. A sell changes cash by `cash += qty * fill_price - COMMISSION_USD`. `record_fill` applies those formulas. It quantizes the buy debit up and the sell credit down, to 4 decimal places. The risk engine resizes a buy whose total would exceed available cash before the fill runs. One test uses a non-zero commission. The fill engine's property tests are still that later step.
 6. Quantity: for notional buys, `qty = floor_to_6dp(notional / fill_price)`; for sells, the requested qty (capped at the held qty).
 7. If there is still no eligible bar after `FILL_TIMEOUT_MINUTES` (default 30 trading minutes; a halt or a long IEX gap), the order expires.
 
