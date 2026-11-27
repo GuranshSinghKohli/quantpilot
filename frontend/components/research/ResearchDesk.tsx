@@ -9,6 +9,7 @@ import {
   type FindingView,
   type ResearchDeskModel,
   pollResearch,
+  MARKET_IDENTITY_UNAVAILABLE,
   researchModel,
 } from "@/lib/researchDesk";
 import { submitBody } from "@/lib/researchSubmit";
@@ -250,7 +251,7 @@ function Citation({ citation, index }: { citation: CitationView; index: number }
   return (
     <li className="font-sans text-xs leading-relaxed text-readout">
       <span className="text-osd">[{index}] </span>
-      {citation.kind === "market_fact" ? "Market data" : citation.title}
+      {citation.kind === "market_fact" ? marketLabel(citation) : citation.title}
       {citation.publisher ? ` · ${citation.publisher}` : ""}
       {citation.publishedAt ? ` · ${citation.publishedAt.slice(0, 10)}` : ""}
       {citation.href ? (
@@ -267,12 +268,26 @@ function Citation({ citation, index }: { citation: CitationView; index: number }
   );
 }
 
+function marketLabel(citation: CitationView): string {
+  const market = citation.market;
+  if (!market?.verified) return MARKET_IDENTITY_UNAVAILABLE;
+  return market.displayName ? `${market.displayName} (${market.symbol})` : market.symbol;
+}
+
 function MarketCard({ citation }: { citation: CitationView }) {
   const market = citation.market;
   if (!market) return null;
+  if (!market.verified) {
+    return (
+      <li className="border border-hud bg-panel px-3 py-4">
+        <p className="font-sans text-sm text-osd">{MARKET_IDENTITY_UNAVAILABLE}</p>
+      </li>
+    );
+  }
+  const heading = market.displayName ? `${market.displayName} (${market.symbol})` : market.symbol;
   return (
     <li className="overflow-x-auto border border-hud bg-panel px-3 py-4">
-      <p className="font-mono text-xs uppercase tracking-widest text-cyan">Market data · {market.symbol}</p>
+      <p className="font-mono text-xs uppercase tracking-widest text-cyan">{heading}</p>
       <p className="mt-2 font-sans text-sm text-osd">Relative return vs {market.benchmark}</p>
       <p className="mt-1 font-sans text-xs text-readout">{market.method}</p>
       <table className="mt-3 w-full min-w-[28rem] text-left font-mono text-xs text-osd">

@@ -81,6 +81,8 @@ def test_package_is_bounded_cited_and_serializable(db):
     for kind in ("document_excerpt", "event_fact", "graph_fact"):
         assert by_kind[kind]
         assert all(item["source_url"] == "https://example.com/p1" for item in by_kind[kind])
+    assert all(item["evidence_id"] == str(ev.id) for item in by_kind["document_excerpt"])
+    assert all(item["evidence"]["source_id"] == str(src.id) for item in by_kind["document_excerpt"])
     assert all(doc.get("source_url") for doc in package["documents"])
     with pytest.raises(RequestOversized):
         assemble_package(db, ResearchRequest(query="x", max_documents=9999), provider=provider)

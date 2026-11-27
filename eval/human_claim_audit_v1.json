@@ -1,0 +1,1952 @@
+{
+  "dataset_version": "human-claim-audit-v1",
+  "evaluation_date": "2026-10-07",
+  "sample_size": 33,
+  "description": "Manual audit of claims from completed staging research reports. Labels were assigned by reading the cited article and, for market claims, the stored event impact. QuantPilot verification_status is recorded on each case. It was not treated as evidence that the source supports the claim.",
+  "source": {
+    "environment": "aws-staging",
+    "api": "GET /api/research/{research_id} and GET /api/events/{event_id}/impact",
+    "host": "quantpilot-staging-1583627039.us-east-1.elb.amazonaws.com",
+    "note": "Historical report rows were not modified. Phase 11 ticker binding was not deployed when these jobs ran."
+  },
+  "model": {
+    "name": "gpt-4o-mini",
+    "note": "The research payload does not store the model name. Phase 9 and Phase 10.1 records identify these jobs as gpt-4o-mini."
+  },
+  "verifier": {
+    "name": "deterministic verifier in backend/app/research/verify.py",
+    "prompt_family": "evidence-v2",
+    "note": "No separate verifier semver. Prompt versions are stored on each case. These jobs used market-v2, not the later local market-v3 prompt."
+  },
+  "market_calculation": {
+    "calculation_version": "v1",
+    "benchmark_symbol": "SPY",
+    "window": "+1 trading session where the sampled market claims name that window",
+    "note": "Returns in the impact payload are fractions. 0.022990 is 2.30 percent."
+  },
+  "inspected_research_ids": [
+    {
+      "research_id": "e124f706-02ec-493d-9b07-68b7427bc0b2",
+      "query": "What did the collected sources report about the event Better Global ETF: Vanguard's VT vs. the iShares URTH, and how did NVDA trade afterward?",
+      "finished_at": "2026-10-04T01:35:47.054249+00:00",
+      "claim_count": 0,
+      "verification_summary": {
+        "supported": 0,
+        "uncertain": 0,
+        "unsupported": 0,
+        "conflicting": 0
+      },
+      "sampled": false
+    },
+    {
+      "research_id": "e10971ee-af75-4550-a8ca-3e71aeada5bb",
+      "query": "What relationships between NVIDIA and Microsoft are explicitly supported by the collected evidence?",
+      "finished_at": "2026-10-04T01:36:20.114718+00:00",
+      "claim_count": 0,
+      "verification_summary": {
+        "supported": 0,
+        "uncertain": 0,
+        "unsupported": 0,
+        "conflicting": 0
+      },
+      "sampled": false
+    },
+    {
+      "research_id": "2f15726e-00b0-49c8-909d-361cb6a56bb4",
+      "query": "What daily market observations are recorded for NVIDIA in the staged bars?",
+      "finished_at": "2026-10-04T01:36:37.165041+00:00",
+      "claim_count": 6,
+      "verification_summary": {
+        "supported": 6,
+        "uncertain": 0,
+        "unsupported": 0,
+        "conflicting": 0
+      },
+      "sampled": true
+    },
+    {
+      "research_id": "20afe096-ec23-4dd1-8f64-0fb58b97b49e",
+      "query": "What did the collected articles report about Meta Platforms?",
+      "finished_at": "2026-10-04T01:37:10.540708+00:00",
+      "claim_count": 0,
+      "verification_summary": {
+        "supported": 0,
+        "uncertain": 0,
+        "unsupported": 0,
+        "conflicting": 0
+      },
+      "sampled": false
+    },
+    {
+      "research_id": "55909e3b-85e0-43ea-a480-01224f7671b1",
+      "query": "Which partnerships among Apple, Microsoft, NVIDIA, AMD, and Meta are explicitly stated by the collected evidence?",
+      "finished_at": "2026-10-04T01:37:28.104159+00:00",
+      "claim_count": 6,
+      "verification_summary": {
+        "supported": 6,
+        "uncertain": 0,
+        "unsupported": 0,
+        "conflicting": 0
+      },
+      "sampled": true
+    },
+    {
+      "research_id": "05a7920d-7577-4680-b4f3-5f68540eb450",
+      "query": "What recent news involving NVIDIA coincided with notable market movement?",
+      "finished_at": "2026-10-05T20:44:51.341517+00:00",
+      "claim_count": 22,
+      "verification_summary": {
+        "supported": 22,
+        "uncertain": 0,
+        "unsupported": 0,
+        "conflicting": 0
+      },
+      "sampled": true
+    },
+    {
+      "research_id": "f1ab9c21-9a47-4ae8-b457-047787c4e863",
+      "query": "How did NVIDIA perform around the recent news events in the corpus?",
+      "finished_at": "2026-10-05T20:45:45.789940+00:00",
+      "claim_count": 14,
+      "verification_summary": {
+        "supported": 11,
+        "uncertain": 3,
+        "unsupported": 0,
+        "conflicting": 0
+      },
+      "sampled": true
+    },
+    {
+      "research_id": "62295884-c072-4a0d-af17-6fe30066983f",
+      "query": "What recent news about Microsoft could be relevant to its market performance?",
+      "finished_at": "2026-10-05T20:46:00.600561+00:00",
+      "claim_count": 16,
+      "verification_summary": {
+        "supported": 13,
+        "uncertain": 2,
+        "unsupported": 1,
+        "conflicting": 0
+      },
+      "sampled": true
+    },
+    {
+      "research_id": "e7462afd-f4f6-4189-9cdc-8a232bd51720",
+      "query": "What companies has Microsoft partnered with according to the collected evidence?",
+      "finished_at": "2026-10-05T20:46:42.557331+00:00",
+      "claim_count": 8,
+      "verification_summary": {
+        "supported": 8,
+        "uncertain": 0,
+        "unsupported": 0,
+        "conflicting": 0
+      },
+      "sampled": true
+    },
+    {
+      "research_id": "7ce0cced-7276-429e-b546-42bc88225a06",
+      "query": "What does Apple do?",
+      "finished_at": "2026-10-05T20:47:08.997060+00:00",
+      "claim_count": 27,
+      "verification_summary": {
+        "supported": 23,
+        "uncertain": 4,
+        "unsupported": 0,
+        "conflicting": 0
+      },
+      "sampled": true
+    },
+    {
+      "research_id": "eca9ce3a-a840-4909-bb81-a9a770ee1f39",
+      "query": "Tell me about the situation.",
+      "finished_at": "2026-10-05T20:47:36.396229+00:00",
+      "claim_count": 31,
+      "verification_summary": {
+        "supported": 26,
+        "uncertain": 4,
+        "unsupported": 1,
+        "conflicting": 0
+      },
+      "sampled": true
+    },
+    {
+      "research_id": "72cf5986-c952-477b-8376-165a7035fd75",
+      "query": "What recent news about Microsoft could be relevant to its market performance?",
+      "finished_at": "2026-10-05T20:50:42.119612+00:00",
+      "claim_count": 15,
+      "verification_summary": {
+        "supported": 13,
+        "uncertain": 1,
+        "unsupported": 1,
+        "conflicting": 0
+      },
+      "sampled": true
+    },
+    {
+      "research_id": "11656c5d-c849-4ff6-8659-fe6f1044d62d",
+      "query": "What happened around a selected NVIDIA news event and what was the subsequent market observation?",
+      "finished_at": "2026-10-05T20:54:46.039026+00:00",
+      "claim_count": 20,
+      "verification_summary": {
+        "supported": 20,
+        "uncertain": 0,
+        "unsupported": 0,
+        "conflicting": 0
+      },
+      "sampled": true
+    }
+  ],
+  "cases": [
+    {
+      "research_id": "05a7920d-7577-4680-b4f3-5f68540eb450",
+      "correlation_id": "phase101-01",
+      "finished_at": "2026-10-05T20:44:51.341517+00:00",
+      "query": "What recent news involving NVIDIA coincided with notable market movement?",
+      "claim_id": "87cef7727472b99c",
+      "claim": "Nvidia has returned $46 billion to shareholders through dividends and buybacks in the first half of its fiscal year.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "a655ee7d6521af69"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/17/nvidia-has-returned-46-billion-to-shareholders-thi?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-01",
+      "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+      "symbol": "NVDA",
+      "human_label": "CORRECT",
+      "human_support_level": "FULLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [],
+      "human_reason": "The cited Motley Fool article says that through the first two quarters of its current fiscal year, Nvidia returned around $46 billion to shareholders through dividends and stock buybacks. 'First half' matches those two quarters. The article says 'around $46 billion.'",
+      "stored_impact": null
+    },
+    {
+      "research_id": "05a7920d-7577-4680-b4f3-5f68540eb450",
+      "correlation_id": "phase101-01",
+      "finished_at": "2026-10-05T20:44:51.341517+00:00",
+      "query": "What recent news involving NVIDIA coincided with notable market movement?",
+      "claim_id": "6ce19421c7940d65",
+      "claim": "Nvidia boosted its quarterly dividend from $0.01 to $0.25 per share in June.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "a655ee7d6521af69"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/17/nvidia-has-returned-46-billion-to-shareholders-thi?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-02",
+      "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+      "symbol": "NVDA",
+      "human_label": "CORRECT",
+      "human_support_level": "FULLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [],
+      "human_reason": "The same article says Nvidia's quarterly dividend is $0.25 per share after a 2,400% boost in June from the $0.01 per share it previously paid.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "05a7920d-7577-4680-b4f3-5f68540eb450",
+      "correlation_id": "phase101-01",
+      "finished_at": "2026-10-05T20:44:51.341517+00:00",
+      "query": "What recent news involving NVIDIA coincided with notable market movement?",
+      "claim_id": "1cb40311f909f8d5",
+      "claim": "Nvidia has a market cap of $5.1 trillion.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "a655ee7d6521af69"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/17/nvidia-has-returned-46-billion-to-shareholders-thi?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-03",
+      "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+      "symbol": "NVDA",
+      "human_label": "CORRECT",
+      "human_support_level": "FULLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "MEDIUM",
+      "error_types": [],
+      "human_reason": "The cited article says a market cap of over $5.1 trillion as of Sept. 15. A different article in the corpus says roughly $5.4 trillion. This citation supports the $5.1 trillion figure, with 'over' and an as-of date the claim omits.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "05a7920d-7577-4680-b4f3-5f68540eb450",
+      "correlation_id": "phase101-01",
+      "finished_at": "2026-10-05T20:44:51.341517+00:00",
+      "query": "What recent news involving NVIDIA coincided with notable market movement?",
+      "claim_id": "1fe8d5d9643c5bf1",
+      "claim": "Nvidia's revenue increased by 106% year-over-year.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "170e492648a08f8f"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/15/is-nvidia-stock-a-buy-in-september-2026?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-04",
+      "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+      "symbol": "NVDA",
+      "human_label": "PARTIALLY_CORRECT",
+      "human_support_level": "PARTIALLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "incomplete_context"
+      ],
+      "human_reason": "The cited article says latest-quarter revenue was $96.2 billion, up 106% from a year earlier. The 106% figure is in the source. The claim drops 'latest quarter' and reads as if it were company-wide revenue growth without a period.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "05a7920d-7577-4680-b4f3-5f68540eb450",
+      "correlation_id": "phase101-01",
+      "finished_at": "2026-10-05T20:44:51.341517+00:00",
+      "query": "What recent news involving NVIDIA coincided with notable market movement?",
+      "claim_id": "dff2bfad5c2dda34",
+      "claim": "AMD's shares rose 12% over the past week, driven by surging data center sales.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "a6c9cfdbddc91c2b"
+      ],
+      "source_urls": [
+        "https://www.zacks.com/stock/news/2989998/amd-s-recent-surge-still-matters-putting-these-etfs-in-focus?cid=CS-ZC-FT-etf_news_and_commentary-2989998"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-05",
+      "entity_id": "bd5ca632-e3f6-4fcd-a1ba-b7cfeb55e5ad",
+      "symbol": "AMD",
+      "human_label": "PARTIALLY_CORRECT",
+      "human_support_level": "PARTIALLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "overclaim"
+      ],
+      "human_reason": "The Zacks article says AMD shares were rising around 12% over the past week as of Sept. 13, and that the rally reflects confidence in the data-center opportunity. It also says data-center sales surged 107% year over year. 'Driven by surging data center sales' is stronger than the article's wording, and '12%' drops 'around'.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "05a7920d-7577-4680-b4f3-5f68540eb450",
+      "correlation_id": "phase101-01",
+      "finished_at": "2026-10-05T20:44:51.341517+00:00",
+      "query": "What recent news involving NVIDIA coincided with notable market movement?",
+      "claim_id": "2f96a3bbb4ad9c4a",
+      "claim": "Nvidia's stock is considered attractive despite recent gains.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "eb6a4efe5d07e3e1"
+      ],
+      "source_urls": [
+        "https://www.zacks.com/stock/news/2992756/zacks-investment-ideas-feature-highlights-microsoft-nvidia-and-apple?cid=CS-ZC-FT-press_releases-2992756"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-06",
+      "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+      "symbol": "NVDA",
+      "human_label": "PARTIALLY_CORRECT",
+      "human_support_level": "PARTIALLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "MEDIUM",
+      "error_types": [
+        "overclaim"
+      ],
+      "human_reason": "The Zacks article says Microsoft and NVIDIA trade at highly attractive valuations, and that NVIDIA shares got cheaper earlier in the year. It does not say the stock is attractive despite recent gains. The sentence is also an opinion stored as FACT.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "05a7920d-7577-4680-b4f3-5f68540eb450",
+      "correlation_id": "phase101-01",
+      "finished_at": "2026-10-05T20:44:51.341517+00:00",
+      "query": "What recent news involving NVIDIA coincided with notable market movement?",
+      "claim_id": "87cef7727472b99c",
+      "claim": "The stock returned 2.30% over the +1 trading-session window and the benchmark return was 1.55%.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "8f6fb65ae7bbe317",
+        "f11b1dc36dcb42f4"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/17/100-monthly-investment-qqq-grow-20-years?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+      "event_title": "A $100 Monthly Investment in QQQ Could Grow Into This Over 20 Years",
+      "event_url": "https://www.fool.com/investing/2026/09/17/100-monthly-investment-qqq-grow-20-years?source=iedfolrf0000001",
+      "citation_symbol": "NVDA",
+      "citation_entity_id": null,
+      "benchmark_symbol": "SPY",
+      "calculation_version": null,
+      "cited_windows": {
+        "+1D": {
+          "return": 0.022990057137715292,
+          "available": true,
+          "relative_return": 0.007485061667116932,
+          "benchmark_return": 0.01550499547059836
+        },
+        "+3D": {
+          "return": 0.01457686597381569,
+          "available": true,
+          "relative_return": 0.0065421011744879465,
+          "benchmark_return": 0.008034764799327743
+        },
+        "+5D": {
+          "return": 0.012597291582309822,
+          "available": true,
+          "relative_return": -8.50332480017979e-05,
+          "benchmark_return": 0.01268232483031162
+        },
+        "-1D": {
+          "return": 0.01335825658794576,
+          "available": true,
+          "relative_return": null,
+          "benchmark_return": null
+        },
+        "+20D": {
+          "return": null,
+          "available": false,
+          "relative_return": null,
+          "benchmark_return": null
+        }
+      },
+      "evaluation_id": "hca-07",
+      "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+      "symbol": "NVDA",
+      "human_label": "CORRECT",
+      "human_support_level": "FULLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "CORRECT_SECURITY",
+      "human_confidence": "HIGH",
+      "error_types": [],
+      "human_reason": "The cited market row is NVDA on event 031156cd. Stored +1D return is 0.022990 (2.30%) and the benchmark return is 0.015505 (1.55%). The citation symbol is NVDA. The question names NVIDIA. The event article is a QQQ column, not an NVIDIA announcement; the return itself matches the NVDA impact row. The citation's entity_id is null because this job predates the ticker-binding fix.",
+      "stored_impact": {
+        "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+        "symbol": "NVDA",
+        "window": "+1D",
+        "return": 0.022990057137715292,
+        "benchmark_return": 0.01550499547059836,
+        "benchmark_symbol": "SPY",
+        "calculation_version": "v1"
+      }
+    },
+    {
+      "research_id": "62295884-c072-4a0d-af17-6fe30066983f",
+      "correlation_id": "phase101-07",
+      "finished_at": "2026-10-05T20:46:00.600561+00:00",
+      "query": "What recent news about Microsoft could be relevant to its market performance?",
+      "claim_id": "6ce19421c7940d65",
+      "claim": "In fiscal 2026, Microsoft paid $27.0 billion in dividends versus $16.7 billion in buybacks.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "dcd0eb9836ed239e"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/15/microsoft-pays-out-more-in-dividends-than-it-spends-buying-back-stock-here-s-what-that-has-done-to-the-share-count?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-08",
+      "entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+      "symbol": "MSFT",
+      "human_label": "PARTIALLY_CORRECT",
+      "human_support_level": "PARTIALLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "incomplete_context"
+      ],
+      "human_reason": "The cited article says Microsoft's fiscal 2026 annual report shows $27.0 billion of dividends declared against $16.7 billion of stock repurchased. The claim says 'paid'. The article distinguishes dividends declared from cash spent.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "62295884-c072-4a0d-af17-6fe30066983f",
+      "correlation_id": "phase101-07",
+      "finished_at": "2026-10-05T20:46:00.600561+00:00",
+      "query": "What recent news about Microsoft could be relevant to its market performance?",
+      "claim_id": "1cb40311f909f8d5",
+      "claim": "Microsoft's Azure cloud service grew 32% year-over-year.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "eb6a4efe5d07e3e1"
+      ],
+      "source_urls": [
+        "https://www.zacks.com/stock/news/2992756/zacks-investment-ideas-feature-highlights-microsoft-nvidia-and-apple?cid=CS-ZC-FT-press_releases-2992756"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-09",
+      "entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+      "symbol": "MSFT",
+      "human_label": "PARTIALLY_CORRECT",
+      "human_support_level": "PARTIALLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "overclaim"
+      ],
+      "human_reason": "The Zacks article says Intelligent Cloud revenue was $39.3 billion, growing 32% year over year, and that Intelligent Cloud results include Azure. It does not say Azure itself grew 32%.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "62295884-c072-4a0d-af17-6fe30066983f",
+      "correlation_id": "phase101-07",
+      "finished_at": "2026-10-05T20:46:00.600561+00:00",
+      "query": "What recent news about Microsoft could be relevant to its market performance?",
+      "claim_id": "22e85f224aeb5fc2",
+      "claim": "Microsoft's forward P/E ratio is 25.77, which is higher than Oracle's 17.97.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "4275151afbf625d8"
+      ],
+      "source_urls": [
+        "https://www.zacks.com/stock/news/2990040/orcl-vs-msft-which-stock-should-value-investors-buy-now?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_3-2990040"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-10",
+      "entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+      "symbol": "MSFT",
+      "human_label": "CORRECT",
+      "human_support_level": "FULLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [],
+      "human_reason": "The cited Zacks article states Oracle's forward P/E of 17.97 and Microsoft's forward P/E of 25.77.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "62295884-c072-4a0d-af17-6fe30066983f",
+      "correlation_id": "phase101-07",
+      "finished_at": "2026-10-05T20:46:00.600561+00:00",
+      "query": "What recent news about Microsoft could be relevant to its market performance?",
+      "claim_id": "87cef7727472b99c",
+      "claim": "The stock returned 1.59% over the +1 trading-session window and the benchmark return was 1.55%.",
+      "finding_type": "OBSERVATION",
+      "report_section": "market_observations",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "8f6fb65ae7bbe317",
+        "f11b1dc36dcb42f4"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/17/100-monthly-investment-qqq-grow-20-years?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+      "event_title": "A $100 Monthly Investment in QQQ Could Grow Into This Over 20 Years",
+      "event_url": "https://www.fool.com/investing/2026/09/17/100-monthly-investment-qqq-grow-20-years?source=iedfolrf0000001",
+      "citation_symbol": "NVDA",
+      "citation_entity_id": null,
+      "benchmark_symbol": "SPY",
+      "calculation_version": null,
+      "cited_windows": {
+        "+1D": {
+          "return": 0.022990057137715292,
+          "available": true,
+          "relative_return": 0.007485061667116932,
+          "benchmark_return": 0.01550499547059836
+        },
+        "+3D": {
+          "return": 0.01457686597381569,
+          "available": true,
+          "relative_return": 0.0065421011744879465,
+          "benchmark_return": 0.008034764799327743
+        },
+        "+5D": {
+          "return": 0.012597291582309822,
+          "available": true,
+          "relative_return": -8.50332480017979e-05,
+          "benchmark_return": 0.01268232483031162
+        },
+        "-1D": {
+          "return": 0.01335825658794576,
+          "available": true,
+          "relative_return": null,
+          "benchmark_return": null
+        },
+        "+20D": {
+          "return": null,
+          "available": false,
+          "relative_return": null,
+          "benchmark_return": null
+        }
+      },
+      "evaluation_id": "hca-11",
+      "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+      "symbol": "NVDA",
+      "human_label": "INCORRECT",
+      "human_support_level": "NOT_SUPPORTED",
+      "citation_correctness": "WRONG_CITATION",
+      "entity_correctness": "WRONG_ENTITY",
+      "market_correctness": "WRONG_SECURITY",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "wrong_security",
+        "citation_mismatch"
+      ],
+      "human_reason": "The question is about Microsoft. The sentence's 1.59% matches the MSFT +1D return on event 031156cd (0.015857) and the 1.55% benchmark matches SPY (0.015505). The market citation symbol is NVDA, whose +1D return on that event is 0.022990 (2.30%), not 1.59%. The citation entity_id is null. This is the pre-fix ticker-binding failure.",
+      "stored_impact": {
+        "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "cited_symbol": "NVDA",
+        "cited_return": 0.022990057137715292,
+        "cited_benchmark_return": 0.01550499547059836,
+        "figure_matches_entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+        "figure_matches_symbol": "MSFT",
+        "figure_matches_return": 0.015857264368747126,
+        "benchmark_symbol": "SPY",
+        "calculation_version": "v1"
+      }
+    },
+    {
+      "research_id": "62295884-c072-4a0d-af17-6fe30066983f",
+      "correlation_id": "phase101-07",
+      "finished_at": "2026-10-05T20:46:00.600561+00:00",
+      "query": "What recent news about Microsoft could be relevant to its market performance?",
+      "claim_id": "fa46b4e476358e8d",
+      "claim": "Microsoft's stock performance is influenced by its capital allocation strategy and growth in cloud services.",
+      "finding_type": "INFERENCE",
+      "report_section": "implications",
+      "in_report": true,
+      "quantpilot_status": "uncertain",
+      "citation_ids": [
+        "dcd0eb9836ed239e",
+        "eb6a4efe5d07e3e1"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/15/microsoft-pays-out-more-in-dividends-than-it-spends-buying-back-stock-here-s-what-that-has-done-to-the-share-count?source=iedfolrf0000001",
+        "https://www.zacks.com/stock/news/2992756/zacks-investment-ideas-feature-highlights-microsoft-nvidia-and-apple?cid=CS-ZC-FT-press_releases-2992756"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-12",
+      "entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+      "symbol": "MSFT",
+      "human_label": "PARTIALLY_CORRECT",
+      "human_support_level": "PARTIALLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "MEDIUM",
+      "error_types": [],
+      "human_reason": "Labeled INFERENCE. The dividend article and the Intelligent Cloud article support the two premises: a shift toward dividends, and cloud growth. They do not measure an effect on the stock. The inference does not add a false company fact. Uncertain is the appropriate status.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "62295884-c072-4a0d-af17-6fe30066983f",
+      "correlation_id": "phase101-07",
+      "finished_at": "2026-10-05T20:46:00.600561+00:00",
+      "query": "What recent news about Microsoft could be relevant to its market performance?",
+      "claim_id": "89edb18e06e57400",
+      "claim": "The backlash against AI could temporarily affect investor sentiment towards Microsoft.",
+      "finding_type": "SCENARIO",
+      "report_section": "scenarios",
+      "in_report": true,
+      "quantpilot_status": "uncertain",
+      "citation_ids": [
+        "e2d8e4a359b92337"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/19/sam-altman-ai-industry-worry-nvidia-microsoft?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-13",
+      "entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+      "symbol": "MSFT",
+      "human_label": "PARTIALLY_CORRECT",
+      "human_support_level": "PARTIALLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "MEDIUM",
+      "error_types": [],
+      "human_reason": "Labeled SCENARIO and kept conditional. The cited headline asks whether AI-industry backlash should worry Nvidia and Microsoft investors. 'Temporarily' is not in the article. The scenario does not state that sentiment did change. Uncertain is appropriate.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "62295884-c072-4a0d-af17-6fe30066983f",
+      "correlation_id": "phase101-07",
+      "finished_at": "2026-10-05T20:46:00.600561+00:00",
+      "query": "What recent news about Microsoft could be relevant to its market performance?",
+      "claim_id": null,
+      "claim": "Microsoft is rated as a 'Hold' by Zacks, while Oracle is rated as a 'Buy'.",
+      "finding_type": "FACT",
+      "report_section": null,
+      "in_report": false,
+      "quantpilot_status": "unsupported",
+      "citation_ids": [],
+      "source_urls": [],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-14",
+      "entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+      "symbol": "MSFT",
+      "human_label": "CORRECT",
+      "human_support_level": "FULLY_SUPPORTED",
+      "citation_correctness": "INSUFFICIENT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "other"
+      ],
+      "human_reason": "The same job's Zacks Oracle-versus-Microsoft article says Oracle has a Zacks Rank of #2 (Buy) and Microsoft has a Zacks Rank of #3 (Hold). The sentence is in that source. This claim was stored as unsupported and excluded from the report, with no citation_ids. The rejection matches the investment-language filter. Recorded as a finding. The verifier was not changed.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "e7462afd-f4f6-4189-9cdc-8a232bd51720",
+      "correlation_id": "phase101-10",
+      "finished_at": "2026-10-05T20:46:42.557331+00:00",
+      "query": "What companies has Microsoft partnered with according to the collected evidence?",
+      "claim_id": "6ce19421c7940d65",
+      "claim": "Microsoft is highlighted as an attractive investment opportunity alongside NVIDIA and Apple.",
+      "finding_type": "FACT",
+      "report_section": "company_relationships",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "eb6a4efe5d07e3e1"
+      ],
+      "source_urls": [
+        "https://www.zacks.com/stock/news/2992756/zacks-investment-ideas-feature-highlights-microsoft-nvidia-and-apple?cid=CS-ZC-FT-press_releases-2992756"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "company": "company-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-15",
+      "entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+      "symbol": "MSFT",
+      "human_label": "PARTIALLY_CORRECT",
+      "human_support_level": "PARTIALLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "MEDIUM",
+      "error_types": [
+        "overclaim"
+      ],
+      "human_reason": "The question asked which companies Microsoft has partnered with. This sentence does not assert a partnership. The Zacks title names Microsoft, NVIDIA, and Apple. The body says Microsoft and NVIDIA trade at highly attractive valuations. 'Alongside Apple' as an attractive opportunity is only in the headline grouping. No graph relationship is claimed.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "e7462afd-f4f6-4189-9cdc-8a232bd51720",
+      "correlation_id": "phase101-10",
+      "finished_at": "2026-10-05T20:46:42.557331+00:00",
+      "query": "What companies has Microsoft partnered with according to the collected evidence?",
+      "claim_id": "094fe87f9f1ba284",
+      "claim": "Berkshire Hathaway has concentrated approximately 31% of its stock portfolio in AI-focused companies, including Microsoft.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "dce32105c453a551"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/16/31-of-berkshire-hathaways-portfolio-is-riding-on?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "company": "company-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-16",
+      "entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+      "symbol": "MSFT",
+      "human_label": "INCORRECT",
+      "human_support_level": "NOT_SUPPORTED",
+      "citation_correctness": "WRONG_CITATION",
+      "entity_correctness": "WRONG_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "wrong_entity"
+      ],
+      "human_reason": "The cited article's title is that 31% of Berkshire's portfolio is riding on two AI stocks. The body names Alphabet and Apple. Microsoft does not appear in the article. The 31% is not a basket that includes Microsoft.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "e7462afd-f4f6-4189-9cdc-8a232bd51720",
+      "correlation_id": "phase101-10",
+      "finished_at": "2026-10-05T20:46:42.557331+00:00",
+      "query": "What companies has Microsoft partnered with according to the collected evidence?",
+      "claim_id": "fe5327bf7ccb4ec1",
+      "claim": "Microsoft is mentioned in the context of AI alongside NVIDIA and Alphabet, indicating its involvement in the AI sector.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "97853bc4c6710f34"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/15/3-ai-robotics-stocks-worth-owning-over-tesla-right?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "company": "company-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-17",
+      "entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+      "symbol": "MSFT",
+      "human_label": "INCORRECT",
+      "human_support_level": "NOT_SUPPORTED",
+      "citation_correctness": "WRONG_CITATION",
+      "entity_correctness": "WRONG_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "citation_mismatch",
+        "relationship_inference"
+      ],
+      "human_reason": "The cited robotics article does not mention Microsoft. Alphabet appears as Waymo's parent. Nvidia appears in site navigation, not as a co-mention with Microsoft. A co-mention would not have been a partnership, and this source does not contain the co-mention.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "7ce0cced-7276-429e-b546-42bc88225a06",
+      "correlation_id": "phase101-11",
+      "finished_at": "2026-10-05T20:47:08.997060+00:00",
+      "query": "What does Apple do?",
+      "claim_id": "6ce19421c7940d65",
+      "claim": "Apple's Services revenue grew 12% to a record $30.74 billion in the June quarter.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "1e765e7854bf4a9e"
+      ],
+      "source_urls": [
+        "https://www.zacks.com/stock/news/2992242/apple-tv-s-emmy-sweep-adds-momentum-to-aapl-s-services-business?cid=CS-ZC-FT-analyst_blog%7Cquick_take-2992242"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "company": "company-v2",
+        "technology": "technology-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-18",
+      "entity_id": "2c509dc4-bf12-4c8f-ae08-4b96025cfe51",
+      "symbol": "AAPL",
+      "human_label": "CORRECT",
+      "human_support_level": "FULLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [],
+      "human_reason": "The Zacks article says Apple Services revenue rose 12% to a June-quarter record of $30.74 billion.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "7ce0cced-7276-429e-b546-42bc88225a06",
+      "correlation_id": "phase101-11",
+      "finished_at": "2026-10-05T20:47:08.997060+00:00",
+      "query": "What does Apple do?",
+      "claim_id": "fe5327bf7ccb4ec1",
+      "claim": "Apple TV won 29 Emmys at the 78th Primetime Emmy Awards.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "1e765e7854bf4a9e"
+      ],
+      "source_urls": [
+        "https://www.zacks.com/stock/news/2992242/apple-tv-s-emmy-sweep-adds-momentum-to-aapl-s-services-business?cid=CS-ZC-FT-analyst_blog%7Cquick_take-2992242"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "company": "company-v2",
+        "technology": "technology-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-19",
+      "entity_id": "2c509dc4-bf12-4c8f-ae08-4b96025cfe51",
+      "symbol": "AAPL",
+      "human_label": "CORRECT",
+      "human_support_level": "FULLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [],
+      "human_reason": "The same article says Apple TV became the most awarded network at the 78th Primetime Emmy Awards with 29 wins.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "7ce0cced-7276-429e-b546-42bc88225a06",
+      "correlation_id": "phase101-11",
+      "finished_at": "2026-10-05T20:47:08.997060+00:00",
+      "query": "What does Apple do?",
+      "claim_id": "87cef7727472b99c",
+      "claim": "Apple launched the wearables segment with the Apple Watch in 2014-2015.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "324525e788920c70"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/16/tim-cook-defining-move-apple-ai-services?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "company": "company-v2",
+        "technology": "technology-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-20",
+      "entity_id": "2c509dc4-bf12-4c8f-ae08-4b96025cfe51",
+      "symbol": "AAPL",
+      "human_label": "CORRECT",
+      "human_support_level": "FULLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [],
+      "human_reason": "The cited article says the wearables segment launched with the Apple Watch, announced in September 2014 and released in April 2015.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "7ce0cced-7276-429e-b546-42bc88225a06",
+      "correlation_id": "phase101-11",
+      "finished_at": "2026-10-05T20:47:08.997060+00:00",
+      "query": "What does Apple do?",
+      "claim_id": "1cb40311f909f8d5",
+      "claim": "Apple is reportedly considering developing its own AI servers in partnership with Nvidia.",
+      "finding_type": "FACT",
+      "report_section": "company_relationships",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "e7354ef4ec5f00c6"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/16/apple-is-considering-something-it-hasnt-done-in-15-years-heres-what-investors-need-to-know?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "company": "company-v2",
+        "technology": "technology-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-21",
+      "entity_id": "2c509dc4-bf12-4c8f-ae08-4b96025cfe51",
+      "symbol": "AAPL",
+      "human_label": "CORRECT",
+      "human_support_level": "FULLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [],
+      "human_reason": "The cited article says The Information reported that Apple was considering developing its own AI server, and that in its proposed partnership with Nvidia, Apple would use NVLink Fusion. The claim says 'reportedly considering' and 'in partnership,' which matches a proposed partnership. It does not say the deal closed. This is explicit relationship language, not a co-mention. The corpus still has no relationship row for it.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "7ce0cced-7276-429e-b546-42bc88225a06",
+      "correlation_id": "phase101-11",
+      "finished_at": "2026-10-05T20:47:08.997060+00:00",
+      "query": "What does Apple do?",
+      "claim_id": "1fe8d5d9643c5bf1",
+      "claim": "Apple's valuation has become dangerously expensive, trading at a price-to-earnings ratio approaching 40x.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "810847438ef18301"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/22/1-red-flag-apple-investors-cant-afford-to-ignore?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "company": "company-v2",
+        "technology": "technology-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-22",
+      "entity_id": "2c509dc4-bf12-4c8f-ae08-4b96025cfe51",
+      "symbol": "AAPL",
+      "human_label": "PARTIALLY_CORRECT",
+      "human_support_level": "PARTIALLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "overclaim"
+      ],
+      "human_reason": "The cited article says a price-to-earnings ratio of 40, calls that incredibly expensive, and says Apple's valuation has gotten out of control. 'Approaching 40x' and 'dangerously' are the model's wording. The sentence is an opinion stored as FACT.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "7ce0cced-7276-429e-b546-42bc88225a06",
+      "correlation_id": "phase101-11",
+      "finished_at": "2026-10-05T20:47:08.997060+00:00",
+      "query": "What does Apple do?",
+      "claim_id": "941ccbd5b6df9387",
+      "claim": "Apple's more conservative AI approach and strong capital return plans make it a better choice for yield-seeking investors.",
+      "finding_type": "INFERENCE",
+      "report_section": "implications",
+      "in_report": true,
+      "quantpilot_status": "uncertain",
+      "citation_ids": [
+        "b8592ac4fd4f7677"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/18/magnificent-seven-stocks-ranked-by-share-repurchas?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "company": "company-v2",
+        "technology": "technology-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-23",
+      "entity_id": "2c509dc4-bf12-4c8f-ae08-4b96025cfe51",
+      "symbol": "AAPL",
+      "human_label": "PARTIALLY_CORRECT",
+      "human_support_level": "PARTIALLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "MEDIUM",
+      "error_types": [
+        "overclaim"
+      ],
+      "human_reason": "Labeled INFERENCE. The cited table ranks total yield with Apple at 1.83%, then Nvidia at 1.74% and Microsoft at 1.24%. That supports a yield comparison. The article does not say Apple has a more conservative AI approach, and it does not say Apple is a better choice for yield-seeking investors. Uncertain is still a reasonable status for an inference.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "7ce0cced-7276-429e-b546-42bc88225a06",
+      "correlation_id": "phase101-11",
+      "finished_at": "2026-10-05T20:47:08.997060+00:00",
+      "query": "What does Apple do?",
+      "claim_id": "a5eff236a0f9bd8a",
+      "claim": "Apple's stock could face a significant correction or remain flat while the company grows into its high valuation.",
+      "finding_type": "SCENARIO",
+      "report_section": "scenarios",
+      "in_report": true,
+      "quantpilot_status": "uncertain",
+      "citation_ids": [
+        "810847438ef18301"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/22/1-red-flag-apple-investors-cant-afford-to-ignore?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "company": "company-v2",
+        "technology": "technology-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-24",
+      "entity_id": "2c509dc4-bf12-4c8f-ae08-4b96025cfe51",
+      "symbol": "AAPL",
+      "human_label": "CORRECT",
+      "human_support_level": "FULLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [],
+      "human_reason": "Labeled SCENARIO and kept conditional. The cited article says the stock could correct to a reasonable valuation or stay flat while Apple grows into its high price tag. Uncertain is appropriate for a scenario.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "55909e3b-85e0-43ea-a480-01224f7671b1",
+      "correlation_id": "32a4e661b6d042fc",
+      "finished_at": "2026-10-04T01:37:28.104159+00:00",
+      "query": "Which partnerships among Apple, Microsoft, NVIDIA, AMD, and Meta are explicitly stated by the collected evidence?",
+      "claim_id": "6ce19421c7940d65",
+      "claim": "AMD has strategic partnerships with OpenAI, Meta, and Anthropic.",
+      "finding_type": "FACT",
+      "report_section": "company_relationships",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "a6c9cfdbddc91c2b"
+      ],
+      "source_urls": [
+        "https://www.zacks.com/stock/news/2989998/amd-s-recent-surge-still-matters-putting-these-etfs-in-focus?cid=CS-ZC-FT-etf_news_and_commentary-2989998"
+      ],
+      "prompt_versions": {
+        "master": "master-v3",
+        "news": "news-v2",
+        "company": "company-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-25",
+      "entity_id": "bd5ca632-e3f6-4fcd-a1ba-b7cfeb55e5ad",
+      "symbol": "AMD",
+      "human_label": "CORRECT",
+      "human_support_level": "FULLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [],
+      "human_reason": "The Zacks article says strategic relationships with OpenAI, Meta, and Anthropic provide greater visibility into future AI deployments. 'Partnerships' is not a material change from 'strategic relationships.' The sentence is explicit. It is a cited prose claim. The staged corpus had no relationship edge for it.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "f1ab9c21-9a47-4ae8-b457-047787c4e863",
+      "correlation_id": "phase101-06",
+      "finished_at": "2026-10-05T20:45:45.789940+00:00",
+      "query": "How did NVIDIA perform around the recent news events in the corpus?",
+      "claim_id": "a6e068f65123071b",
+      "claim": "Nvidia could reach $515 per share according to analysts, driven by triple-digit data center growth.",
+      "finding_type": "INFERENCE",
+      "report_section": "implications",
+      "in_report": true,
+      "quantpilot_status": "uncertain",
+      "citation_ids": [
+        "2b5fb779966a68eb"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/15/2-trillion-dollar-ai-infrastructure-stocks-up-to-136-upside-according-to-wall-street-analysts?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-26",
+      "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+      "symbol": "NVDA",
+      "human_label": "PARTIALLY_CORRECT",
+      "human_support_level": "PARTIALLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "overclaim"
+      ],
+      "human_reason": "Labeled INFERENCE. The cited article says one analyst, Simon Leopold at Raymond James, expects Nvidia to reach $515 per share, and that analysts are in awe of triple-digit Data Center sales growth. 'Analysts' plural as the source of the $515 target overstates one named analyst. Uncertain is appropriate rather than FACT.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "eca9ce3a-a840-4909-bb81-a9a770ee1f39",
+      "correlation_id": "phase101-12",
+      "finished_at": "2026-10-05T20:47:36.396229+00:00",
+      "query": "Tell me about the situation.",
+      "claim_id": "fe5327bf7ccb4ec1",
+      "claim": "The S&P 500's top 10 holdings now account for approximately 40% of the index's value, the most concentrated since the mid-1960s.",
+      "finding_type": "FACT",
+      "report_section": "key_facts",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "51ba30a9c2ff9e03"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/20/the-stock-market-has-been-sending-a-quiet-warning?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-27",
+      "entity_id": null,
+      "symbol": null,
+      "human_label": "CORRECT",
+      "human_support_level": "FULLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [],
+      "human_reason": "The cited article says the 10 largest stocks in the S&P 500 now account for around 40% of the index's overall value, the most concentrated since the mid-1960s, according to S&P Global. No company is named. CORRECT_ENTITY here means no company was mis-attributed.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "eca9ce3a-a840-4909-bb81-a9a770ee1f39",
+      "correlation_id": "phase101-12",
+      "finished_at": "2026-10-05T20:47:36.396229+00:00",
+      "query": "Tell me about the situation.",
+      "claim_id": "6ce19421c7940d65",
+      "claim": "The stock returned 0.0085% over the +1 trading-session window and the benchmark return is 0.0155%.",
+      "finding_type": "OBSERVATION",
+      "report_section": "market_observations",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "8f6fb65ae7bbe317",
+        "f11b1dc36dcb42f4"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/17/100-monthly-investment-qqq-grow-20-years?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+      "event_title": "A $100 Monthly Investment in QQQ Could Grow Into This Over 20 Years",
+      "event_url": "https://www.fool.com/investing/2026/09/17/100-monthly-investment-qqq-grow-20-years?source=iedfolrf0000001",
+      "citation_symbol": "NVDA",
+      "citation_entity_id": null,
+      "benchmark_symbol": "SPY",
+      "calculation_version": null,
+      "cited_windows": {
+        "+1D": {
+          "return": 0.022990057137715292,
+          "available": true,
+          "relative_return": 0.007485061667116932,
+          "benchmark_return": 0.01550499547059836
+        },
+        "+3D": {
+          "return": 0.01457686597381569,
+          "available": true,
+          "relative_return": 0.0065421011744879465,
+          "benchmark_return": 0.008034764799327743
+        },
+        "+5D": {
+          "return": 0.012597291582309822,
+          "available": true,
+          "relative_return": -8.50332480017979e-05,
+          "benchmark_return": 0.01268232483031162
+        },
+        "-1D": {
+          "return": 0.01335825658794576,
+          "available": true,
+          "relative_return": null,
+          "benchmark_return": null
+        },
+        "+20D": {
+          "return": null,
+          "available": false,
+          "relative_return": null,
+          "benchmark_return": null
+        }
+      },
+      "evaluation_id": "hca-28",
+      "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+      "symbol": "NVDA",
+      "human_label": "INCORRECT",
+      "human_support_level": "NOT_SUPPORTED",
+      "citation_correctness": "WRONG_CITATION",
+      "entity_correctness": "WRONG_ENTITY",
+      "market_correctness": "WRONG_SECURITY",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "wrong_security",
+        "market_calculation"
+      ],
+      "human_reason": "The question does not name a company. The market citation symbol is NVDA on event 031156cd. That NVDA +1D return is 0.022990 (2.30%) and the benchmark is 0.015505 (1.55%). The stated 0.0085% matches Apple's +1D return on the same event (0.008479) printed as a raw fraction with a percent sign. The stated benchmark 0.0155% is the raw SPY fraction 0.015505 with a percent sign. The citation entity_id is null.",
+      "stored_impact": {
+        "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "cited_symbol": "NVDA",
+        "cited_entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+        "cited_return": 0.022990057137715292,
+        "cited_benchmark_return": 0.01550499547059836,
+        "figure_matches_entity_id": "2c509dc4-bf12-4c8f-ae08-4b96025cfe51",
+        "figure_matches_symbol": "AAPL",
+        "figure_matches_return": 0.008478862344926119,
+        "benchmark_symbol": "SPY",
+        "calculation_version": "v1"
+      }
+    },
+    {
+      "research_id": "eca9ce3a-a840-4909-bb81-a9a770ee1f39",
+      "correlation_id": "phase101-12",
+      "finished_at": "2026-10-05T20:47:36.396229+00:00",
+      "query": "Tell me about the situation.",
+      "claim_id": "d1b8f741feef0b3d",
+      "claim": "The stock returned 0.0134% over the +1 trading-session window and the benchmark return is 0.0113%.",
+      "finding_type": "OBSERVATION",
+      "report_section": "market_observations",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "cbe101c81e5b6e99",
+        "df482119f0de8ae5"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/16/hock-tan-just-guided-broadcoms-ai-revenue-to-reach?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": "0efae0a6-0c59-4960-b9f0-43d4672c2e70",
+      "event_title": "Hock Tan Just Guided Broadcom's AI Revenue to Reach $230 Billion by 2028. Should You Believe Him?",
+      "event_url": "https://www.fool.com/investing/2026/09/16/hock-tan-just-guided-broadcoms-ai-revenue-to-reach?source=iedfolrf0000001",
+      "citation_symbol": "META",
+      "citation_entity_id": null,
+      "benchmark_symbol": "SPY",
+      "calculation_version": null,
+      "cited_windows": {
+        "+1D": {
+          "return": 0.01336679983959832,
+          "available": true,
+          "relative_return": 0.0020280292010466106,
+          "benchmark_return": 0.01133877063855171
+        },
+        "+3D": {
+          "return": 0.10089706078923522,
+          "available": true,
+          "relative_return": 0.07510301530153551,
+          "benchmark_return": 0.0257940454876997
+        },
+        "+5D": {
+          "return": 0.10513730673835231,
+          "available": true,
+          "relative_return": 0.08688917995630874,
+          "benchmark_return": 0.018248126782043572
+        },
+        "-1D": {
+          "return": 0.004580448794461622,
+          "available": true,
+          "relative_return": null,
+          "benchmark_return": null
+        },
+        "+20D": {
+          "return": null,
+          "available": false,
+          "relative_return": null,
+          "benchmark_return": null
+        }
+      },
+      "evaluation_id": "hca-29",
+      "entity_id": "6026fafe-7a6a-4e79-aec3-efee09708ff6",
+      "symbol": "META",
+      "human_label": "INCORRECT",
+      "human_support_level": "NOT_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "AMBIGUOUS",
+      "market_correctness": "CORRECT_SECURITY",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "market_calculation"
+      ],
+      "human_reason": "The market citation symbol is META on event 0efae0a6. Stored +1D return is 0.013367 (1.34%) and the benchmark is 0.011339 (1.13%). The sentence prints those fractions with a percent sign, so both figures are about 100 times too small. The symbol matches the Meta impact row. The sentence says 'the stock' on an unscoped question, so the entity is ambiguous in the prose. The citation entity_id is null. A 100x unit error is not a correct number.",
+      "stored_impact": {
+        "event_id": "0efae0a6-0c59-4960-b9f0-43d4672c2e70",
+        "cited_symbol": "META",
+        "cited_entity_id": "6026fafe-7a6a-4e79-aec3-efee09708ff6",
+        "return": 0.01336679983959832,
+        "benchmark_return": 0.01133877063855171,
+        "benchmark_symbol": "SPY",
+        "calculation_version": "v1"
+      }
+    },
+    {
+      "research_id": "eca9ce3a-a840-4909-bb81-a9a770ee1f39",
+      "correlation_id": "phase101-12",
+      "finished_at": "2026-10-05T20:47:36.396229+00:00",
+      "query": "Tell me about the situation.",
+      "claim_id": null,
+      "claim": "Companies with significant China exposure including Qualcomm, Intel, Micron, Applied Materials, NVIDIA, Apple, Walmart, Target, Best Buy, Costco, and Tesla may see positive sentiment if trade tensions ease.",
+      "finding_type": "INFERENCE",
+      "report_section": null,
+      "in_report": false,
+      "quantpilot_status": "unsupported",
+      "citation_ids": [],
+      "source_urls": [],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": null,
+      "event_title": null,
+      "event_url": null,
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-30",
+      "entity_id": null,
+      "symbol": null,
+      "human_label": "PARTIALLY_CORRECT",
+      "human_support_level": "NOT_SUPPORTED",
+      "citation_correctness": "INSUFFICIENT_CITATION",
+      "entity_correctness": "WRONG_ENTITY",
+      "market_correctness": "NOT_APPLICABLE",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "overclaim"
+      ],
+      "human_reason": "Stored as unsupported and excluded from the report, with no citation on the claim. A sibling passage in the fetched Zacks article says Qualcomm, Intel, Micron, and Applied Materials have solid China exposure and that this could support semiconductor sentiment. Retailers Walmart, Target, Best Buy, and Costco are in a different paragraph about lower prices if tariffs fall. Tesla's China exposure is in an auto-ETF paragraph. NVIDIA appears as 'NVIDIA-Heavy ETFs' and in a most-viewed sidebar, not in the China-exposure company list. Apple appears in that sidebar, not in the list. The claim merges those passages and adds NVIDIA and Apple. QuantPilot's unsupported status agrees that the combined sentence should not be supported. The verifier was not changed.",
+      "stored_impact": null
+    },
+    {
+      "research_id": "2f15726e-00b0-49c8-909d-361cb6a56bb4",
+      "correlation_id": "190cbeae11224a29",
+      "finished_at": "2026-10-04T01:36:37.165041+00:00",
+      "query": "What daily market observations are recorded for NVIDIA in the staged bars?",
+      "claim_id": "87cef7727472b99c",
+      "claim": "The stock returned 1.34% over the +1 trading-session window and the benchmark returned 1.55%.",
+      "finding_type": "OBSERVATION",
+      "report_section": "market_observations",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "8f6fb65ae7bbe317",
+        "f11b1dc36dcb42f4"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/17/100-monthly-investment-qqq-grow-20-years?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v3",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+      "event_title": "A $100 Monthly Investment in QQQ Could Grow Into This Over 20 Years",
+      "event_url": "https://www.fool.com/investing/2026/09/17/100-monthly-investment-qqq-grow-20-years?source=iedfolrf0000001",
+      "citation_symbol": null,
+      "citation_entity_id": null,
+      "benchmark_symbol": null,
+      "calculation_version": null,
+      "cited_windows": null,
+      "evaluation_id": "hca-31",
+      "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+      "symbol": null,
+      "human_label": "INCORRECT",
+      "human_support_level": "NOT_SUPPORTED",
+      "citation_correctness": "WRONG_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "WRONG_SECURITY",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "temporal_mismatch"
+      ],
+      "human_reason": "The question names NVIDIA. The citation points at event 031156cd and stores no symbol, no entity_id, and no windows. That event's NVDA +1D return is 0.022990 (2.30%) and its benchmark is 0.015505 (1.55%). The stated 1.34% matches NVDA's +1D return on a different event, 0acaefb4 (0.013358). That other event's benchmark is -0.001193, not 1.55%. The sentence pairs one event's return with another event's benchmark. Missing symbol means the security identity was not verified. This job predates the ticker-binding fix.",
+      "stored_impact": {
+        "cited_event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "cited_symbol": null,
+        "cited_entity_id_on_citation": null,
+        "cited_event_nvda_return": 0.022990057137715292,
+        "cited_event_benchmark_return": 0.01550499547059836,
+        "return_matches_event_id": "0acaefb4-1723-444c-9933-e9a709f5329f",
+        "return_matches_entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+        "return_matches_return": 0.01335825658794576,
+        "return_matches_benchmark_return": -0.0011932861264096761,
+        "benchmark_symbol": "SPY",
+        "calculation_version": "v1"
+      }
+    },
+    {
+      "research_id": "11656c5d-c849-4ff6-8659-fe6f1044d62d",
+      "correlation_id": "c9c14f9a89774fc8",
+      "finished_at": "2026-10-05T20:54:46.039026+00:00",
+      "query": "What happened around a selected NVIDIA news event and what was the subsequent market observation?",
+      "claim_id": "87cef7727472b99c",
+      "claim": "The stock returned 2.30% over the +1 trading-session window and the benchmark return was 1.55%.",
+      "finding_type": "OBSERVATION",
+      "report_section": "market_observations",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "8f6fb65ae7bbe317",
+        "f11b1dc36dcb42f4"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/17/100-monthly-investment-qqq-grow-20-years?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+      "event_title": "A $100 Monthly Investment in QQQ Could Grow Into This Over 20 Years",
+      "event_url": "https://www.fool.com/investing/2026/09/17/100-monthly-investment-qqq-grow-20-years?source=iedfolrf0000001",
+      "citation_symbol": "NVDA",
+      "citation_entity_id": null,
+      "benchmark_symbol": "SPY",
+      "calculation_version": null,
+      "cited_windows": {
+        "+1D": {
+          "return": 0.022990057137715292,
+          "available": true,
+          "relative_return": 0.007485061667116932,
+          "benchmark_return": 0.01550499547059836
+        },
+        "+3D": {
+          "return": 0.01457686597381569,
+          "available": true,
+          "relative_return": 0.0065421011744879465,
+          "benchmark_return": 0.008034764799327743
+        },
+        "+5D": {
+          "return": 0.012597291582309822,
+          "available": true,
+          "relative_return": -8.50332480017979e-05,
+          "benchmark_return": 0.01268232483031162
+        },
+        "-1D": {
+          "return": 0.01335825658794576,
+          "available": true,
+          "relative_return": null,
+          "benchmark_return": null
+        },
+        "+20D": {
+          "return": null,
+          "available": false,
+          "relative_return": null,
+          "benchmark_return": null
+        }
+      },
+      "evaluation_id": "hca-32",
+      "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+      "symbol": "NVDA",
+      "human_label": "CORRECT",
+      "human_support_level": "FULLY_SUPPORTED",
+      "citation_correctness": "CORRECT_CITATION",
+      "entity_correctness": "CORRECT_ENTITY",
+      "market_correctness": "CORRECT_SECURITY",
+      "human_confidence": "HIGH",
+      "error_types": [],
+      "human_reason": "Same NVDA +1D row as hca-07: 0.022990 (2.30%) versus SPY 0.015505 (1.55%) on event 031156cd. The question names NVIDIA and the citation symbol is NVDA. Included so the same window can be compared with the Microsoft jobs that cite it for a different company. The citation entity_id is still null.",
+      "stored_impact": {
+        "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+        "symbol": "NVDA",
+        "window": "+1D",
+        "return": 0.022990057137715292,
+        "benchmark_return": 0.01550499547059836,
+        "benchmark_symbol": "SPY",
+        "calculation_version": "v1"
+      }
+    },
+    {
+      "research_id": "72cf5986-c952-477b-8376-165a7035fd75",
+      "correlation_id": "657d4cbcba0a4d23",
+      "finished_at": "2026-10-05T20:50:42.119612+00:00",
+      "query": "What recent news about Microsoft could be relevant to its market performance?",
+      "claim_id": "87cef7727472b99c",
+      "claim": "The stock returned 1.59% over the +1 trading-session window and the benchmark returned 1.55%.",
+      "finding_type": "OBSERVATION",
+      "report_section": "market_observations",
+      "in_report": true,
+      "quantpilot_status": "supported",
+      "citation_ids": [
+        "8f6fb65ae7bbe317",
+        "f11b1dc36dcb42f4"
+      ],
+      "source_urls": [
+        "https://www.fool.com/investing/2026/09/17/100-monthly-investment-qqq-grow-20-years?source=iedfolrf0000001"
+      ],
+      "prompt_versions": {
+        "master": "master-v4",
+        "news": "news-v2",
+        "market": "market-v2",
+        "evidence": "evidence-v2"
+      },
+      "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+      "event_title": "A $100 Monthly Investment in QQQ Could Grow Into This Over 20 Years",
+      "event_url": "https://www.fool.com/investing/2026/09/17/100-monthly-investment-qqq-grow-20-years?source=iedfolrf0000001",
+      "citation_symbol": "NVDA",
+      "citation_entity_id": null,
+      "benchmark_symbol": "SPY",
+      "calculation_version": null,
+      "cited_windows": {
+        "+1D": {
+          "return": 0.022990057137715292,
+          "available": true,
+          "relative_return": 0.007485061667116932,
+          "benchmark_return": 0.01550499547059836
+        },
+        "+3D": {
+          "return": 0.01457686597381569,
+          "available": true,
+          "relative_return": 0.0065421011744879465,
+          "benchmark_return": 0.008034764799327743
+        },
+        "+5D": {
+          "return": 0.012597291582309822,
+          "available": true,
+          "relative_return": -8.50332480017979e-05,
+          "benchmark_return": 0.01268232483031162
+        },
+        "-1D": {
+          "return": 0.01335825658794576,
+          "available": true,
+          "relative_return": null,
+          "benchmark_return": null
+        },
+        "+20D": {
+          "return": null,
+          "available": false,
+          "relative_return": null,
+          "benchmark_return": null
+        }
+      },
+      "evaluation_id": "hca-33",
+      "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+      "symbol": "NVDA",
+      "human_label": "INCORRECT",
+      "human_support_level": "NOT_SUPPORTED",
+      "citation_correctness": "WRONG_CITATION",
+      "entity_correctness": "WRONG_ENTITY",
+      "market_correctness": "WRONG_SECURITY",
+      "human_confidence": "HIGH",
+      "error_types": [
+        "wrong_security",
+        "citation_mismatch"
+      ],
+      "human_reason": "A later rerun of the Microsoft market question. The 1.59% again matches the MSFT +1D return on event 031156cd (0.015857), while the market citation symbol is NVDA (0.022990, 2.30%). Same binding failure as hca-11, on a different research id. The citation entity_id is null.",
+      "stored_impact": {
+        "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "cited_symbol": "NVDA",
+        "cited_return": 0.022990057137715292,
+        "cited_benchmark_return": 0.01550499547059836,
+        "figure_matches_entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+        "figure_matches_symbol": "MSFT",
+        "figure_matches_return": 0.015857264368747126,
+        "benchmark_symbol": "SPY",
+        "calculation_version": "v1"
+      }
+    }
+  ],
+  "identifier_note": "evaluation_id is the unique key. claim_id is a 16-character hash of finding_id and verification status, so the same claim_id appears on different statements across jobs. Unsupported claims that were excluded from the report have no claim_id.",
+  "label_independence": "verification_status was visible on the stored report. Each support judgment was made from the opened article and, for market claims, from GET /api/events/{id}/impact. A second rater did not label the set."
+}

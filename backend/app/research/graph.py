@@ -14,7 +14,7 @@ from app.observability.logger import get_logger, log_event
 from app.research.agents import SPECIALISTS, run_evidence_agent, run_specialist
 from app.research.llm import LLMError, get_llm_provider
 from app.research.metrics import RESEARCH_METRICS
-from app.research.plan import accept_plan, bounded_plan_context, fallback_plan
+from app.research.plan import accept_plan, bounded_plan_context, fallback_plan, missing_required_agents
 from app.research.prompts import PROMPT_VERSIONS, SYSTEM_PROMPTS
 from app.research.report import assemble_report
 from app.research.runtime import research_db, research_embed, research_llm
@@ -139,7 +139,13 @@ def create_research_plan_node(state: ResearchState) -> Dict[str, Any]:
                 model_version = response.model_version
                 tokens_in = response.usage.input_tokens
                 tokens_out = response.usage.output_tokens
-                error_type = None if plan is not None else "invalid_plan"
+                query = str(request.get("query") or "")
+                if plan is not None and missing_required_agents(query, plan.selected_agents):
+                    plan = None
+                    error_type = "invalid_plan"
+                    hint = "This query requires the market specialist. Include market in selected_agents."
+                else:
+                    error_type = None if plan is not None else "invalid_plan"
             except LLMError as exc:
                 plan = None
                 error_type = exc.error_type

@@ -26,6 +26,7 @@ class AgentFinding(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0, default=0.5)
     reasoning_summary: str = Field(default="", max_length=500)
     verification_status: Optional[VerificationStatus] = None
+    provenance: Optional[Dict[str, Any]] = None
 
     @field_validator("statement", "reasoning_summary")
     @classmethod
@@ -50,8 +51,12 @@ class VerifiedClaim(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     citation_ids: List[str] = Field(default_factory=list)
     evidence_refs: List[str] = Field(default_factory=list)
+    source_ids: List[str] = Field(default_factory=list)
+    evidence_ids: List[str] = Field(default_factory=list)
+    entity_id: Optional[str] = None
     agent: str
     issues: List[str] = Field(default_factory=list)
+    provenance: Optional[Dict[str, Any]] = None
 
 
 class AgentRunMeta(BaseModel):
@@ -112,6 +117,7 @@ class ResearchPlan(BaseModel):
     reasoning_notes: str = ""
     plan_version: str = PLAN_VERSION
     source: str = "fallback"
+    required_domains: List[str] = Field(default_factory=list)
 
 
 class ReportItem(BaseModel):
@@ -121,7 +127,11 @@ class ReportItem(BaseModel):
     finding_type: ClaimKind
     claim_id: str
     citation_ids: List[str] = Field(default_factory=list)
+    source_ids: List[str] = Field(default_factory=list)
+    evidence_ids: List[str] = Field(default_factory=list)
+    entity_id: Optional[str] = None
     agent: str
+    provenance: Optional[Dict[str, Any]] = None
 
 
 class ResearchReport(BaseModel):

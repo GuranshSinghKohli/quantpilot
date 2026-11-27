@@ -112,7 +112,15 @@ def test_quoted_excerpt_verifies_and_bare_partnership_does_not():
                 "kind": "document_excerpt",
                 "document_id": "d1",
                 "chunk_id": "k1",
+                "source_id": "s1",
+                "evidence_id": "ev1",
                 "title": "announcement",
+                "evidence": {
+                    "evidence_id": "ev1",
+                    "source_id": "s1",
+                    "document_id": "d1",
+                    "entity_ids": [],
+                },
             }
         ],
         "documents": [

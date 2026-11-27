@@ -1,0 +1,123 @@
+{
+  "phase": "13",
+  "image": "sha256:73261c13ed3c587a7cc2fc0c7875c545c0f7c33e497b7a63eb73859a859c2b55",
+  "api_task_definition": "quantpilot-staging-api:8",
+  "worker_task_definition": "quantpilot-staging-worker:13",
+  "note": "Generated percents are the deterministic renderer output. They were compared with round(stored_fraction * 100, 2). Historical Phase 12 reports were not rewritten.",
+  "jobs": [
+    {
+      "label": "microsoft-market",
+      "research_id": "a13e7c68-5931-4c60-bcec-aa302794b84d",
+      "query": "What recent news about Microsoft could be relevant to its market performance?",
+      "status": "succeeded",
+      "resolved_symbol": "MSFT",
+      "resolved_entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+      "market_agent": "succeeded",
+      "observations": 12,
+      "observation_symbols": ["MSFT"],
+      "percent_mismatches": 0,
+      "example": {
+        "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "window": "+1D",
+        "benchmark": "SPY",
+        "generated": "+1.59%",
+        "stored_asset": "+1.59%",
+        "generated_benchmark": "+1.55%",
+        "stored_benchmark": "+1.55%"
+      },
+      "model_raw_fraction_observation": "unsupported"
+    },
+    {
+      "label": "nvidia-market",
+      "research_id": "3c3dcaa3-84af-4c1e-830f-a5f13301171e",
+      "query": "How did NVIDIA perform around the recent news events in the corpus?",
+      "status": "succeeded",
+      "resolved_symbol": "NVDA",
+      "resolved_entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+      "market_agent": "skipped",
+      "planner_selected_agents": ["news"],
+      "observations": 0,
+      "percent_mismatches": 0
+    },
+    {
+      "label": "nvidia-market-followup",
+      "research_id": "574d7ded-3cbb-4a7b-b8cb-ae897617f427",
+      "query": "What recent news about NVIDIA could be relevant to its market performance?",
+      "status": "succeeded",
+      "resolved_symbol": "NVDA",
+      "resolved_entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+      "market_agent": "succeeded",
+      "observations": 12,
+      "observation_symbols": ["NVDA"],
+      "percent_mismatches": 0,
+      "example": {
+        "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "window": "+1D",
+        "benchmark": "SPY",
+        "generated": "+2.30%",
+        "stored_asset": "+2.30%",
+        "generated_benchmark": "+1.55%",
+        "stored_benchmark": "+1.55%"
+      }
+    },
+    {
+      "label": "meta-market",
+      "research_id": "b0b428cb-611c-4eac-b2fa-53234adad18a",
+      "query": "How did Meta Platforms stock move around the recent news events in the corpus?",
+      "status": "partial",
+      "limitation": "news unavailable",
+      "resolved_symbol": "META",
+      "resolved_entity_id": "6026fafe-7a6a-4e79-aec3-efee09708ff6",
+      "market_agent": "succeeded",
+      "observations": 12,
+      "observation_symbols": ["META"],
+      "percent_mismatches": 0,
+      "example": {
+        "event_id": "0efae0a6-0c59-4960-b9f0-43d4672c2e70",
+        "window": "+1D",
+        "benchmark": "SPY",
+        "generated": "+1.34%",
+        "stored_asset": "+1.34%",
+        "generated_benchmark": "+1.13%",
+        "stored_benchmark": "+1.13%"
+      }
+    },
+    {
+      "label": "apple-market",
+      "research_id": "53e422bc-53fe-4b15-a914-0c213b71ee98",
+      "query": "How did Apple stock move around the recent news events in the corpus?",
+      "status": "succeeded",
+      "resolved_symbol": "AAPL",
+      "resolved_entity_id": "2c509dc4-bf12-4c8f-ae08-4b96025cfe51",
+      "market_agent": "succeeded",
+      "observations": 12,
+      "observation_symbols": ["AAPL"],
+      "percent_mismatches": 0,
+      "example": {
+        "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "window": "+1D",
+        "benchmark": "SPY",
+        "generated": "+0.85%",
+        "stored_asset": "+0.85%",
+        "generated_benchmark": "+1.55%",
+        "stored_benchmark": "+1.55%"
+      }
+    },
+    {
+      "label": "company-fact",
+      "research_id": "b807cfe9-a259-4f99-90f7-ad7b5d397eb8",
+      "query": "What does Apple do?",
+      "status": "succeeded",
+      "resolved_symbol": "AAPL",
+      "resolved_entity_id": "2c509dc4-bf12-4c8f-ae08-4b96025cfe51"
+    },
+    {
+      "label": "relationship",
+      "research_id": "e5c62644-3495-4156-8d85-2ac277b60894",
+      "query": "Which partnerships among Apple, Microsoft, NVIDIA, AMD, and Meta are explicitly stated by the collected evidence?",
+      "status": "succeeded",
+      "resolved_symbols": ["AAPL", "AMD", "META", "MSFT", "NVDA"],
+      "relationship_findings": 2
+    }
+  ]
+}

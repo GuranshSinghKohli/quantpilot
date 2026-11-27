@@ -16,6 +16,7 @@ from app.domain.models import AgentRun, ClaimEvidence, EvidenceRecord, Report, R
 from app.domain.schemas import ResearchJobIn
 from app.repositories.research_jobs import create_job
 from app.research.schemas import ResearchResult
+from app.research.security import validate_report_market_bindings
 from app.retrieval.package import ResearchRequest
 
 
@@ -101,10 +102,13 @@ def persist_result(
         )
         db.add(row)
         db.flush()
-        for ref in claim.evidence_refs:
+        linked = list(dict.fromkeys([*claim.evidence_ids, *claim.evidence_refs]))
+        seen_evidence = set()
+        for ref in linked:
             evidence_id = _as_uuid(ref)
-            if evidence_id is None or db.get(EvidenceRecord, evidence_id) is None:
+            if evidence_id is None or evidence_id in seen_evidence or db.get(EvidenceRecord, evidence_id) is None:
                 continue
+            seen_evidence.add(evidence_id)
             db.add(
                 ClaimEvidence(
                     claim_id=row.id,
@@ -115,6 +119,7 @@ def persist_result(
                 )
             )
     if result.report is not None:
+        result.report = validate_report_market_bindings(result.report)
         db.add(
             Report(
                 research_job_id=job.id,

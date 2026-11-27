@@ -111,13 +111,35 @@ def test_conflicts_preserved():
 
 def test_observation_inference_scenario():
     package = _package()
+    package["resolved_securities"] = [{"entity_id": "ent-amd", "symbol": "AMD"}]
     package["citations"].append(
-        {"citation_id": "m1", "kind": "market_fact", "locator": {"event_id": "e1", "calculation_version": "v1"}}
+        {
+            "citation_id": "m1",
+            "kind": "market_fact",
+            "locator": {"event_id": "e1", "calculation_version": "v1"},
+            "market": {
+                "entity_id": "ent-amd",
+                "symbol": "AMD",
+                "canonical_name": "AMD",
+                "event_id": "e1",
+                "configured_benchmark_symbol": "SPY",
+                "calculation_version": "v1",
+                "identity_verified": True,
+                "windows": {
+                    "+1D": {
+                        "return": 0.032,
+                        "benchmark_return": 0.01,
+                        "relative_return": 0.022,
+                        "available": True,
+                    }
+                },
+            },
+        }
     )
     obs = _finding(
         finding_id="o",
         agent="market",
-        statement="The stock returned 3.2% over the +5 trading-session window.",
+        statement="AMD (AMD) returned +3.20% over the +1 session window, versus +1.00% for SPY.",
         finding_type=ClaimKind.OBSERVATION,
         citations=["m1"],
         evidence_refs=["m1"],
@@ -211,4 +233,4 @@ def test_evidence_agent_wrapper_records_metadata():
     assert claims
     assert meta.agent == "evidence"
     assert meta.model == "deterministic-guard"
-    assert meta.prompt_version == "evidence-v2"
+    assert meta.prompt_version == "evidence-v5"

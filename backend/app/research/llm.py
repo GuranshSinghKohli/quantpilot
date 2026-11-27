@@ -434,6 +434,7 @@ def _valid_findings(agent: str, context: Dict[str, Any]) -> List[Dict[str, Any]]
             if not cites:
                 continue
             symbol = fact.get("symbol") or "asset"
+            name = fact.get("canonical_name") or symbol
             windows = fact.get("windows") or {}
             window = windows.get("+5D") or windows.get("+3D") or next(iter(windows.values()), None)
             returned = None
@@ -441,8 +442,10 @@ def _valid_findings(agent: str, context: Dict[str, Any]) -> List[Dict[str, Any]]
                 returned = window.get("return")
             elif window is not None:
                 returned = window
+            benchmark = fact.get("benchmark_symbol") or "the configured benchmark"
             statement = (
-                f"The stock {symbol} returned {returned} over the documented trading-session window "
+                f"{name} ({symbol}) returned {returned} over the documented trading-session window "
+                f"relative to {benchmark} "
                 f"(calculation_version={fact.get('calculation_version')})."
             )
             findings.append(_finding(agent, "OBSERVATION", statement, cites, "market window"))

@@ -54,7 +54,10 @@ function payload(overrides: Record<string, unknown> = {}) {
           title: "NVDA v1",
           source_url: null,
           market: {
+            entity_id: "nvda-id",
             symbol: "NVDA",
+            canonical_name: "NVIDIA",
+            identity_verified: true,
             configured_benchmark_symbol: "SPY",
             method: "session return relative to the configured benchmark; not a causal effect",
             windows: { "+1D": { return: 0.0218, relative_return: 0.012, benchmark_return: 0.0098 } },
@@ -88,16 +91,39 @@ test("market windows stay descriptive returns", () => {
     title: "NVDA",
     source_url: null,
     market: {
+      entity_id: "nvda-id",
       symbol: "NVDA",
+      canonical_name: "NVIDIA",
+      identity_verified: true,
       configured_benchmark_symbol: "SPY",
       windows: { "+1D": { return: 0.0218, relative_return: -0.004 } },
     },
   });
   assert.equal(view.href, null);
+  assert.equal(view.market?.verified, true);
+  assert.equal(view.market?.displayName, "NVIDIA");
+  assert.equal(view.market?.symbol, "NVDA");
+  assert.equal(view.market?.benchmark, "SPY");
   assert.equal(view.market?.windows[0]?.assetReturn, "+2.18%");
   assert.equal(view.market?.windows[0]?.relativeReturn, "-0.40%");
   assert.match(view.market?.method || "", /not a causal effect/i);
   assert.equal(formatReturn(null), "unavailable");
+});
+
+test("unverified market identity hides the numbers", () => {
+  const view = citationView({
+    citation_id: "m2",
+    kind: "market_fact",
+    title: "NVDA v1",
+    source_url: null,
+    market: {
+      symbol: "NVDA",
+      windows: { "+1D": { return: 0.5, relative_return: 0.4 } },
+    },
+  });
+  assert.equal(view.market?.verified, false);
+  assert.equal(view.market?.windows.length, 0);
+  assert.equal(view.market?.symbol, "");
 });
 
 test("succeeded report keeps types, verification, and excluded claims", () => {

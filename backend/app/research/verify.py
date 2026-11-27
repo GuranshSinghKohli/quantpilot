@@ -7,6 +7,8 @@ import re
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 from app.domain.enums import ClaimKind, VerificationStatus
+from app.research.market_facts import market_observation_issues
+from app.research.proposition import document_support_issues
 from app.research.schemas import AgentFinding, VerifiedClaim
 
 _NEG = re.compile(r"\b(did not|does not|do not|didn't|doesn't|not|no longer|denied|never)\b", re.I)
@@ -21,6 +23,7 @@ _ADVICE = re.compile(
 )
 _CAUSAL = re.compile(r"\b(caused|cause[sd]?|because of|due to the (event|announcement))\b", re.I)
 _TOKEN = re.compile(r"[a-z0-9]+")
+_CONDITIONAL = re.compile(r"\b(if|could|might|may|would)\b", re.I)
 _REL_ALIASES = {
     "PARTNERED_WITH": ("partner", "partnership"),
     "ACQUIRED": ("acquir", "acquisition"),
@@ -80,8 +83,33 @@ def _verify_one(
         issues.append("unsupported_relationship")
     if _structured_fact_ungrounded(finding.statement, package, resolved):
         issues.append("ungrounded_structured_fact")
+    documents = [row for row in resolved if row.get("kind") == "document_excerpt"]
+    if documents and kind in {ClaimKind.FACT, ClaimKind.OBSERVATION, ClaimKind.INFERENCE, ClaimKind.SCENARIO}:
+        issues.extend(_document_evidence_issues(finding, documents))
+        if kind in {ClaimKind.FACT, ClaimKind.INFERENCE}:
+            for row in documents:
+                excerpt = _excerpt_for(package, row)
+                issues.extend(document_support_issues(finding.statement, excerpt, package.get("entities") or []))
+    if kind is ClaimKind.OBSERVATION and (
+        finding.agent == "market" or any(row.get("kind") == "market_fact" for row in resolved)
+    ):
+        issues.extend(market_observation_issues(finding.statement, resolved, package))
+    if kind is ClaimKind.SCENARIO and not _CONDITIONAL.search(finding.statement):
+        issues.append("scenario_not_conditional")
 
     status = _status(kind, issues, valid_ids)
+    source_ids = [str(row["source_id"]) for row in resolved if row.get("source_id")]
+    evidence_ids = [str(row["evidence_id"]) for row in resolved if row.get("evidence_id")]
+    entity_id = None
+    provenance = finding.provenance
+    if provenance and provenance.get("entity_id"):
+        entity_id = str(provenance["entity_id"])
+    if entity_id is None:
+        for row in resolved:
+            market_entity = str((row.get("market") or {}).get("entity_id") or "")
+            if market_entity:
+                entity_id = market_entity
+                break
     return VerifiedClaim(
         claim_id=_claim_id(finding.finding_id, status.value),
         finding_id=finding.finding_id,
@@ -91,8 +119,12 @@ def _verify_one(
         confidence=finding.confidence,
         citation_ids=valid_ids,
         evidence_refs=list(finding.evidence_refs),
+        source_ids=list(dict.fromkeys(source_ids)),
+        evidence_ids=list(dict.fromkeys(evidence_ids)),
+        entity_id=entity_id,
         agent=finding.agent,
         issues=list(dict.fromkeys(issues)),
+        provenance=provenance,
     )
 
 
@@ -104,6 +136,23 @@ def _status(kind: ClaimKind, issues: Sequence[str], valid_ids: Sequence[str]) ->
         "ungrounded_structured_fact",
         "investment_language",
         "causal_claim",
+        "entity_not_in_source",
+        "scope_changed",
+        "population_widened",
+        "period_changed",
+        "certainty_raised",
+        "market_identity_mismatch",
+        "market_number_mismatch",
+        "security_mismatch",
+        "entity_mismatch",
+        "symbol_mismatch",
+        "event_mismatch",
+        "scenario_not_conditional",
+        "missing_evidence",
+        "unresolved_evidence",
+        "evidence_source_mismatch",
+        "evidence_document_mismatch",
+        "evidence_entity_mismatch",
     }
     if any(item in blocking for item in issues):
         return VerificationStatus.UNSUPPORTED
@@ -122,6 +171,39 @@ _LISTING_WORDS = frozenset({
     "legal", "name", "ticker", "symbol", "cik", "exchange", "listed",
     "listing", "recorded", "sec", "identity", "canonical",
 })
+
+
+def _document_evidence_issues(
+    finding: AgentFinding,
+    documents: Sequence[Dict[str, Any]],
+) -> List[str]:
+    """A document citation supports a claim only through a real evidence record.
+
+    The citation id is not an evidence id. A missing record, a record from
+    another source or document, or a record tied to another entity blocks
+    support. Market observations do not use this path.
+    """
+    issues: List[str] = []
+    claim_entity = str((finding.provenance or {}).get("entity_id") or "")
+    for row in documents:
+        evidence_id = str(row.get("evidence_id") or "")
+        record = row.get("evidence") if isinstance(row.get("evidence"), dict) else None
+        if not evidence_id:
+            issues.append("missing_evidence")
+            continue
+        if record is None or str(record.get("evidence_id") or "") != evidence_id:
+            issues.append("unresolved_evidence")
+            continue
+        if str(record.get("source_id") or "") != str(row.get("source_id") or ""):
+            issues.append("evidence_source_mismatch")
+        record_document = str(record.get("document_id") or "")
+        citation_document = str(row.get("document_id") or "")
+        if record_document and citation_document and record_document != citation_document:
+            issues.append("evidence_document_mismatch")
+        entities = [str(item) for item in (record.get("entity_ids") or []) if item]
+        if claim_entity and entities and claim_entity not in entities:
+            issues.append("evidence_entity_mismatch")
+    return issues
 
 
 def _structured_fact_ungrounded(

@@ -82,6 +82,7 @@ def impact_payload(impact: EventImpact) -> Dict[str, Any]:
         "impact_id": str(impact.id),
         "event_id": str(impact.event_id),
         "entity_id": str(impact.entity_id),
+        "symbol": impact.symbol,
         "asset": {"symbol": impact.symbol},
         "event_trading_date": impact.event_trading_date.isoformat() if impact.event_trading_date else None,
         "observed": {

@@ -34,7 +34,7 @@ Retries: transient timeout / rate-limit / temporary provider errors use bounded 
 
 ## Prompts
 
-`master-v4`, `news-v2`, `company-v2`, `technology-v2`, `market-v2`, `evidence-v2`, `report-v1`. Change the version string when wording changes. Raw prompts and raw completions are not persisted. The report prompt may only repeat statements already on the verified set.
+`master-v4`, `news-v2`, `company-v2`, `technology-v2`, `market-v4`, `evidence-v5`, `report-v1`. Change the version string when wording changes. Market percents are rendered from the stored impact window. A document fact or document observation stays supported only when its citation resolves to an evidence record for that source. A market observation still comes from the stored impact window and does not need a document evidence id. A query that asks for a market reaction must keep the market specialist on the plan. Raw prompts and raw completions are not persisted. The report prompt may only repeat statements already on the verified set.
 
 ## Later jobs
 

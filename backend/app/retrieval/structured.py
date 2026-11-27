@@ -21,7 +21,9 @@ from app.domain.models import (
     Relationship,
     Source,
 )
+from app.core.settings import get_settings
 from app.graph.queries import entity_payload
+from app.market.binding import WINDOW_DEFINITION, matching_security
 from app.market.queries import impact_payload
 
 
@@ -135,20 +137,75 @@ def load_graph_facts(db: Session, entity_ids: Sequence[uuid.UUID], *, limit: int
     return out
 
 
-def load_market_facts(db: Session, event_ids: Sequence[uuid.UUID], *, limit: int) -> List[Dict[str, Any]]:
-    if not event_ids:
+def load_market_facts(
+    db: Session,
+    event_ids: Sequence[uuid.UUID],
+    *,
+    securities: Sequence[Dict[str, Any]],
+    limit: int,
+) -> List[Dict[str, Any]]:
+    """Impacts for the resolved securities that are explicitly linked to the event.
+
+    An event id alone is not enough. The impact entity and symbol must be one
+    resolved security, and an event_entities row must name that entity.
+    """
+    if not event_ids or not securities:
         return []
+    entity_ids = []
+    symbols = []
+    for row in securities:
+        try:
+            entity_ids.append(uuid.UUID(str(row.get("entity_id"))))
+        except (TypeError, ValueError):
+            continue
+        symbol = str(row.get("symbol") or "").strip().upper()
+        if symbol:
+            symbols.append(symbol)
+    if not entity_ids or not symbols:
+        return []
+    linked = {
+        (event_id, entity_id)
+        for event_id, entity_id in db.execute(
+            select(EventEntity.event_id, EventEntity.entity_id).where(
+                EventEntity.event_id.in_(list(event_ids)),
+                EventEntity.entity_id.in_(entity_ids),
+            )
+        )
+    }
     rows = list(
         db.scalars(
             select(EventImpact)
-            .where(EventImpact.event_id.in_(list(event_ids)))
+            .join(
+                EventEntity,
+                (EventEntity.event_id == EventImpact.event_id)
+                & (EventEntity.entity_id == EventImpact.entity_id),
+            )
+            .where(
+                EventImpact.event_id.in_(list(event_ids)),
+                EventImpact.entity_id.in_(entity_ids),
+                EventImpact.symbol.in_(symbols),
+            )
+            .distinct()
             .order_by(EventImpact.event_id, EventImpact.symbol)
             .limit(limit)
         )
     )
+    benchmark = get_settings().MARKET_BENCHMARK_SYMBOL
     out = []
     for impact in rows:
+        if (impact.event_id, impact.entity_id) not in linked:
+            continue
         payload = impact_payload(impact)
+        security = matching_security(payload, securities)
+        if security is None:
+            continue
+        payload["symbol"] = impact.symbol
+        payload["canonical_name"] = security.get("canonical_name")
+        payload["exchange"] = security.get("exchange")
+        payload["security_type"] = security.get("security_type") or "equity"
+        payload["benchmark_symbol"] = benchmark
+        payload["window_definition"] = WINDOW_DEFINITION
+        payload["identity_verified"] = True
         payload["source"] = {
             "record": "event_impacts",
             "event_id": str(impact.event_id),

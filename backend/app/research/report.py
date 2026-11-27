@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from app.core.settings import get_settings
 from app.domain.enums import ClaimKind, VerificationStatus
 from app.research.schemas import ReportItem, ResearchReport, VerifiedClaim
+from app.research.security import validate_report_market_bindings
 from app.research.verify import used_citations
 
 _BANNED = re.compile(r"\b(buy|sell|hold|price target|expected return|caused|causes)\b", re.I)
@@ -20,7 +21,11 @@ def _item(claim: VerifiedClaim) -> ReportItem:
         finding_type=claim.claim_type,
         claim_id=claim.claim_id,
         citation_ids=list(claim.citation_ids),
+        source_ids=list(claim.source_ids),
+        evidence_ids=list(claim.evidence_ids),
+        entity_id=claim.entity_id,
         agent=claim.agent,
+        provenance=claim.provenance,
     )
 
 
@@ -108,9 +113,14 @@ def assemble_report(
             "plan_version": "plan-v1",
             "summary_rejected": dropped,
             "factual_items": len(facts) + len(observations),
+            **(
+                {"resolved_securities": list(package.get("resolved_securities") or [])}
+                if "resolved_securities" in package
+                else {}
+            ),
         },
     )
-    return report, dropped
+    return validate_report_market_bindings(report), dropped
 
 
 def factual_items(report: ResearchReport) -> Iterable[ReportItem]:

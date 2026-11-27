@@ -8,9 +8,12 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.settings import get_settings
+from app.domain.models import EvidenceRecord
+from app.market.binding import WINDOW_DEFINITION
 from app.observability.logger import get_logger, log_event
 from app.retrieval.metrics import RETRIEVAL_METRICS
 from app.retrieval.search import hit_payload, search
@@ -159,15 +162,7 @@ def _cite_market(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "title": f"{item.get('symbol') or (item.get('asset') or {}).get('symbol')} {source['calculation_version']}",
         "published_at": None,
         "locator": source,
-        "market": {
-            "symbol": item.get("symbol") or (item.get("asset") or {}).get("symbol"),
-            "configured_benchmark_symbol": get_settings().MARKET_BENCHMARK_SYMBOL,
-            "event_trading_date": item.get("event_trading_date"),
-            "windows": item.get("windows") or {},
-            "volume": item.get("volume") or {},
-            "volatility": item.get("volatility") or {},
-            "method": "session return relative to the configured benchmark; not a causal effect",
-        },
+        "market": _market_identity(item, source),
     }
 
 
@@ -189,12 +184,116 @@ def _cite_document(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     }
 
 
+def _market_identity(item: Dict[str, Any], source: Dict[str, Any]) -> Dict[str, Any]:
+    symbol = item.get("symbol") or (item.get("asset") or {}).get("symbol")
+    entity_id = item.get("entity_id")
+    verified = bool(symbol and entity_id and item.get("identity_verified") is True)
+    return {
+        "entity_id": entity_id,
+        "symbol": symbol,
+        "canonical_name": item.get("canonical_name"),
+        "exchange": item.get("exchange"),
+        "security_type": item.get("security_type") or ("equity" if verified else None),
+        "configured_benchmark_symbol": item.get("benchmark_symbol") or get_settings().MARKET_BENCHMARK_SYMBOL,
+        "event_id": source.get("event_id"),
+        "calculation_version": source.get("calculation_version"),
+        "window_definition": item.get("window_definition") or WINDOW_DEFINITION,
+        "identity_verified": verified,
+        "event_trading_date": item.get("event_trading_date"),
+        "windows": item.get("windows") or {},
+        "volume": item.get("volume") or {},
+        "volatility": item.get("volatility") or {},
+        "method": "session return relative to the configured benchmark; not a causal effect",
+    }
+
+
+def _bind_document_evidence(
+    db: Session,
+    documents: Sequence[Dict[str, Any]],
+    citations: List[Dict[str, Any]],
+) -> None:
+    """Attach an existing evidence record. Never invent an id.
+
+    A record counts only when its source is the citation's source, its
+    document id agrees when one is stored, and its excerpt is in the chunk.
+    """
+    by_chunk = {str(item.get("chunk_id") or ""): item for item in documents}
+    source_ids = []
+    for item in documents:
+        try:
+            source_ids.append(uuid.UUID(str(item.get("source_id"))))
+        except (TypeError, ValueError):
+            continue
+    records: List[EvidenceRecord] = []
+    if source_ids:
+        records = list(
+            db.scalars(select(EvidenceRecord).where(EvidenceRecord.source_id.in_(source_ids)))
+        )
+    grouped: Dict[str, List[EvidenceRecord]] = {}
+    for record in records:
+        grouped.setdefault(str(record.source_id), []).append(record)
+    for citation in citations:
+        if citation.get("kind") != "document_excerpt":
+            continue
+        document = by_chunk.get(str(citation.get("chunk_id") or ""))
+        if document is None:
+            continue
+        entity_ids = [str(item) for item in (document.get("entity_ids") or []) if item]
+        citation["entity_ids"] = entity_ids
+        match = _matching_evidence(grouped.get(str(citation.get("source_id") or ""), []), document)
+        if match is None:
+            citation["evidence_id"] = None
+            citation.pop("evidence", None)
+            continue
+        citation["evidence_id"] = str(match.id)
+        citation["evidence"] = {
+            "evidence_id": str(match.id),
+            "source_id": str(match.source_id),
+            "document_id": str(match.document_id) if match.document_id else None,
+            "entity_ids": entity_ids,
+        }
+        if not citation.get("source_url"):
+            citation["source_url"] = http_source_url(document.get("source_url"))
+
+
+def _matching_evidence(
+    records: Sequence[EvidenceRecord],
+    document: Dict[str, Any],
+) -> Optional[EvidenceRecord]:
+    haystack = f"{document.get('title') or ''}\n{document.get('excerpt') or ''}".lower()
+    document_id = str(document.get("document_id") or "")
+    matches = []
+    for record in records:
+        if record.document_id is not None and document_id and str(record.document_id) != document_id:
+            continue
+        excerpt = " ".join(str(record.excerpt or "").split()).lower()
+        if excerpt and excerpt in " ".join(haystack.split()):
+            matches.append(record)
+    if not matches:
+        return None
+    matches.sort(key=lambda item: (item.document_id is not None, len(item.excerpt or "")), reverse=True)
+    return matches[0]
+
+
 def assemble_package(db: Session, request: ResearchRequest, *, provider=None) -> Dict[str, Any]:
+    # Imported here so retrieval can load without initializing the research package.
+    # app.research.__init__ imports the agent graph, which imports this module.
+    from app.research.security import resolve_securities
+
     limits = _limits(request)
-    entities = load_entities(db, request.entity_ids, limit=limits["entities"])
+    securities, security_notes = resolve_securities(db, request.query, request.entity_ids)
+    scope_ids = list(request.entity_ids)
+    if not scope_ids:
+        scope_ids = []
+        for row in securities:
+            try:
+                scope_ids.append(uuid.UUID(str(row["entity_id"])))
+            except (TypeError, ValueError, KeyError):
+                continue
+    entities = load_entities(db, scope_ids, limit=limits["entities"])
     events = load_events(
         db,
-        entity_ids=request.entity_ids,
+        entity_ids=scope_ids,
         event_ids=request.event_ids,
         date_from=request.date_from,
         date_to=request.date_to,
@@ -203,8 +302,8 @@ def assemble_package(db: Session, request: ResearchRequest, *, provider=None) ->
     event_ids = [uuid.UUID(item["event_id"]) for item in events]
     if request.event_ids:
         event_ids = list(dict.fromkeys(list(request.event_ids) + event_ids))
-    graph_facts = load_graph_facts(db, request.entity_ids, limit=limits["relationships"])
-    market_facts = load_market_facts(db, event_ids, limit=limits["events"])
+    graph_facts = load_graph_facts(db, scope_ids, limit=limits["relationships"])
+    market_facts = load_market_facts(db, event_ids, securities=securities, limit=limits["events"])
     semantic = search(
         db,
         request.query,
@@ -223,6 +322,7 @@ def assemble_package(db: Session, request: ResearchRequest, *, provider=None) ->
     kept_graph, graph_cites = _keep(graph_facts, _cite_graph)
     kept_market, market_cites = _keep(market_facts, _cite_market)
     kept_docs, doc_cites = _keep(documents, _cite_document)
+    _bind_document_evidence(db, kept_docs, doc_cites)
     citations = entity_cites + event_cites + graph_cites + market_cites + doc_cites
     citations.sort(key=lambda item: item["citation_id"])
 
@@ -237,6 +337,7 @@ def assemble_package(db: Session, request: ResearchRequest, *, provider=None) ->
         },
         "entities": kept_entities,
         "events": kept_events,
+        "resolved_securities": securities,
         "market_facts": kept_market,
         "graph_facts": kept_graph,
         "documents": kept_docs,
@@ -249,6 +350,7 @@ def assemble_package(db: Session, request: ResearchRequest, *, provider=None) ->
             else round(len(citations) / max(1, len(kept_entities) + len(kept_events) + len(kept_graph) + len(kept_market) + len(kept_docs)), 4),
             "citation_url_coverage": citation_url_coverage(citations),
             "limits": limits,
+            "security_notes": security_notes,
         },
     }
     RETRIEVAL_METRICS.inc("context_packages_total", 1, operation="context", status="ok", component="retrieval")

@@ -1,0 +1,520 @@
+{
+  "phase": "14",
+  "api_task_definition": "quantpilot-staging-api:10",
+  "worker_task_definition": "quantpilot-staging-worker:15",
+  "image": "sha256:1f5335119bde734f668439721dc1a720dfef37be35a99ef06bc7affd5d8fad67",
+  "jobs": [
+    {
+      "label": "A-microsoft-market",
+      "query": "What was Microsoft's market reaction?",
+      "expect_market": true,
+      "research_id": "efaa201a-d6f4-4fb5-857b-4073fe6e3e1d",
+      "status": "succeeded",
+      "error": null,
+      "error_category": null,
+      "plan_version": "plan-v1",
+      "plan_source": "llm",
+      "selected_agents": [
+        "market"
+      ],
+      "required_domains": [
+        "market"
+      ],
+      "requested_sections": [
+        "market_observations",
+        "key_facts"
+      ],
+      "agent_runs": [
+        {
+          "agent": "master",
+          "status": "succeeded",
+          "prompt_version": "master-v4"
+        },
+        {
+          "agent": "news",
+          "status": "skipped",
+          "prompt_version": "news-v2"
+        },
+        {
+          "agent": "company",
+          "status": "skipped",
+          "prompt_version": "company-v2"
+        },
+        {
+          "agent": "technology",
+          "status": "skipped",
+          "prompt_version": "technology-v2"
+        },
+        {
+          "agent": "market",
+          "status": "succeeded",
+          "prompt_version": "market-v4"
+        },
+        {
+          "agent": "evidence",
+          "status": "succeeded",
+          "prompt_version": "evidence-v5"
+        }
+      ],
+      "market_executed": true,
+      "market_status": [
+        "succeeded"
+      ],
+      "sections": [
+        "market_observations"
+      ],
+      "resolved_securities": [
+        {
+          "symbol": "MSFT",
+          "entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+          "canonical_name": "MICROSOFT"
+        }
+      ],
+      "observations": 12,
+      "persisted_claims": 12,
+      "observation_symbols": [
+        "MSFT"
+      ],
+      "observation_events": [
+        "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "0acaefb4-1723-444c-9933-e9a709f5329f",
+        "11f7015d-4141-460f-8e01-f11f58cc19c0",
+        "12407837-cd47-447b-bae8-11dac3014f1f"
+      ],
+      "percent_mismatches": [],
+      "example": {
+        "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "window": "+1D",
+        "symbol": "MSFT",
+        "entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+        "benchmark": "SPY",
+        "generated": "+1.59%",
+        "stored_asset": "+1.59%",
+        "generated_benchmark": "+1.55%",
+        "stored_benchmark": "+1.55%",
+        "statement": "MICROSOFT (MSFT) returned +1.59% over the +1 session window, versus +1.55% for SPY."
+      },
+      "key_facts": 0,
+      "empty_evidence_supported_facts": [],
+      "non_window_supported": [],
+      "verification_summary": {
+        "supported": 12,
+        "uncertain": 0,
+        "unsupported": 0,
+        "conflicting": 0
+      },
+      "limitations": []
+    },
+    {
+      "label": "B-nvidia-stock",
+      "query": "How did NVIDIA's stock react?",
+      "expect_market": true,
+      "research_id": "a0bd238a-09be-4ef1-9a7d-9968dd00bfde",
+      "status": "succeeded",
+      "error": null,
+      "error_category": null,
+      "plan_version": "plan-v1",
+      "plan_source": "llm",
+      "selected_agents": [
+        "market"
+      ],
+      "required_domains": [
+        "market"
+      ],
+      "requested_sections": [
+        "key_facts",
+        "market_observations",
+        "implications"
+      ],
+      "agent_runs": [
+        {
+          "agent": "master",
+          "status": "succeeded",
+          "prompt_version": "master-v4"
+        },
+        {
+          "agent": "news",
+          "status": "skipped",
+          "prompt_version": "news-v2"
+        },
+        {
+          "agent": "company",
+          "status": "skipped",
+          "prompt_version": "company-v2"
+        },
+        {
+          "agent": "technology",
+          "status": "skipped",
+          "prompt_version": "technology-v2"
+        },
+        {
+          "agent": "market",
+          "status": "succeeded",
+          "prompt_version": "market-v4"
+        },
+        {
+          "agent": "evidence",
+          "status": "succeeded",
+          "prompt_version": "evidence-v5"
+        }
+      ],
+      "market_executed": true,
+      "market_status": [
+        "succeeded"
+      ],
+      "sections": [
+        "market_observations"
+      ],
+      "resolved_securities": [
+        {
+          "symbol": "NVDA",
+          "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+          "canonical_name": "NVIDIA"
+        }
+      ],
+      "observations": 12,
+      "persisted_claims": 12,
+      "observation_symbols": [
+        "NVDA"
+      ],
+      "observation_events": [
+        "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "0acaefb4-1723-444c-9933-e9a709f5329f",
+        "0d4b0c31-30bf-46ff-b297-991a739cd796",
+        "11f7015d-4141-460f-8e01-f11f58cc19c0"
+      ],
+      "percent_mismatches": [],
+      "example": {
+        "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "window": "+1D",
+        "symbol": "NVDA",
+        "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+        "benchmark": "SPY",
+        "generated": "+2.30%",
+        "stored_asset": "+2.30%",
+        "generated_benchmark": "+1.55%",
+        "stored_benchmark": "+1.55%",
+        "statement": "NVIDIA (NVDA) returned +2.30% over the +1 session window, versus +1.55% for SPY."
+      },
+      "key_facts": 0,
+      "empty_evidence_supported_facts": [],
+      "non_window_supported": [],
+      "verification_summary": {
+        "supported": 12,
+        "uncertain": 0,
+        "unsupported": 0,
+        "conflicting": 0
+      },
+      "limitations": []
+    },
+    {
+      "label": "C-microsoft-overview",
+      "query": "What does Microsoft do?",
+      "expect_market": false,
+      "research_id": "aa229a47-8dc5-4bd0-bdfb-0894bf5e10c5",
+      "status": "succeeded",
+      "error": null,
+      "error_category": null,
+      "plan_version": "plan-v1",
+      "plan_source": "llm",
+      "selected_agents": [
+        "company",
+        "technology",
+        "market"
+      ],
+      "required_domains": [],
+      "requested_sections": [
+        "key_facts",
+        "market_observations",
+        "company_relationships",
+        "technology_findings"
+      ],
+      "agent_runs": [
+        {
+          "agent": "master",
+          "status": "succeeded",
+          "prompt_version": "master-v4"
+        },
+        {
+          "agent": "news",
+          "status": "skipped",
+          "prompt_version": "news-v2"
+        },
+        {
+          "agent": "company",
+          "status": "succeeded",
+          "prompt_version": "company-v2"
+        },
+        {
+          "agent": "technology",
+          "status": "succeeded",
+          "prompt_version": "technology-v2"
+        },
+        {
+          "agent": "market",
+          "status": "succeeded",
+          "prompt_version": "market-v4"
+        },
+        {
+          "agent": "evidence",
+          "status": "succeeded",
+          "prompt_version": "evidence-v5"
+        }
+      ],
+      "market_executed": true,
+      "market_status": [
+        "succeeded"
+      ],
+      "sections": [
+        "key_facts",
+        "market_observations"
+      ],
+      "resolved_securities": [
+        {
+          "symbol": "MSFT",
+          "entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+          "canonical_name": "MICROSOFT"
+        }
+      ],
+      "observations": 12,
+      "persisted_claims": 32,
+      "observation_symbols": [
+        "MSFT"
+      ],
+      "observation_events": [
+        "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "0acaefb4-1723-444c-9933-e9a709f5329f",
+        "11f7015d-4141-460f-8e01-f11f58cc19c0",
+        "12407837-cd47-447b-bae8-11dac3014f1f"
+      ],
+      "percent_mismatches": [],
+      "example": {
+        "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "window": "+1D",
+        "symbol": "MSFT",
+        "entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+        "benchmark": "SPY",
+        "generated": "+1.59%",
+        "stored_asset": "+1.59%",
+        "generated_benchmark": "+1.55%",
+        "stored_benchmark": "+1.55%",
+        "statement": "MICROSOFT (MSFT) returned +1.59% over the +1 session window, versus +1.55% for SPY."
+      },
+      "key_facts": 1,
+      "empty_evidence_supported_facts": [
+        {
+          "agent": "company",
+          "statement": "Microsoft is a company listed on NASDAQ with the ticker symbol MSFT.",
+          "evidence_ids": []
+        }
+      ],
+      "non_window_supported": [
+        {
+          "kind": "FACT",
+          "statement": "Microsoft is a company listed on NASDAQ with the ticker symbol MSFT."
+        }
+      ],
+      "verification_summary": {
+        "supported": 13,
+        "uncertain": 0,
+        "unsupported": 19,
+        "conflicting": 0
+      },
+      "limitations": [
+        "unsupported claims were excluded from factual sections",
+        "investment language and unsupported causal wording were excluded"
+      ]
+    },
+    {
+      "label": "D-nvidia-partnership",
+      "query": "What is NVIDIA's partnership with Microsoft?",
+      "expect_market": false,
+      "research_id": "51ba579b-f740-4030-a9e0-ee59f66dcd07",
+      "status": "succeeded",
+      "error": null,
+      "error_category": null,
+      "plan_version": "plan-v1",
+      "plan_source": "llm",
+      "selected_agents": [
+        "news",
+        "company"
+      ],
+      "required_domains": [],
+      "requested_sections": [
+        "key_facts",
+        "company_relationships",
+        "market_observations"
+      ],
+      "agent_runs": [
+        {
+          "agent": "master",
+          "status": "succeeded",
+          "prompt_version": "master-v4"
+        },
+        {
+          "agent": "news",
+          "status": "succeeded",
+          "prompt_version": "news-v2"
+        },
+        {
+          "agent": "company",
+          "status": "succeeded",
+          "prompt_version": "company-v2"
+        },
+        {
+          "agent": "technology",
+          "status": "skipped",
+          "prompt_version": "technology-v2"
+        },
+        {
+          "agent": "market",
+          "status": "skipped",
+          "prompt_version": "market-v4"
+        },
+        {
+          "agent": "evidence",
+          "status": "succeeded",
+          "prompt_version": "evidence-v5"
+        }
+      ],
+      "market_executed": false,
+      "market_status": [
+        "skipped"
+      ],
+      "sections": [],
+      "resolved_securities": [
+        {
+          "symbol": "MSFT",
+          "entity_id": "a6d84c30-9814-454f-99a3-66e1cdeaf237",
+          "canonical_name": "MICROSOFT"
+        },
+        {
+          "symbol": "NVDA",
+          "entity_id": "3462ac4e-98c0-417a-aa56-538b1d91e605",
+          "canonical_name": "NVIDIA"
+        }
+      ],
+      "observations": 0,
+      "persisted_claims": 17,
+      "observation_symbols": [],
+      "observation_events": [],
+      "percent_mismatches": [],
+      "example": null,
+      "key_facts": 0,
+      "empty_evidence_supported_facts": [],
+      "non_window_supported": [],
+      "verification_summary": {
+        "supported": 0,
+        "uncertain": 0,
+        "unsupported": 17,
+        "conflicting": 0
+      },
+      "limitations": [
+        "insufficient evidence for a verified factual section",
+        "unsupported claims were excluded from factual sections",
+        "investment language and unsupported causal wording were excluded"
+      ]
+    },
+    {
+      "label": "E-apple-market",
+      "query": "What was Apple's market reaction?",
+      "expect_market": true,
+      "research_id": "7c015307-7311-4109-825b-7570c34c8008",
+      "status": "succeeded",
+      "error": null,
+      "error_category": null,
+      "plan_version": "plan-v1",
+      "plan_source": "llm",
+      "selected_agents": [
+        "market"
+      ],
+      "required_domains": [
+        "market"
+      ],
+      "requested_sections": [
+        "market_observations",
+        "key_facts"
+      ],
+      "agent_runs": [
+        {
+          "agent": "master",
+          "status": "succeeded",
+          "prompt_version": "master-v4"
+        },
+        {
+          "agent": "news",
+          "status": "skipped",
+          "prompt_version": "news-v2"
+        },
+        {
+          "agent": "company",
+          "status": "skipped",
+          "prompt_version": "company-v2"
+        },
+        {
+          "agent": "technology",
+          "status": "skipped",
+          "prompt_version": "technology-v2"
+        },
+        {
+          "agent": "market",
+          "status": "succeeded",
+          "prompt_version": "market-v4"
+        },
+        {
+          "agent": "evidence",
+          "status": "succeeded",
+          "prompt_version": "evidence-v5"
+        }
+      ],
+      "market_executed": true,
+      "market_status": [
+        "succeeded"
+      ],
+      "sections": [
+        "market_observations"
+      ],
+      "resolved_securities": [
+        {
+          "symbol": "AAPL",
+          "entity_id": "2c509dc4-bf12-4c8f-ae08-4b96025cfe51",
+          "canonical_name": "Apple"
+        }
+      ],
+      "observations": 12,
+      "persisted_claims": 9,
+      "observation_symbols": [
+        "AAPL"
+      ],
+      "observation_events": [
+        "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "0acaefb4-1723-444c-9933-e9a709f5329f",
+        "11a49636-df2a-4069-bfcc-a7447aab0b66",
+        "11f7015d-4141-460f-8e01-f11f58cc19c0"
+      ],
+      "percent_mismatches": [],
+      "example": {
+        "event_id": "031156cd-bf79-422d-98f2-7f5aa949ecb6",
+        "window": "+1D",
+        "symbol": "AAPL",
+        "entity_id": "2c509dc4-bf12-4c8f-ae08-4b96025cfe51",
+        "benchmark": "SPY",
+        "generated": "+0.85%",
+        "stored_asset": "+0.85%",
+        "generated_benchmark": "+1.55%",
+        "stored_benchmark": "+1.55%",
+        "statement": "Apple (AAPL) returned +0.85% over the +1 session window, versus +1.55% for SPY."
+      },
+      "key_facts": 0,
+      "empty_evidence_supported_facts": [],
+      "non_window_supported": [],
+      "verification_summary": {
+        "supported": 9,
+        "uncertain": 0,
+        "unsupported": 0,
+        "conflicting": 0
+      },
+      "limitations": []
+    }
+  ]
+}

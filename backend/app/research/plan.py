@@ -22,6 +22,24 @@ _TECH = (
     "accelerator", "architecture", "release", "released",
 )
 _MARKET = ("stock", "price", "return", "returns", "market", "volume", "volatility", "benchmark", "trading")
+_INSTRUMENT = frozenset({"stock", "stocks", "share", "shares"})
+_REACTION = frozenset({
+    "react", "reaction", "reacted",
+    "rose", "rise", "risen",
+    "fell", "fall", "fallen",
+    "gained", "gain", "gains",
+    "dropped", "drop",
+    "perform", "performance", "performed",
+    "trading", "traded",
+})
+_MARKET_PHRASES = (
+    "market reaction",
+    "market reacted",
+    "price reaction",
+    "investor reaction",
+    "stock price",
+    "share price",
+)
 _ACTION = ("partner", "partnership", "acquisition", "acquire", "acquired", "merger", "announced", "announcement")
 _TECH_WITH_COMPANY = ("use", "uses", "using", "develop", "develops")
 
@@ -57,6 +75,40 @@ def _has(tokens: Set[str], words: Sequence[str]) -> bool:
     return False
 
 
+def market_required(query: str) -> bool:
+    """Explicit market-reaction intent. A company name or partnership is not enough.
+
+    ``market share`` is a business phrase. Stock, shares, and a reaction
+    question are market requests. ``How did NVIDIA perform`` is a market
+    request. ``What does Microsoft do`` is not.
+    """
+    raw = query.lower()
+    tokens = _tokens(query)
+    if any(phrase in raw for phrase in _MARKET_PHRASES):
+        return True
+    if "market" in tokens and tokens & {"react", "reaction", "reacted"}:
+        return True
+    instruments = set(tokens & _INSTRUMENT)
+    if "market share" in raw or "market shares" in raw:
+        instruments -= {"share", "shares"}
+    if instruments:
+        return True
+    if "business" in tokens:
+        return False
+    if tokens & _REACTION and tokens & {"how", "why", "did"}:
+        return True
+    return False
+
+
+def required_domains(query: str) -> List[str]:
+    return ["market"] if market_required(query) else []
+
+
+def missing_required_agents(query: str, selected: Sequence[str]) -> List[str]:
+    chosen = set(selected)
+    return [name for name in required_domains(query) if name not in chosen]
+
+
 def route_query(query: str, package: Optional[Dict[str, Any]] = None) -> Tuple[List[str], List[str]]:
     """Classify the request. Package presence does not add an agent.
 
@@ -68,7 +120,7 @@ def route_query(query: str, package: Optional[Dict[str, Any]] = None) -> Tuple[L
     news = _has(tokens, _NEWS)
     company = _has(tokens, _COMPANY) or ("what" in tokens and "is" in tokens)
     tech = _has(tokens, _TECH)
-    market = _has(tokens, _MARKET)
+    market = _has(tokens, _MARKET) or market_required(query)
     if company and _has(tokens, _ACTION):
         news = True
     if tech and _has(tokens, _TECH_WITH_COMPANY):
@@ -121,6 +173,7 @@ def fallback_plan(request: Dict[str, Any], package: Dict[str, Any], *, note: str
         reasoning_notes=text[:500],
         plan_version=PLAN_VERSION,
         source="fallback",
+        required_domains=required_domains(query),
     )
 
 
@@ -154,6 +207,7 @@ def accept_plan(
         reasoning_notes=payload.reasoning_notes[:500],
         plan_version=PLAN_VERSION,
         source="llm",
+        required_domains=required_domains(query),
     )
 
 

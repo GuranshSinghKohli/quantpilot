@@ -45,6 +45,8 @@ export interface MarketWindowView {
 }
 
 export interface MarketView {
+  verified: boolean;
+  displayName: string;
   symbol: string;
   benchmark: string;
   method: string;
@@ -53,6 +55,9 @@ export interface MarketView {
   volumeRatio: string | null;
   volatility: string | null;
 }
+
+export const MARKET_IDENTITY_UNAVAILABLE =
+  "Market impact unavailable: security identity could not be verified.";
 
 export interface FindingView {
   statement: string;
@@ -119,6 +124,25 @@ function asList(value: unknown): Record<string, unknown>[] {
 function marketView(raw: unknown): MarketView | null {
   const market = asRecord(raw);
   if (!market) return null;
+  const symbol = String(market.symbol || "").trim();
+  const entityId = String(market.entity_id || "").trim();
+  const benchmark = String(market.configured_benchmark_symbol || "").trim();
+  const displayName = String(market.canonical_name || "").trim();
+  const verified =
+    market.identity_verified === true && Boolean(symbol && entityId && benchmark);
+  if (!verified) {
+    return {
+      verified: false,
+      displayName: "",
+      symbol: "",
+      benchmark: "",
+      method: "",
+      eventTradingDate: null,
+      windows: [],
+      volumeRatio: null,
+      volatility: null,
+    };
+  }
   const windows = asRecord(market.windows) ?? {};
   const order = ["-1D", "+1D", "+3D", "+5D", "+20D"];
   const rendered: MarketWindowView[] = [];
@@ -135,8 +159,10 @@ function marketView(raw: unknown): MarketView | null {
   const volume = asRecord(market.volume);
   const volatility = asRecord(market.volatility);
   return {
-    symbol: String(market.symbol || "symbol unavailable"),
-    benchmark: String(market.configured_benchmark_symbol || "configured benchmark"),
+    verified: true,
+    displayName,
+    symbol,
+    benchmark,
     method: String(
       market.method || "Session return relative to the configured benchmark. Not a causal effect."
     ),

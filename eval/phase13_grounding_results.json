@@ -1,0 +1,245 @@
+{
+  "dataset_version": "human-claim-audit-v1",
+  "phase": "13",
+  "note": "Disposition of each Phase 12 case under the new checks. Historical reports were not rewritten.",
+  "cases": [
+    {
+      "evaluation_id": "hca-01",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-02",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-03",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-04",
+      "disposition": "STILL ALLOWS",
+      "error_types": [
+        "incomplete_context"
+      ],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-05",
+      "disposition": "STILL ALLOWS",
+      "error_types": [
+        "overclaim"
+      ],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-06",
+      "disposition": "STILL ALLOWS",
+      "error_types": [
+        "overclaim"
+      ],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-07",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-08",
+      "disposition": "STILL ALLOWS",
+      "error_types": [
+        "incomplete_context"
+      ],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-09",
+      "disposition": "DETECTS",
+      "error_types": [
+        "overclaim"
+      ],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-10",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-11",
+      "disposition": "PREVENTS",
+      "error_types": [
+        "wrong_security",
+        "citation_mismatch"
+      ],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-12",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "uncertain"
+    },
+    {
+      "evaluation_id": "hca-13",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "uncertain"
+    },
+    {
+      "evaluation_id": "hca-14",
+      "disposition": "STILL ALLOWS",
+      "error_types": [
+        "other"
+      ],
+      "quantpilot_status": "unsupported"
+    },
+    {
+      "evaluation_id": "hca-15",
+      "disposition": "STILL ALLOWS",
+      "error_types": [
+        "overclaim"
+      ],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-16",
+      "disposition": "DETECTS",
+      "error_types": [
+        "wrong_entity"
+      ],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-17",
+      "disposition": "DETECTS",
+      "error_types": [
+        "citation_mismatch",
+        "relationship_inference"
+      ],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-18",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-19",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-20",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-21",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-22",
+      "disposition": "STILL ALLOWS",
+      "error_types": [
+        "overclaim"
+      ],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-23",
+      "disposition": "STILL ALLOWS",
+      "error_types": [
+        "overclaim"
+      ],
+      "quantpilot_status": "uncertain"
+    },
+    {
+      "evaluation_id": "hca-24",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "uncertain"
+    },
+    {
+      "evaluation_id": "hca-25",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-26",
+      "disposition": "DETECTS",
+      "error_types": [
+        "overclaim"
+      ],
+      "quantpilot_status": "uncertain"
+    },
+    {
+      "evaluation_id": "hca-27",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-28",
+      "disposition": "PREVENTS",
+      "error_types": [
+        "wrong_security",
+        "market_calculation"
+      ],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-29",
+      "disposition": "PREVENTS",
+      "error_types": [
+        "market_calculation"
+      ],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-30",
+      "disposition": "STILL ALLOWS",
+      "error_types": [
+        "overclaim"
+      ],
+      "quantpilot_status": "unsupported"
+    },
+    {
+      "evaluation_id": "hca-31",
+      "disposition": "PREVENTS",
+      "error_types": [
+        "temporal_mismatch"
+      ],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-32",
+      "disposition": "NOT_A_FAILURE",
+      "error_types": [],
+      "quantpilot_status": "supported"
+    },
+    {
+      "evaluation_id": "hca-33",
+      "disposition": "PREVENTS",
+      "error_types": [
+        "wrong_security",
+        "citation_mismatch"
+      ],
+      "quantpilot_status": "supported"
+    }
+  ]
+}

@@ -97,12 +97,16 @@ def package_with_market(citation_id: str = "mkt1") -> dict:
         "market_facts": [
             {
                 "event_id": "evt-1",
+                "entity_id": "amd-1",
                 "symbol": "AMD",
+                "canonical_name": "AMD",
+                "benchmark_symbol": "SPY",
                 "windows": {"+5D": {"return": 0.032, "benchmark_return": 0.01, "relative_return": 0.022}},
                 "calculation_version": "v1",
                 "source": {"record": "event_impacts", "event_id": "evt-1", "calculation_version": "v1"},
             }
         ],
+        "resolved_securities": [{"entity_id": "amd-1", "symbol": "AMD", "canonical_name": "AMD"}],
         "citations": [
             {
                 "citation_id": citation_id,
@@ -115,6 +119,17 @@ def package_with_market(citation_id: str = "mkt1") -> dict:
                 "title": "AMD v1",
                 "published_at": None,
                 "locator": {"event_id": "evt-1", "calculation_version": "v1"},
+                "market": {
+                    "entity_id": "amd-1",
+                    "symbol": "AMD",
+                    "canonical_name": "AMD",
+                    "event_id": "evt-1",
+                    "benchmark_symbol": "SPY",
+                    "configured_benchmark_symbol": "SPY",
+                    "calculation_version": "v1",
+                    "identity_verified": True,
+                    "windows": {"+5D": {"return": 0.032, "benchmark_return": 0.01, "relative_return": 0.022}},
+                },
             }
         ],
         "retrieval_metadata": {"semantic_available": True, "semantic_reason": None, "citation_coverage": 1.0, "limits": {}},

@@ -8,8 +8,8 @@ PROMPT_VERSIONS = {
     "news": "news-v2",
     "company": "company-v2",
     "technology": "technology-v2",
-    "market": "market-v2",
-    "evidence": "evidence-v2",
+    "market": "market-v4",
+    "evidence": "evidence-v5",
     "master": "master-v4",
     "report": "report-v1",
 }
@@ -56,9 +56,10 @@ SYSTEM_PROMPTS = {
     "A mention is not USES. Discussion is not USES. "
     "Only emit a company-technology relationship when a graph_fact or an explicit use, develop, or deploy statement supports it.",
     "market": _SHARED
-    + "Role: MarketAgent. Report existing event-impact windows only. "
-    "Say 'the stock returned X% over the +N trading-session window' and the benchmark return. "
-    "Never claim the event caused the move. Never predict prices.",
+    + "Role: MarketAgent. Do not write a percentage, a decimal return, or a benchmark figure. "
+    "The application renders each stored impact window, including the security, the event, and the percent. "
+    "You may add an INFERENCE or SCENARIO that cites the market citation and does not restate a number. "
+    "Never claim the event caused the move. Never predict prices. Never use a different symbol.",
     "evidence": _SHARED
     + "Role: EvidenceAgent. You do not create new facts. You only check citations against the package.",
 }
@@ -116,14 +117,20 @@ def package_brief(package: Dict[str, Any], *, max_excerpt: int = 280) -> Dict[st
         "market_facts": [
             {
                 "event_id": item.get("event_id") or (item.get("source") or {}).get("event_id"),
-                "symbol": item.get("symbol") or item.get("asset"),
+                "entity_id": item.get("entity_id"),
+                "symbol": item.get("symbol") or (item.get("asset") or {}).get("symbol"),
+                "canonical_name": item.get("canonical_name"),
+                "benchmark_symbol": item.get("benchmark_symbol"),
                 "windows": item.get("windows"),
+                "window_definition": item.get("window_definition"),
                 "volume": item.get("volume"),
                 "volatility": item.get("volatility"),
                 "calculation_version": item.get("calculation_version")
                 or (item.get("source") or {}).get("calculation_version"),
                 "citation_ids": _matching_citations(
-                    citations, locator_event=(item.get("source") or {}).get("event_id")
+                    citations,
+                    locator_event=(item.get("source") or {}).get("event_id"),
+                    symbol=item.get("symbol") or (item.get("asset") or {}).get("symbol"),
                 ),
             }
             for item in package.get("market_facts") or []
@@ -141,6 +148,7 @@ def _matching_citations(
     evidence_id: Any = None,
     title: Any = None,
     locator_event: Any = None,
+    symbol: Any = None,
 ) -> List[str]:
     ids: List[str] = []
     for item in citations:
@@ -154,5 +162,8 @@ def _matching_citations(
         elif title and item.get("title") == title:
             ids.append(cid)
         elif locator_event and str((item.get("locator") or {}).get("event_id") or "") == str(locator_event):
+            cited_symbol = str((item.get("market") or {}).get("symbol") or "").upper()
+            if symbol and cited_symbol and cited_symbol != str(symbol).upper():
+                continue
             ids.append(cid)
     return list(dict.fromkeys(ids))

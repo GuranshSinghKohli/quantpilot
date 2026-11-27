@@ -74,7 +74,10 @@ def invoke_tool(
             )
             return _structured(rows, kind="event")
         if name == "get_market_impact":
-            rows = load_market_facts(db, ev_ids, limit=_MAX_IDS)
+            securities = list((package or {}).get("resolved_securities") or [])
+            if not securities:
+                return ToolResult(data=[], errors=["security_identity_unverified"])
+            rows = load_market_facts(db, ev_ids, securities=securities, limit=_MAX_IDS)
             return _structured(rows, kind="market")
         if name == "retrieve_documents":
             text = (query or (request.query if request else "") or "").strip()

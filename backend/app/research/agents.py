@@ -13,6 +13,7 @@ from app.core.settings import get_settings
 from app.observability.logger import get_logger, log_event
 from app.research.llm import FakeLLMProvider, LLMError, LLMProvider, get_llm_provider
 from app.research.metrics import RESEARCH_METRICS
+from app.research.market_facts import ground_market_findings
 from app.research.prompts import PROMPT_VERSIONS, SYSTEM_PROMPTS, package_brief
 from app.research.schemas import AgentFinding, AgentFindingsPayload, AgentRunMeta
 from app.research.tools import invoke_tool
@@ -98,6 +99,7 @@ def run_specialist(
 
     if agent == "market":
         findings = [item for item in findings if not _has_advice(item.statement)]
+        findings = ground_market_findings(findings, package)
 
     duration_ms = int((time.perf_counter() - t0) * 1000)
     completed = datetime.now(timezone.utc)

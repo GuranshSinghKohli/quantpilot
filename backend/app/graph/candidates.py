@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
@@ -33,7 +34,7 @@ logger = get_logger("graph")
 
 # Deterministic cues. Co-mention without one of these is not evidence.
 _CUES: dict[str, tuple[str, ...]] = {
-    RelationshipType.PARTNERED_WITH.value: ("partner", "partnership", "alliance"),
+    RelationshipType.PARTNERED_WITH.value: ("partnership", "partner", "alliance", "relationship"),
     RelationshipType.ACQUIRED.value: ("acquir", "acquisition", "bought", "purchase"),
     RelationshipType.OWNS.value: ("owns", "ownership", "owned"),
     RelationshipType.INVESTED_IN.value: ("invest", "stake"),
@@ -73,7 +74,21 @@ def evidence_explicitly_states(excerpt: str, relationship_type: RelationshipType
         return True
     lowered = text.casefold()
     cues = _CUES.get(relationship_type.value, ())
-    return any(cue in lowered for cue in cues)
+    return _cue_affirmed(lowered, cues)
+
+
+def _cue_affirmed(text: str, cues: tuple[str, ...]) -> bool:
+    for cue in cues:
+        start = 0
+        while True:
+            index = text.find(cue, start)
+            if index < 0:
+                break
+            prefix = text[max(0, index - 40) : index]
+            if not re.search(r"\b(no|not|never|without)\b", prefix):
+                return True
+            start = index + len(cue)
+    return False
 
 
 def _require_evidence(db: Session, proposal: CandidateProposal) -> EvidenceRecord:
