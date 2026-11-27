@@ -395,7 +395,6 @@ def _house_price(side: str, price: Decimal) -> Decimal:
 
 
 @settings(
-    max_examples=20,
     deadline=None,
     derandomize=True,
     suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow],

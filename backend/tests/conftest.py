@@ -11,6 +11,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from hypothesis import settings as hypothesis_settings
+
 _TEST_DB = Path(__file__).resolve().parent / "_test_session.db"
 if _TEST_DB.exists():
     _TEST_DB.unlink()
@@ -56,3 +58,9 @@ os.environ["OPENAI_API_KEY"] = ""
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+
+# Loaded before test modules, so @settings() on a test inherits this profile.
+# The default stays at 20 examples. HYPOTHESIS_PROFILE=thorough selects 300.
+hypothesis_settings.register_profile("default", max_examples=20)
+hypothesis_settings.register_profile("thorough", max_examples=300)
+hypothesis_settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "default"))
