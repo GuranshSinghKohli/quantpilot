@@ -377,7 +377,7 @@ Week 1 does not add League routes and does not create player rows from signup.
 
 Default contents: current S&P 500 constituents plus these ETFs: SPY, QQQ, DIA, IWM, XLK, XLF, XLE, XLV, XLI, XLY, XLP, XLU, XLB, XLRE, XLC, SMH, TAN, ICLN.
 
-The loader reads `UNIVERSE_PATH`. The default is `config/universe.csv`. Columns are `ticker, name, sector, market_cap`. `market_cap` may be empty. The loader does not invent a market cap. If the file is missing, the loader fails with an error that names the path.
+The loader reads `UNIVERSE_PATH`. The default is `config/universe.csv`. Columns are exactly `ticker`, `name`, `sector`, and `market_cap`. A missing or extra column fails and the error names the columns. `market_cap` may be empty. The loader does not invent a market cap. The file is opened as `utf-8-sig`, and whitespace is stripped from headers and values. A ticker must match `^[A-Z][A-Z.]{0,5}$`, must not end with a dot, and is stored and looked up in that uppercase form. If the file is missing, the loader fails with an error that names the path. `load_universe` returns a frozen universe with lookup by ticker and by sector.
 
 `backend/tests/fixtures/universe_small.csv` is the Week 1 fixture, about 25 liquid names across sectors. It includes AAPL, MSFT, NVDA, AMD, TSM, GOOGL, AMZN, META, JPM, XOM, UNH, TSLA, SPY, QQQ, XLK, and SMH. Tests and the one-day replay pass this path. It is not the season universe.
 
@@ -401,7 +401,7 @@ Checked against Alpaca's market-data docs (November 2026):
 - Historical SIP queries without a subscription require `end` to be at least 15 minutes in the past.
 - That 15-minute cutoff is a SIP rule. It is not the rule for the IEX feed.
 
-The game clock is real time minus `DATA_DELAY_MINUTES`. The value stays configurable.
+The game clock is real time minus `DATA_DELAY_MINUTES`. The value stays configurable. `SystemClock` (`backend/app/league/sim/clock.py`) takes that delay and a wall-time function. The default function is the only `datetime.now(timezone.utc)` call in League code. Tests pass their own function. `ManualClock` (also `FixedClock`) can be set to a later time and advanced by a non-negative `timedelta`. An earlier `set` or a negative `advance` raises `ClockWentBackwards`. A naive datetime raises. Aware datetimes are converted to UTC. America/New_York is for market-hours display later, not for this clock.
 
 - `ALPACA_DATA_FEED=iex` (the section 15 default): `DATA_DELAY_MINUTES` defaults to 0.
 - `ALPACA_DATA_FEED=sip` with no SIP subscription: `DATA_DELAY_MINUTES` is 15.
@@ -711,7 +711,7 @@ Redis pub/sub channels with the same names feed the WebSocket hub.
 - Not investment advice: persistent footer + onboarding checkbox: "This is a game with simulated money. Nothing here is financial advice."
 - Rate limits (Redis): player orders 30/min; API 120/min per user.
 - Only the simulator writes portfolios, positions, and fills (single writer), and it does so through `backend/app/league/repo/`. The marketdata poller is the writer for `league.bars`, also through that repository. Fill and risk functions do not hold a session.
-- Validate every input with Pydantic/Zod; tickers must match `^[A-Z.]{1,6}$` and be in the universe.
+- Validate every input with Pydantic/Zod; tickers must match `^[A-Z][A-Z.]{0,5}$`, must not end with a dot, and must be in the universe.
 - Store no sensitive personal data beyond email/display name.
 - Respect data-provider terms: do not redistribute raw market data feeds; show derived values in-app only.
 - Anti-cheat: risk level locked per season; config edits rate-limited; all orders timestamped on the game clock server-side.
@@ -727,11 +727,10 @@ quantpilot/
 │  │  ├─ api/            # FastAPI routers (v1), websocket hub
 │  │  ├─ core/           # existing pydantic-settings; League settings are a new module
 │  │  ├─ db/             # existing models and session; League uses its own MetaData
-│  │  ├─ sim/            # clock.py, fills.py, risk.py, portfolio.py, stoploss.py
 │  │  ├─ agent/          # graph.py (LangGraph), nodes/, prompts/, schemas.py, validate.py
 │  │  ├─ graph/          # neo4j client, cypher queries, path validation
 │  │  ├─ market/         # existing event-study engine; League Alpaca code does not go here
-│  │  ├─ league/         # repo/, alpaca data client, poller, calendar, later leaderboard
+│  │  ├─ league/         # repo/, universe.py, sim/clock.py (fills, risk, stoploss later), alpaca client, poller, calendar
 │  │  ├─ backtest/       # runner, replay clock
 │  │  └─ workers/        # entrypoints: scheduler, agent_worker, simulator, marketdata
 │  ├─ tests/             # unit, property (hypothesis), integration
