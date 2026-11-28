@@ -234,6 +234,32 @@ def test_public_tables_unchanged_across_upgrade_downgrade_upgrade() -> None:
         engine.dispose()
 
 
+def test_bars_volume_column_is_numeric_20_6() -> None:
+    url = _url()
+    engine = _engine(url)
+    cfg = _config(url)
+    try:
+        command.downgrade(cfg, "base")
+        command.upgrade(cfg, "head")
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    """
+                    SELECT data_type, numeric_precision, numeric_scale
+                    FROM information_schema.columns
+                    WHERE table_schema = 'league'
+                      AND table_name = 'bars'
+                      AND column_name = 'v'
+                    """
+                )
+            ).one()
+        assert row.data_type == "numeric"
+        assert row.numeric_precision == 20
+        assert row.numeric_scale == 6
+    finally:
+        engine.dispose()
+
+
 def test_alembic_check_reports_no_drift() -> None:
     url = _url()
     engine = _engine(url)

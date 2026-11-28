@@ -9,9 +9,6 @@ import pytest
 from app.league.config import RISK_LIMITS, LeagueSettings
 
 _SECTION_15 = (
-    "ALPACA_API_KEY",
-    "ALPACA_API_SECRET",
-    "ALPACA_DATA_FEED",
     "DATA_DELAY_MINUTES",
     "UNIVERSE_PATH",
     "DATABASE_URL",
@@ -75,9 +72,6 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_section_15_defaults(clean_env: None) -> None:
     settings = LeagueSettings()
-    assert settings.ALPACA_API_KEY == ""
-    assert settings.ALPACA_API_SECRET == ""
-    assert settings.ALPACA_DATA_FEED == "iex"
     assert settings.DATA_DELAY_MINUTES == 0
     assert settings.UNIVERSE_PATH == "config/universe.csv"
     assert settings.DATABASE_URL == ""

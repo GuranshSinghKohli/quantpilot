@@ -560,6 +560,26 @@ def test_upsert_bars_is_idempotent(league_session) -> None:
     assert stored.feed == "iex"
 
 
+def test_upsert_bars_keeps_fractional_volume(league_session) -> None:
+    session, _seed, _engine = league_session
+    when = datetime(2026, 1, 2, 15, 4, tzinfo=timezone.utc)
+    bar = BarInput(
+        ticker="AAPL",
+        t=when,
+        o=Decimal("10"),
+        h=Decimal("10"),
+        l=Decimal("10"),
+        c=Decimal("10"),
+        v=Decimal("10.5"),
+        feed="massive",
+    )
+    assert upsert_bars(session, [bar]) == 1
+    stored = first_bar_after(session, "AAPL", when - timedelta(minutes=1), when)
+    assert stored is not None
+    assert isinstance(stored.v, Decimal)
+    assert stored.v == Decimal("10.5")
+
+
 def test_missing_order_is_rejected(league_session) -> None:
     session, _seed, _engine = league_session
     with pytest.raises(OrderNotFound):

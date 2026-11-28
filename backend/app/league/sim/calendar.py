@@ -1,4 +1,4 @@
-"""Session calendar. Alpaca's calendar is a later step. Times are UTC."""
+"""Session calendar for tests. The XNYS calendar is ``app.league.sim.xnys``. Times are UTC."""
 
 from __future__ import annotations
 

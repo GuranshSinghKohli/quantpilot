@@ -21,7 +21,7 @@ class BarInput:
     h: Decimal
     l: Decimal
     c: Decimal
-    v: int
+    v: Decimal
     feed: str
 
 

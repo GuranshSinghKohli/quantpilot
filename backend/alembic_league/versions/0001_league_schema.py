@@ -1,5 +1,9 @@
 """Create the league schema. Does not alter public.
 
+``league.bars.v`` is NUMERIC(20,6). Massive aggregate volume is a fractional
+float, the same reason public migration 0013 widened ``market_bars.volume``.
+A fraction is stored. It is not rounded to a whole share.
+
 Revision ID: 0001
 Revises:
 Create Date: 2026-11-26
@@ -331,7 +335,7 @@ def upgrade() -> None:
         sa.Column("h", sa.Numeric(14, 4), nullable=False),
         sa.Column("l", sa.Numeric(14, 4), nullable=False),
         sa.Column("c", sa.Numeric(14, 4), nullable=False),
-        sa.Column("v", sa.BigInteger(), nullable=False),
+        sa.Column("v", sa.Numeric(20, 6), nullable=False),
         sa.Column("feed", sa.Text(), nullable=False),
         sa.PrimaryKeyConstraint("ticker", "t", name="pk_bars"),
         schema=SCHEMA,

@@ -34,3 +34,5 @@ opentelemetry-instrumentation-fastapi==0.62b1
 neo4j==5.28.2
 # Phase 4.1 — pgvector retrieval index (Postgres). SQLite stores embeddings as JSON.
 pgvector==0.3.6
+# League: offline NYSE calendar (XNYS). Used by backend/app/league/sim/xnys.py.
+exchange-calendars==4.13.3

@@ -5,7 +5,7 @@ reference it. The league Alembic env ignores every object outside schema
 `league`, so that stub is never migrated.
 
 `agent_config_history.id` is a UUID primary key. `seasons.starting_cash` is
-NUMERIC(14,4).
+NUMERIC(14,4). `bars.v` is NUMERIC(20,6).
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from decimal import Decimal
 from typing import Any, List, Optional
 
 from sqlalchemy import (
-    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
@@ -352,5 +351,5 @@ class Bar(LeagueBase):
     h: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
     l: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
     c: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
-    v: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    v: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     feed: Mapped[str] = mapped_column(Text, nullable=False)

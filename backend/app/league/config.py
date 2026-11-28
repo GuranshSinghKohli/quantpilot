@@ -53,9 +53,6 @@ class LeagueSettings(BaseSettings):
 
     model_config = SettingsConfigDict(extra="ignore", case_sensitive=True)
 
-    ALPACA_API_KEY: str = ""
-    ALPACA_API_SECRET: str = ""
-    ALPACA_DATA_FEED: Literal["iex", "sip"] = "iex"
     DATA_DELAY_MINUTES: int = 0
     UNIVERSE_PATH: str = "config/universe.csv"
 

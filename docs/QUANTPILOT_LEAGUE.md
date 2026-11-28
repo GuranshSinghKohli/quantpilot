@@ -11,7 +11,7 @@ Amendments recorded before Week 1 code, against the November 2026 PDF:
 - All section 6 tables live in Postgres schema `league`. League migrations use their own Alembic version table, `league.alembic_version`, and never modify the `public` schema.
 - There is no `league.users` and no Supabase Auth. `league.players` points at the existing `public.users` integer id. `league.portfolios` is the cash book, not the `public.portfolios` watchlist.
 - League models use their own `MetaData(schema="league")` and the existing sync engine and session factory (`psycopg2`). No `asyncpg`. Database access goes through `backend/app/league/repo/`. Fill and risk are pure functions.
-- `DATA_DELAY_MINUTES=0` when `ALPACA_DATA_FEED=iex`, and 15 for SIP without a subscription. `scripts/check_iex_latency.py` measures IEX bar age before that default is treated as final.
+- Market data is Massive (formerly Polygon), the client QuantPilot already uses. Week 1 is the free Stocks Basic plan: historical 1-minute aggregates, 5 calls/minute. `DATA_DELAY_MINUTES` stays 0. Live play is later and would use Massive Starter with `DATA_DELAY_MINUTES=15`. There is no Alpaca client and no IEX latency check.
 - One-minute bars are stored in `league.bars`. Redis keeps only the latest price. Fills use the first existing bar strictly after the order time.
 - `league.rationales.system` defaults to false. Only the simulator may set it true. An empty graph path and empty news ids are allowed only then. The UI labels those trades "Auto stop-loss".
 - Tests and the one-day replay read `backend/tests/fixtures/universe_small.csv`. `scripts/build_universe.py` writes `config/universe.csv`. The loader path is `UNIVERSE_PATH`.
@@ -126,9 +126,9 @@ League models use `MetaData(schema="league")` and the app's single engine. `app.
 
 | Component | Technology | Why |
 | --- | --- | --- |
-| Market data | Alpaca Market Data API via official SDK `alpaca-py` | Free plan: historical bars (7+ years), IEX real-time WebSocket (max 30 symbols on the free plan), 200 REST calls/min. See 7.2 for the delay rule. |
-| Market calendar | Alpaca Trading API `/v2/calendar` and `/v2/clock` (paper account keys) | Market open/close, holidays, early closes |
-| News (optional extra source) | Alpaca News API (verify plan limits in the docs before relying on it) + existing QuantPilot sources | More news coverage |
+| Market data | Massive (formerly Polygon) via the existing `SourceClient` | Week 1: Stocks Basic, historical 1-minute aggregates, 5 calls/minute. The League wrapper does not change `backend/app/market/`. See 7.2. |
+| Market calendar | `exchange_calendars`, exchange `XNYS`, offline | Session open/close, holidays, early closes. No network call. |
+| News | Existing Massive news adapter (`NEWS_API_KEY`) | League does not add a second news vendor. |
 | Cache / leaderboard / pub-sub | Redis (`redis` Python package, asyncio API) | Latest prices, sorted-set leaderboards, pub/sub to the WebSocket hub, rate limits |
 | Scheduler | APScheduler (`apscheduler`, `AsyncIOScheduler`) | Decision cycles, leaderboard snapshots, season rollover |
 | Kafka client | `confluent-kafka` (or `aiokafka`) | Produce/consume from Python services |
@@ -207,7 +207,7 @@ Sources
   events.impact
   agent.cycle
   orders.proposed
-        Alpaca market data (1-min bars + IEX stream)     News sources
+        Massive 1-min aggregates (historical in Week 1)  News sources
         Market data service                              News ingest
                     Kafka / Redpanda
                     PySpark enrichment → impact events
@@ -225,7 +225,7 @@ Sources
 | Service | Responsibilities | Scale (v1) |
 | --- | --- | --- |
 | api | REST endpoints, WebSocket hub, auth verification | 1 process |
-| marketdata | Pull 1-min bars for the universe on a schedule; subscribe to the IEX stream for up to 30 hot symbols; upsert every fetched bar into `league.bars` (section 7.2); write the latest price to Redis; publish `market.bars` | 1 |
+| marketdata | Week 2+: pull 1-min bars for the universe on a schedule, under the Massive rate limit; upsert every fetched session bar into `league.bars` (section 7.2); write the latest price to Redis; publish `market.bars`. No WebSocket in Week 1. | 1 |
 | news-ingest | Existing QuantPilot ingest; publishes `news.raw` | 1 |
 | enrichment | Existing PySpark job, extended to output `events.impact` (section 8.3) | 1 |
 | scheduler | APScheduler: triggers decision cycles, leaderboard snapshots, metrics, season rollover | 1 |
@@ -328,7 +328,7 @@ league.user_achievements(id UUID PK, player_id UUID FK players, achievement_id F
                          UNIQUE (player_id, achievement_id, season_id) NULLS NOT DISTINCT)
 league.bars             (ticker TEXT, t TIMESTAMPTZ,
                          o NUMERIC(14,4), h NUMERIC(14,4), l NUMERIC(14,4), c NUMERIC(14,4),
-                         v BIGINT, feed TEXT,
+                         v NUMERIC(20,6), feed TEXT,
                          PRIMARY KEY (ticker, t))
 ```
 
@@ -342,7 +342,7 @@ A non-system rationale must have at least one news id, and none of those ids may
 
 `agent_cycles.finished_at` is nullable while the cycle is running. `tokens_in` and `tokens_out` default to 0. `cost_usd` defaults to 0. The text arrays `interests`, `excluded_tickers`, `excluded_sectors`, and `news_ids` default to `'{}'`.
 
-`league.bars` is the durable 1-minute bar store. The marketdata poller upserts each fetched bar with `ON CONFLICT (ticker, t) DO NOTHING`. The repository reads this table for fills (section 7.4). Redis does not store the bar history.
+`league.bars` is the durable 1-minute bar store. The marketdata poller upserts each fetched bar with `ON CONFLICT (ticker, t) DO NOTHING`. The repository reads this table for fills (section 7.4). Redis does not store the bar history. `league.bars.v` is `NUMERIC(20,6)`, the same width as `public.market_bars.volume` after migration 0013. Massive sends `v` as a fractional number. The column keeps that fraction. A bar is not dropped because its volume is not a whole share.
 
 Invariants enforced by Postgres:
 
@@ -385,8 +385,8 @@ The loader reads `UNIVERSE_PATH`. The default is `config/universe.csv`. Columns 
 
 - S&P 500 constituents and GICS sectors come from Wikipedia's "List of S&P 500 companies" table, read with `pandas.read_html`.
 - The section 7.1 ETF list is appended.
-- Tickers are normalized to Alpaca's symbol form. A hyphen becomes a dot (`BRK-B` → `BRK.B`).
-- Each symbol is checked with `TradingClient.get_all_assets(GetAssetsRequest(status=AssetStatus.ACTIVE, asset_class=AssetClass.US_EQUITY))` from `alpaca-py`. The client is constructed for the paper account. The script keeps a symbol only when the returned asset is `tradable`. It calls no order method.
+- Tickers are normalized to Massive's symbol form. A hyphen becomes a dot (`BRK-B` → `BRK.B`).
+- Each symbol is checked with Massive reference data (`GET /v3/reference/tickers/{ticker}`) through the same client as section 7.2. The script keeps a symbol only when Massive lists it as an active US stock or ETF. It calls no order method. This check is step 12, not step 10.
 - Symbols that fail the check are printed and dropped.
 - `market_cap` is left empty. The script does not look up or invent a market cap.
 - It prints a summary: total tickers written, how many were dropped, and why.
@@ -395,29 +395,28 @@ The season file is refreshed by running that script, not by editing prices by ha
 
 ### 7.2 Prices and the game clock
 
-Checked against Alpaca's market-data docs (November 2026):
+Market data is Massive (formerly Polygon). QuantPilot already calls it for daily bars and news. League does not add a second vendor and does not change `backend/app/market/` or `MassiveMarketAdapter` (that adapter is daily bars). The League wrapper is `backend/app/league/market/massive_data.py`. It uses the existing `SourceClient`.
 
-- The Basic plan includes real-time IEX data. The IEX WebSocket is limited to 30 symbols.
-- Historical SIP queries without a subscription require `end` to be at least 15 minutes in the past.
-- That 15-minute cutoff is a SIP rule. It is not the rule for the IEX feed.
+Week 1 uses the free Stocks Basic plan: historical 1-minute aggregates, `GET /v2/aggs/ticker/{ticker}/range/1/minute/{from}/{to}`, 5 calls per minute. The same plan allows 2 years of history. Auth is `Authorization: Bearer` from `MARKET_API_KEY`. The base URL is `MARKET_BASE_URL` (default `https://api.massive.com`). The pace is `MARKET_REQUESTS_PER_MINUTE` (default 5). `SourceClient` waits between calls and retries HTTP 429 with backoff. A `Retry-After` longer than `SOURCE_MAX_RETRY_AFTER_SECONDS` is not retried. The key is not a League setting and is never printed.
+
+A `next_url` is followed only when its host equals the host of `MARKET_BASE_URL`. A link to any other host is not requested. The wrapper logs a warning that names the refused host, keeps the bars already read, and stops paging. The URL itself is not logged. The API key stays on the `Authorization` header and is not sent to that other host.
+
+`results[].t` is the Unix millisecond timestamp for the start of the aggregate window. Massive's custom-bars docs define it that way, and the existing daily adapter treats the same field as the start of the day (00:00 America/New_York). The wrapper stores that start instant in UTC. It does not move the timestamp to the end of the minute. A bar outside the XNYS session (section 7.3), `[open, close)`, is not written. Volume is stored as `NUMERIC(20,6)`, including a fractional `v`. A fractional volume does not drop the bar. `adjusted=false`. Prices are not invented.
 
 The game clock is real time minus `DATA_DELAY_MINUTES`. The value stays configurable. `SystemClock` (`backend/app/league/sim/clock.py`) takes that delay and a wall-time function. The default function is the only `datetime.now(timezone.utc)` call in League code. Tests pass their own function. `ManualClock` (also `FixedClock`) can be set to a later time and advanced by a non-negative `timedelta`. An earlier `set` or a negative `advance` raises `ClockWentBackwards`. A naive datetime raises. Aware datetimes are converted to UTC. America/New_York is for market-hours display later, not for this clock.
 
-- `ALPACA_DATA_FEED=iex` (the section 15 default): `DATA_DELAY_MINUTES` defaults to 0.
-- `ALPACA_DATA_FEED=sip` with no SIP subscription: `DATA_DELAY_MINUTES` is 15.
+`DATA_DELAY_MINUTES` defaults to 0. Week 1 replays historical bars on an injected clock, so there is no live delay to apply. Live play is week 2 or later: Massive Starter is 15 minutes delayed, and that is when `DATA_DELAY_MINUTES` becomes 15. There is no IEX feed and no `scripts/check_iex_latency.py`.
 
-All decisions and fills use bars at or before the game clock. The UI badge says "IEX prices" when the delay is 0, and "Prices delayed N min" otherwise.
+All decisions and fills use bars at or before the game clock. The UI badge says "Massive prices" when the delay is 0, and "Prices delayed N min" otherwise.
 
-`scripts/check_iex_latency.py` runs during market hours. It requests the latest IEX bars for SPY, AAPL, and one small S&P 500 stock, and prints how old each bar is. If those bars are delayed, set `DATA_DELAY_MINUTES` back to 15. The script calls no order method.
+Some minutes have no bar. The fill engine uses the first in-session bar after the order time, or the first in-session bar at or after the next open when the order was accepted while the market was closed (section 7.4). A missing minute is not filled by copying an earlier bar.
 
-IEX is a small share of total volume, so some tickers will have minutes with no bar. The fill engine uses the first in-session bar after the order time, or the first in-session bar at or after the next open when the order was accepted while the market was closed (section 7.4). A missing minute is not filled by copying an earlier bar.
-
-`marketdata` pulls 1-minute bars for the whole universe every minute (batched multi-symbol requests, staying under the REST rate limit). For each fetched bar it:
+The live `marketdata` poller is not Week 1. When it exists, it pulls 1-minute bars for the universe on a schedule, staying under `MARKET_REQUESTS_PER_MINUTE`. For each fetched session bar it:
 
 1. Upserts the bar into `league.bars` (`ON CONFLICT (ticker, t) DO NOTHING`).
 2. Writes only the latest bar for that ticker to Redis: `price:{ticker}` → `{t, c}`. Redis is the UI and equity-display cache. It is not the fill source.
 
-`scripts/backfill_bars.py --start --end --tickers` loads historical bars into `league.bars`. Later backtests use that table.
+`scripts/backfill_bars.py --start --end --tickers` (or `--universe`) loads historical minute bars into `league.bars`. Later backtests use that table. A repeat run does not change rows already stored.
 
 The Week 1 replay does not wait on a live backfill. It loads `backend/tests/fixtures/bars_one_day/`, one real trading day of 1-minute bars for the fixture tickers, into `league.bars`. That fixture is produced once from `scripts/backfill_bars.py`. Prices in it are not invented.
 
@@ -425,25 +424,25 @@ Retention: keep every bar. Pruning or partitioning can be added later. Neither i
 
 ### 7.3 Market hours
 
-Use Alpaca `/v2/calendar` to load trading days (including early closes) once per day, cached in Redis.
+The calendar is the `exchange_calendars` library, exchange `XNYS`, used offline. It includes holidays and early closes. No Redis cache and no network call. League code implements the same protocol as the test `SessionCalendar`: `is_open`, `next_open`, and `trading_minutes`. The close instant is not open. A known early close is 2026-11-27, 13:00 America/New_York. Thanksgiving is closed. A normal session is 09:30–16:00 America/New_York. A date outside the range the library has loaded raises `CalendarUnavailable`. The calendar does not invent a session past that range.
 
 Orders created outside market hours get status `queued` and fill at the first in-session bar at or after the next open. A bar after the close is not that bar.
 
 ### 7.4 Fill model (market orders)
 
-The fill function is pure. It receives the order, the game clock, the already-loaded bars for that ticker, and the config numbers. It does not query Postgres or Alpaca. The repository loads `league.bars` and, on the fallback below, writes the Alpaca rows before calling the function a second time.
+The fill function is pure. It receives the order, the game clock, the already-loaded bars for that ticker, and the config numbers. It does not query Postgres or Massive. The repository loads `league.bars` and, on the fallback below, writes the Massive rows before calling the function a second time.
 
-`decide_fill` in `backend/app/league/sim/fills.py` is that function. `process_order` in `backend/app/league/sim/process.py` locks the order, re-reads its status, and returns without writing when that status is no longer `accepted` or `queued`. It then loads the held quantity, calls `decide_fill`, then calls `record_fill` or `set_order_status`. It does not commit and it does not compute cash itself. Week 1 does not fetch Alpaca from either function. The fallback fetch below waits for the Alpaca client.
+`decide_fill` in `backend/app/league/sim/fills.py` is that function. `process_order` in `backend/app/league/sim/process.py` locks the order, re-reads its status, and returns without writing when that status is no longer `accepted` or `queued`. It then loads the held quantity, calls `decide_fill`, then calls `record_fill` or `set_order_status`. It does not commit and it does not compute cash itself. Week 1 does not fetch Massive from either function. The fallback fetch below waits for the Massive wrapper.
 
 Given an order accepted at game time `T`:
 
 1. Every fill bar is inside a trading session: `is_open(bar.t)` is true. An order accepted while the market is open uses the first such bar with `t > T` and `t <= now`. The bar at exactly `T` is never used. An order accepted while the market is closed uses the first such bar with `t >= next_open(T)` and `t <= now`. A bar the lookup returns outside that window — `t <= T`, `t < next_open(T)` for a closed order, `t > now`, or not `is_open(t)` — is ignored. A post-close bar is never a fill, including for an order accepted at 15:59. Minutes with no row are skipped. `next_open(T)` returning `None` raises `CalendarUnavailable` and leaves the order untouched. `process_order` sets a queued order to `rejected` directly.
-2. If no row matches and the poller may be lagging, the repository fetches that ticker's window from Alpaca once, upserts into `league.bars` (`ON CONFLICT DO NOTHING`), and calls the fill function once more. The fill function itself does not perform this fetch. That fetch is not part of Week 1.
+2. If no row matches and the poller may be lagging, the repository fetches that ticker's window from Massive once, upserts into `league.bars` (`ON CONFLICT DO NOTHING`), and calls the fill function once more. The fill function itself does not perform this fetch. That fetch is not part of Week 1.
 3. Base price = that bar's open.
 4. Slippage: buys pay `open × (1 + SLIPPAGE_BPS/10000)`, sells receive `open × (1 − SLIPPAGE_BPS/10000)`. Default `SLIPPAGE_BPS = 5`. The result uses the same 4-decimal buy `ROUND_CEILING` and sell `ROUND_FLOOR` as `record_fill`.
 5. Commission is `COMMISSION_USD`, default 0. A buy changes cash by `cash -= qty * fill_price + COMMISSION_USD`. A sell changes cash by `cash += qty * fill_price - COMMISSION_USD`. `record_fill` applies those formulas. It quantizes the buy debit up and the sell credit down, to 4 decimal places. The risk engine resizes a buy whose total would exceed available cash before the fill runs. If `record_fill` still raises `InsufficientCash`, `process_order` sets the order to `rejected` with reason `insufficient cash incl. commission` and writes nothing else. `InsufficientPosition` becomes `rejected` with reason `no position`. A sell when the held quantity is already 0 is that same rejection, not an expiry. One test uses a non-zero commission.
 6. Quantity: for notional buys, `qty = floor_to_6dp(notional / fill_price)`, then one quantum less if the product would still exceed the notional. For sells, the requested qty, capped at the held qty. A sell fraction, when the pure function is given one, is `floor_to_6dp(held * fraction)`. Computed qty at or below 0 expires with `size rounds to zero`. A rounded price at or below 0 expires with `price rounds to zero`.
-7. If there is still no eligible bar once more than `FILL_TIMEOUT_MINUTES` of trading time have passed since `T` (default 30; a halt or a long IEX gap), the order expires. Trading minutes are open-session time in `(T, now]`. Time outside a session, including overnight and after an early close, counts as zero. A bar at exactly the timeout still fills. At exactly the timeout with no bar, the order waits. Expiry starts on the next trading minute.
+7. If there is still no eligible bar once more than `FILL_TIMEOUT_MINUTES` of trading time have passed since `T` (default 30; a halt or a long gap with no bar), the order expires. Trading minutes are open-session time in `(T, now]`. Time outside a session, including overnight and after an early close, counts as zero. A bar at exactly the timeout still fills. At exactly the timeout with no bar, the order waits. Expiry starts on the next trading minute.
 
 A unit test builds a bar series with a gap and asserts the fill uses the first bar that exists after `T`, not a synthesized bar inside the gap. An early-close session (09:30–13:00 America/New_York) stops the trading-minute count at 13:00, ignores a 13:05 bar, and carries the remaining timeout into the next session.
 
@@ -455,7 +454,9 @@ A unit test builds a bar series with a gap and asserts the fill uses the first b
 
 ### 7.6 Corporate actions (v1)
 
-- Splits: apply split adjustments to positions and `avg_cost` using Alpaca's corporate actions data (or a manual admin command if unavailable). Backtests use split-adjusted bars.
+Bars are fetched unadjusted (`adjusted=false`) so fills match real traded prices. Split handling for positions and backtests stays as this section describes.
+
+- Splits: apply split adjustments to positions and `avg_cost` using Massive's split data (or a manual admin command if unavailable). Backtests use split-adjusted bars.
 - Dividends: ignored in v1 (documented on the FAQ page).
 
 ## 8. The agent
@@ -712,7 +713,7 @@ All endpoints under `/api/v1`. Auth is the existing QuantPilot bearer JWT (secti
 | GET | `/seasons/{id}/recap?week=` | Weekly recap data |
 | GET | `/achievements` | All + unlocked |
 | POST · GET | `/backtests` · `/backtests/{id}` | Start / poll backtest |
-| GET | `/market/universe` · `/market/quote/{ticker}` | Universe list, latest price. The badge is "IEX prices" when `DATA_DELAY_MINUTES` is 0, and "Prices delayed N min" otherwise. |
+| GET | `/market/universe` · `/market/quote/{ticker}` | Universe list, latest price. The badge is "Massive prices" when `DATA_DELAY_MINUTES` is 0, and "Prices delayed N min" otherwise. |
 
 WebSocket: `GET /ws?token=<JWT>`. Client subscribes with `{"op":"sub","channels":["portfolio:{id}","league:{id}","prices:{ticker}"]}`.
 
@@ -730,7 +731,7 @@ Redis pub/sub channels with the same names feed the WebSocket hub.
 
 ## 13. Security, fairness and compliance
 
-- Paper money only. No broker trading endpoints are ever called. Alpaca keys are paper-account keys used for data and the calendar only.
+- Paper money only. No broker trading endpoints are ever called. Massive is market data only. The calendar is a local library.
 - Not investment advice: persistent footer + onboarding checkbox: "This is a game with simulated money. Nothing here is financial advice."
 - Rate limits (Redis): player orders 30/min; API 120/min per user.
 - Only the simulator writes portfolios, positions, and fills (single writer), and it does so through `backend/app/league/repo/`. The marketdata poller is the writer for `league.bars`, also through that repository. Fill and risk functions do not hold a session.
@@ -752,8 +753,8 @@ quantpilot/
 │  │  ├─ db/             # existing models and session; League uses its own MetaData
 │  │  ├─ agent/          # graph.py (LangGraph), nodes/, prompts/, schemas.py, validate.py
 │  │  ├─ graph/          # neo4j client, cypher queries, path validation
-│  │  ├─ market/         # existing event-study engine; League Alpaca code does not go here
-│  │  ├─ league/         # repo/, universe.py, sim/clock.py (fills, risk, stoploss later), alpaca client, poller, calendar
+│  │  ├─ market/         # existing event-study engine; League does not modify this package
+│  │  ├─ league/         # repo/, universe.py, sim/ (xnys.py), market/massive_data.py
 │  │  ├─ backtest/       # runner, replay clock
 │  │  └─ workers/        # entrypoints: scheduler, agent_worker, simulator, marketdata
 │  ├─ tests/             # unit, property (hypothesis), integration
@@ -773,18 +774,16 @@ quantpilot/
 ├─ config/universe.csv          # written by scripts/build_universe.py
 ├─ scripts/backfill_bars.py
 ├─ scripts/build_universe.py
-├─ scripts/check_iex_latency.py
 ├─ docker-compose.yml
 └─ docs/QUANTPILOT_LEAGUE.md    # this spec. Root DESIGN.md stays the UI system.
 ```
 
-Where a target path already exists and means something else (`backend/app/market`, `backend/app/graph`, `backend/app/db/models.py`, `frontend/`), new League modules do not overwrite those files. Alpaca code for League goes in a new module under `backend/app/league/` (data client, poller, calendar). It does not replace the event-study package `backend/app/market`. Neo4j path checks, when they are built, extend the existing `backend/app/graph` client instead of adding a second driver. That extension is not Week 1.
+Where a target path already exists and means something else (`backend/app/market`, `backend/app/graph`, `backend/app/db/models.py`, `frontend/`), new League modules do not overwrite those files. The Massive wrapper and the XNYS calendar live under `backend/app/league/`. They do not replace the event-study package `backend/app/market`. Neo4j path checks, when they are built, extend the existing `backend/app/graph` client instead of adding a second driver. That extension is not Week 1.
 
 ## 15. Configuration (environment variables)
 
 ```
 # Data
-ALPACA_API_KEY=            ALPACA_API_SECRET=       ALPACA_DATA_FEED=iex
 DATA_DELAY_MINUTES=0
 UNIVERSE_PATH=config/universe.csv
 # Infra
@@ -799,13 +798,13 @@ FILL_TIMEOUT_MINUTES=30   EVENT_IMPACT_THRESHOLD=0.7   MAX_EVENT_CYCLES_PER_DAY=
 MIN_ORDER_USD=5
 ```
 
-`DATA_DELAY_MINUTES=0` is the default because `ALPACA_DATA_FEED` defaults to `iex`. Set it to 15 only for SIP without a subscription (section 7.2). `DATABASE_URL` is the app's sync URL. Local development uses `postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot`. The app opens one engine from it, and League uses `SessionLocal`. There is no `LEAGUE_DATABASE_URL`. There are no Supabase settings. `UNIVERSE_PATH` is the loader input (section 7.1).
+`DATA_DELAY_MINUTES=0` is the Week 1 default. Set it to 15 only when live play uses Massive Starter (section 7.2). There are no `ALPACA_*` settings. The Massive key is the existing app setting `MARKET_API_KEY`, with `MARKET_BASE_URL` and `MARKET_REQUESTS_PER_MINUTE` (default 5). League settings do not copy that key. `DATABASE_URL` is the app's sync URL. Local development uses `postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot`. The app opens one engine from it, and League uses `SessionLocal`. There is no `LEAGUE_DATABASE_URL`. There are no Supabase settings. `UNIVERSE_PATH` is the loader input (section 7.1).
 
 ## 16. Testing strategy
 
 | Area | Tests |
 | --- | --- |
-| Fill engine | Fills use the first existing `league.bars` row with `t > order_time` and `t <= game_clock`; a gap test (no synthesized bar inside a hole); slippage direction; fractional qty rounding; expiry on halt; one Alpaca fallback fetch then expiry |
+| Fill engine | Fills use the first existing `league.bars` row with `t > order_time` and `t <= game_clock`; a gap test (no synthesized bar inside a hole); slippage direction; fractional qty rounding; expiry on halt; one Massive fallback fetch then expiry |
 | Risk engine | Each limit in section 9, per risk level, at the cap and one cent over; processing order; buys spend current cash only; player buys must be in the universe. Stop-loss at the threshold and one cent above. The pending-stop check is the connector's. Agent and LLM paths cannot set `rationales.system`. Only the stop-loss result may, and that row has empty `graph_path` and `news_ids` with `validated = true`. |
 | Property tests (hypothesis) | For random order sequences: cash never < 0, qty never < 0, equity = cash + Σ positions, ghost and actual diverge only via player orders |
 | No look-ahead | Backtest on synthetic data with a known future spike: agent must not "see" it |
@@ -826,7 +825,7 @@ Alerts (simple): marketdata stale > 5 min during market hours; simulator lag > 2
 
 | Week | Build | Done when |
 | --- | --- | --- |
-| 1 | Simulator core: `league` schema and its own Alembic version table, universe fixture plus `scripts/build_universe.py`, game clock, Alpaca bars poller writing `league.bars`, calendar, pure fill and risk functions, repository, property tests, `scripts/backfill_bars.py`, `scripts/check_iex_latency.py`, and a committed one-day bar fixture loaded into `league.bars` for the replay | A script places random orders for 1 day of replayed bars and all invariants hold. `public` is unchanged. The replay bars come from `backend/tests/fixtures/bars_one_day/`, produced by the backfill script, not invented. |
+| 1 | Simulator core: `league` schema and its own Alembic version table, universe fixture plus `scripts/build_universe.py` (Massive reference check, not a broker asset list), game clock, Massive historical 1-minute backfill writing `league.bars`, offline XNYS calendar (`exchange_calendars`), pure fill and risk functions, repository, property tests, and a committed one-day bar fixture loaded into `league.bars` for the replay. No live poller and no IEX latency check. | A script places random orders for 1 day of replayed bars and all invariants hold. `public` is unchanged. The replay bars come from `backend/tests/fixtures/bars_one_day/`, produced by the backfill script, not invented. |
 | 2 | Agent: impact events, interest subgraph, LangGraph cycle, rationale validation, scheduler | Agents trade on live data; every trade has a validated rationale |
 | 3 | API + auth + WebSocket; Next.js onboarding, dashboard (equity chart, positions, trade feed) | A new user can sign up and watch their agent trade |
 | 4 | Leagues, seasons, leaderboard, achievements, approve mode, you-vs-agent, trade detail 3D graph, landing galaxy | 5 friends in a private league with a live leaderboard |
