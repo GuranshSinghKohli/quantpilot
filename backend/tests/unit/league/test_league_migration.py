@@ -1,8 +1,9 @@
 """League migrations against local Compose Postgres.
 
-The default URL is 127.0.0.1:5433, the published port of this Compose Postgres
-while 5432 is held by another local database. Set LEAGUE_TEST_DATABASE_URL to
-override it. The override must still be localhost and database quantpilot.
+The default URL is 127.0.0.1:5433/quantpilot_test. The dev database quantpilot
+is not a test target. Set LEAGUE_TEST_DATABASE_URL to override the default.
+The override must still be localhost, and the database name must be
+quantpilot_test. A URL pointed at quantpilot is refused.
 """
 
 from __future__ import annotations
@@ -26,7 +27,8 @@ from app.league.local_url import (
 from app.league.models import LeagueBase
 
 INI = Path(__file__).resolve().parents[3] / "alembic_league.ini"
-DEFAULT_URL = "postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot"
+DEFAULT_URL = "postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot_test"
+TEST_DATABASE = "quantpilot_test"
 LEAGUE_TABLES = {
     "players",
     "leagues",
@@ -48,7 +50,15 @@ LEAGUE_TABLES = {
 
 
 def _url() -> str:
-    return os.environ.get("LEAGUE_TEST_DATABASE_URL", DEFAULT_URL)
+    """The league suite's database. quantpilot is refused even if the env var names it."""
+    raw = os.environ.get("LEAGUE_TEST_DATABASE_URL", DEFAULT_URL)
+    url = assert_localhost_database_url(raw)
+    name = make_url(url).database
+    if name != TEST_DATABASE:
+        raise LeagueDatabaseRefused(
+            f"League tests refuse database {name!r}. The suite uses quantpilot_test only."
+        )
+    return url
 
 
 def _config(url: str) -> Config:
@@ -187,7 +197,7 @@ def test_public_tables_unchanged_across_upgrade_downgrade_upgrade() -> None:
         print(f"\nserver_version: {server_version}")
         print(f"database: {database}")
         assert str(server_version).startswith("16."), server_version
-        assert database == "quantpilot"
+        assert database == "quantpilot_test"
         with engine.connect() as conn:
             assert_league_database(conn)
 
@@ -276,7 +286,7 @@ def test_alembic_check_reports_no_drift() -> None:
 def test_other_local_database_is_refused_and_has_no_league_schema() -> None:
     quantpilot = make_url(_url())
     assert quantpilot.host in {"localhost", "127.0.0.1", "::1"}
-    assert quantpilot.database == "quantpilot"
+    assert quantpilot.database == "quantpilot_test"
     other_url = quantpilot.set(database="roadsafety").render_as_string(hide_password=False)
     admin = create_engine(_url(), isolation_level="AUTOCOMMIT")
     other = create_engine(other_url)

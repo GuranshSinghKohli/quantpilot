@@ -250,7 +250,7 @@ Keying by `portfolio_id` keeps all orders for one portfolio in order on one part
 
 All League tables live in schema `league`. Migrations live in `backend/alembic_league/` and record their revision in `league.alembic_version`. The env metadata is the League tables plus a one-column stub of `public.users`, so `players.user_id` resolves for `alembic check`. `include_object` ignores every object whose schema is not `league`, and the migration never alters `public`.
 
-Both offline and online modes refuse before any SQL unless the URL's database name is `quantpilot`. Online mode then connects and also refuses unless `current_database()` is `quantpilot` and `public.users` exists. Only then does it create schema `league`. A localhost URL pointed at another database, such as `roadsafety`, is refused and leaves no `league` schema.
+Both offline and online modes refuse before any SQL unless the URL's database name is `quantpilot` or `quantpilot_test`. Online mode then connects and also refuses unless `current_database()` is one of those two names and `public.users` exists. Only then does it create schema `league`. A localhost URL pointed at another database, such as `roadsafety`, is refused and leaves no `league` schema. League tests do not use the dev database. They read `LEAGUE_TEST_DATABASE_URL`, which defaults to `postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot_test`, and they refuse a URL whose database name is `quantpilot`. The QA downgrade and upgrade run on `quantpilot_test`, so they cannot drop `league.bars` in the dev database. There is still no `LEAGUE_DATABASE_URL`. Scripts such as the backfill and the replay use the app `DATABASE_URL`, which for local development is `quantpilot`.
 
 League models declare `MetaData(schema="league")` and use the app's single engine through `SessionLocal` (`app.core.db.SessionLocal`, re-exported by `app.db.session`, psycopg2). There is no second engine and no `asyncpg`.
 
@@ -407,7 +407,7 @@ The game clock is real time minus `DATA_DELAY_MINUTES`. The value stays configur
 
 `DATA_DELAY_MINUTES` defaults to 0. Week 1 replays historical bars on an injected clock, so there is no live delay to apply. Live play is week 2 or later: Massive Starter is 15 minutes delayed, and that is when `DATA_DELAY_MINUTES` becomes 15. There is no IEX feed and no `scripts/check_iex_latency.py`.
 
-All decisions and fills use bars at or before the game clock. The UI badge says "Massive prices" when the delay is 0, and "Prices delayed N min" otherwise.
+A bar timestamped `t` is the start of that minute. Its close is not known at `t`. The latest known price at clock time `now` is the close of the most recent bar with `t + 1 minute <= now`. `latest_known_prices` is that read. Risk, stop-loss, player checks, and equity all use it. The future price service uses the same rule: it does not publish a minute's close until that minute has completed. Fills are different and unchanged. A fill uses the bar's open, the first in-session bar with `t > T` and `t <= now`. The UI badge says "Massive prices" when the delay is 0, and "Prices delayed N min" otherwise.
 
 Some minutes have no bar. The fill engine uses the first in-session bar after the order time, or the first in-session bar at or after the next open when the order was accepted while the market was closed (section 7.4). A missing minute is not filled by copying an earlier bar.
 
@@ -418,7 +418,7 @@ The live `marketdata` poller is not Week 1. When it exists, it pulls 1-minute ba
 
 `scripts/backfill_bars.py --start --end --tickers` (or `--universe`) loads historical minute bars into `league.bars`. Later backtests use that table. A repeat run does not change rows already stored.
 
-The Week 1 replay does not wait on a live backfill. It loads `backend/tests/fixtures/bars_one_day/`, one real trading day of 1-minute bars for the fixture tickers, into `league.bars`. That fixture is produced once from `scripts/backfill_bars.py`. Prices in it are not invented.
+The Week 1 replay reads bars already stored in `league.bars`. It does not fetch and it does not invent a price. Massive data is licensed and this repo is public, so a dump of real bars is not committed. `backend/tests/fixtures/bars_one_day/` is gitignored. Tests of the replay use synthetic bars. `scripts/replay_day.py` refuses a date that is not an XNYS session, and it refuses a universe ticker that has no in-session bar, naming the ticker and pointing at `scripts/backfill_bars.py`.
 
 Retention: keep every bar. Pruning or partitioning can be added later. Neither is part of v1.
 
@@ -603,7 +603,7 @@ A proposal that fails after the retry is dropped and logged (`agent_cycles.error
 | Stop-loss per position (auto-sell) | −8% | −12% | −20% |
 | ETFs allowed | Yes | Yes | Yes |
 
-`apply_risk` is a pure function. It does not read the database or the clock. Equity is `cash + Σ qty × latest price`. A missing price, or a price ≤ 0, for a held ticker or for a proposal ticker that was quoted raises `MissingPrice`. The function does not invent a price.
+`apply_risk` is a pure function. It does not read the database or the clock. Equity is `cash + Σ qty × latest known price` (section 7.2). A missing price, or a price ≤ 0, for a held ticker or for a proposal ticker that was quoted raises `MissingPrice`. The function does not invent a price.
 
 Processing order:
 
@@ -634,7 +634,7 @@ Player orders (`validate_player_order`): a buy must be in the universe (`not in 
 
 ### 10.1 Metrics (per portfolio)
 
-- Equity = cash + Σ(qty × latest price).
+- Equity = cash + Σ(qty × latest known price). The price is the close of the newest bar with `t + 1 minute <= now` (section 7.2).
 - Return = equity / starting_cash − 1.
 - Excess return vs. SPY = return − SPY return over the same window.
 - Sharpe (season) = mean(daily returns) / std(daily returns) × √252, risk-free = 0; shown only after ≥ 5 trading days.
@@ -798,7 +798,7 @@ FILL_TIMEOUT_MINUTES=30   EVENT_IMPACT_THRESHOLD=0.7   MAX_EVENT_CYCLES_PER_DAY=
 MIN_ORDER_USD=5
 ```
 
-`DATA_DELAY_MINUTES=0` is the Week 1 default. Set it to 15 only when live play uses Massive Starter (section 7.2). There are no `ALPACA_*` settings. The Massive key is the existing app setting `MARKET_API_KEY`, with `MARKET_BASE_URL` and `MARKET_REQUESTS_PER_MINUTE` (default 5). League settings do not copy that key. `DATABASE_URL` is the app's sync URL. Local development uses `postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot`. The app opens one engine from it, and League uses `SessionLocal`. There is no `LEAGUE_DATABASE_URL`. There are no Supabase settings. `UNIVERSE_PATH` is the loader input (section 7.1).
+`DATA_DELAY_MINUTES=0` is the Week 1 default. Set it to 15 only when live play uses Massive Starter (section 7.2). There are no `ALPACA_*` settings. The Massive key is the existing app setting `MARKET_API_KEY`, with `MARKET_BASE_URL` and `MARKET_REQUESTS_PER_MINUTE` (default 5). League settings do not copy that key. `DATABASE_URL` is the app's sync URL. Local development uses `postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot`. The app opens one engine from it, and League uses `SessionLocal`. There is no `LEAGUE_DATABASE_URL`. League tests use `LEAGUE_TEST_DATABASE_URL`, default `postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot_test`. That name is a test environment variable, not an app setting. The QA downgrade runs there so it cannot drop bars in the dev database. There are no Supabase settings. `UNIVERSE_PATH` is the loader input (section 7.1).
 
 ## 16. Testing strategy
 
@@ -807,7 +807,7 @@ MIN_ORDER_USD=5
 | Fill engine | Fills use the first existing `league.bars` row with `t > order_time` and `t <= game_clock`; a gap test (no synthesized bar inside a hole); slippage direction; fractional qty rounding; expiry on halt; one Massive fallback fetch then expiry |
 | Risk engine | Each limit in section 9, per risk level, at the cap and one cent over; processing order; buys spend current cash only; player buys must be in the universe. Stop-loss at the threshold and one cent above. The pending-stop check is the connector's. Agent and LLM paths cannot set `rationales.system`. Only the stop-loss result may, and that row has empty `graph_path` and `news_ids` with `validated = true`. |
 | Property tests (hypothesis) | For random order sequences: cash never < 0, qty never < 0, equity = cash + Σ positions, ghost and actual diverge only via player orders |
-| No look-ahead | Backtest on synthetic data with a known future spike: agent must not "see" it |
+| No look-ahead | A minute bar's close is used only once `t + 1 minute <= now` (section 7.2). A backtest on synthetic data with a known future spike must not see it |
 | Rationale validation | Fake news IDs, future-dated news, non-existent edges, wrong path end → all rejected |
 | Agent graph | LLM mocked with fixed JSON; retry path; empty proposals |
 | API | Auth required; permission checks (can't read others' pending orders); rate limits |
@@ -825,7 +825,7 @@ Alerts (simple): marketdata stale > 5 min during market hours; simulator lag > 2
 
 | Week | Build | Done when |
 | --- | --- | --- |
-| 1 | Simulator core: `league` schema and its own Alembic version table, universe fixture plus `scripts/build_universe.py` (Massive reference check, not a broker asset list), game clock, Massive historical 1-minute backfill writing `league.bars`, offline XNYS calendar (`exchange_calendars`), pure fill and risk functions, repository, property tests, and a committed one-day bar fixture loaded into `league.bars` for the replay. No live poller and no IEX latency check. | A script places random orders for 1 day of replayed bars and all invariants hold. `public` is unchanged. The replay bars come from `backend/tests/fixtures/bars_one_day/`, produced by the backfill script, not invented. |
+| 1 | Simulator core: `league` schema and its own Alembic version table, universe fixture plus `scripts/build_universe.py` (Massive reference check, not a broker asset list), game clock, Massive historical 1-minute backfill writing `league.bars`, offline XNYS calendar (`exchange_calendars`), pure fill and risk functions, repository, property tests, and a one-day replay that reads `league.bars`. Real bars are not committed. Tests use synthetic bars. No live poller and no IEX latency check. | A script places seeded orders for 1 day of bars already in `league.bars` and all invariants hold. `public` is unchanged. The replay does not fetch. |
 | 2 | Agent: impact events, interest subgraph, LangGraph cycle, rationale validation, scheduler | Agents trade on live data; every trade has a validated rationale |
 | 3 | API + auth + WebSocket; Next.js onboarding, dashboard (equity chart, positions, trade feed) | A new user can sign up and watch their agent trade |
 | 4 | Leagues, seasons, leaderboard, achievements, approve mode, you-vs-agent, trade detail 3D graph, landing galaxy | 5 friends in a private league with a live leaderboard |

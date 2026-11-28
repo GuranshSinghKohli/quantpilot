@@ -22,8 +22,17 @@ def test_localhost_urls_pass() -> None:
         "postgresql://quantpilot:quantpilot@localhost:5432/quantpilot",
         "postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot",
         "postgresql://quantpilot:quantpilot@[::1]:5432/quantpilot",
+        "postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot_test",
+        "postgresql://quantpilot:quantpilot@localhost:5433/quantpilot_test",
     ):
         assert assert_localhost_database_url(url) == url
+
+
+@pytest.mark.parametrize("name", ["roadsafety", "quantpilot_other", "postgres"])
+def test_localhost_database_outside_the_allowed_set_is_refused(name: str) -> None:
+    url = f"postgresql://quantpilot:quantpilot@127.0.0.1:5433/{name}"
+    with pytest.raises(LeagueDatabaseRefused, match=name):
+        assert_localhost_database_url(url)
 
 
 @pytest.mark.parametrize(
@@ -62,6 +71,20 @@ class _Conn:
 def test_quantpilot_without_public_users_is_refused() -> None:
     with pytest.raises(LeagueDatabaseRefused, match="public.users"):
         assert_league_database(_Conn("quantpilot", None))
+
+
+def test_quantpilot_test_without_public_users_is_refused() -> None:
+    with pytest.raises(LeagueDatabaseRefused, match="public.users"):
+        assert_league_database(_Conn("quantpilot_test", None))
+
+
+def test_quantpilot_test_with_public_users_is_accepted() -> None:
+    assert_league_database(_Conn("quantpilot_test", 1)) is None
+
+
+def test_connected_database_outside_the_allowed_set_is_refused() -> None:
+    with pytest.raises(LeagueDatabaseRefused, match="roadsafety"):
+        assert_league_database(_Conn("roadsafety", 1))
 
 
 def test_alembic_refuses_an_rds_url_before_connecting() -> None:

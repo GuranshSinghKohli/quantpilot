@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_EVEN, Decimal
 from typing import Callable, Optional
 from zoneinfo import ZoneInfo
@@ -22,7 +22,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.league.config import RISK_LIMITS, LeagueSettings
 from app.league.models import Agent, AgentCycle, Bar, Fill, League, Order, Player, Position, Rationale, Season
-from app.league.repo import BarInput, create_order, create_portfolio, get_portfolio, upsert_bars
+from app.league.repo import (
+    BarInput,
+    create_order,
+    create_portfolio,
+    get_portfolio,
+    latest_known_prices,
+    upsert_bars,
+)
 from app.league.sim.calendar import SessionCalendar
 from app.league.sim.clock import ManualClock
 from app.league.sim.process import process_order
@@ -330,24 +337,9 @@ def _bars_for(scenario: _Scenario) -> list[BarInput]:
     return bars
 
 
-def _latest_stored(session: Session, tickers: list[str], now: datetime) -> dict[str, Decimal]:
-    if not tickers:
-        return {}
-    rows = session.execute(
-        select(Bar.ticker, Bar.t, Bar.c).where(Bar.ticker.in_(tickers), Bar.t <= now).order_by(Bar.t.asc())
-    ).all()
-    found: dict[str, Decimal] = {}
-    for ticker, _when, close in rows:
-        found[ticker] = close
-    return found
-
-
-def _latest(bars: list[BarInput], now: datetime) -> dict[str, Decimal]:
-    found: dict[str, tuple[datetime, Decimal]] = {}
-    for bar in bars:
-        if bar.t <= now and (bar.ticker not in found or bar.t > found[bar.ticker][0]):
-            found[bar.ticker] = (bar.t, bar.c)
-    return {ticker: price for ticker, (_when, price) in found.items()}
+def _prices(session: Session, tickers: list[str] | tuple[str, ...], now: datetime) -> dict[str, Decimal]:
+    """Completed minutes only. A bar at exactly now is not a price yet."""
+    return latest_known_prices(session, tickers, now)
 
 
 def _snapshot(session: Session, portfolio_id: uuid.UUID) -> PortfolioSnapshot:
@@ -646,29 +638,26 @@ def _cash_from_fills(session: Session, portfolio_id: uuid.UUID, commission: Deci
 def _assert_books(
     session: Session,
     portfolio_ids: tuple[uuid.UUID, uuid.UUID],
-    bars: list[BarInput],
     clock: ManualClock,
     calendar: SessionCalendar,
     commission: Decimal,
     terminal: dict[uuid.UUID, str],
 ) -> None:
     now = clock.now()
-    prices = _latest(bars, now)
+    cutoff = now - timedelta(minutes=1)
     actual_id, ghost_id = portfolio_ids
     books = []
     for portfolio_id in portfolio_ids:
         session.expire_all()
         view = get_portfolio(session, portfolio_id)
         assert view.portfolio.cash >= 0
+        prices = _prices(session, [position.ticker for position in view.positions], now)
         for position in view.positions:
             assert position.qty > 0
             assert position.avg_cost == (position.cost_basis / position.qty).quantize(_CASH, rounding=ROUND_HALF_EVEN)
             assert position.ticker in prices
-        stored = _latest_stored(session, [position.ticker for position in view.positions], now)
-        for position in view.positions:
-            assert stored[position.ticker] == prices[position.ticker]
         equity = view.portfolio.cash + sum(
-            (position.qty * stored[position.ticker] for position in view.positions),
+            (position.qty * prices[position.ticker] for position in view.positions),
             Decimal("0"),
         )
         sql_equity = session.scalar(
@@ -679,7 +668,7 @@ def _assert_books(
                     FROM league.positions pos
                     JOIN LATERAL (
                         SELECT c FROM league.bars
-                        WHERE ticker = pos.ticker AND t <= :now
+                        WHERE ticker = pos.ticker AND t <= :cutoff
                         ORDER BY t DESC
                         LIMIT 1
                     ) latest ON true
@@ -689,7 +678,7 @@ def _assert_books(
                 WHERE p.id = :portfolio_id
                 """
             ),
-            {"now": now, "portfolio_id": portfolio_id},
+            {"cutoff": cutoff, "portfolio_id": portfolio_id},
         )
         assert equity == sql_equity
         assert view.portfolio.cash == _cash_from_fills(session, portfolio_id, commission)
@@ -782,7 +771,7 @@ def _play(session: Session, scenario: _Scenario) -> None:
     exclusions = _exclusions(scenario)
     for index, target in enumerate(scenario.targets):
         when = clock.now()
-        prices = _latest(bars, when)
+        prices = _prices(session, scenario.names, when)
         proposals = [
             Proposal(ticker=ticker, action=action, size_pct_of_equity=size, confidence=confidence)
             for ticker, action, size, confidence in scenario.proposals[index]
@@ -790,7 +779,7 @@ def _play(session: Session, scenario: _Scenario) -> None:
         for portfolio_id in portfolio_ids:
             snapshot = _snapshot(session, portfolio_id)
             if any(position.ticker not in prices for position in snapshot.positions):
-                raise AssertionError("a held ticker has no price at or before the clock")
+                raise AssertionError("a held ticker has no completed minute")
             today = _buys_today(session, portfolio_id, when.astimezone(_UTC).date())
             orders, _dropped = apply_risk(
                 proposals,
@@ -807,11 +796,11 @@ def _play(session: Session, scenario: _Scenario) -> None:
             _submit_agent(session, portfolio_id, agent_id, orders, when, calendar)
         _advance_across(clock, target)
         _process_open(session, portfolio_ids, clock, calendar, settings)
-        prices = _latest(bars, clock.now())
+        prices = _prices(session, scenario.names, clock.now())
         for portfolio_id in portfolio_ids:
             snapshot = _snapshot(session, portfolio_id)
             if any(position.ticker not in prices for position in snapshot.positions):
-                raise AssertionError("a held ticker has no price at or before the clock")
+                raise AssertionError("a held ticker has no completed minute")
             stops = check_stop_losses(snapshot.positions, prices, scenario.level)
             _submit_stops(session, portfolio_id, stops, clock.now(), calendar, scenario.level, snapshot, prices)
         player = scenario.players[index]
@@ -840,11 +829,11 @@ def _play(session: Session, scenario: _Scenario) -> None:
                     )
                 else:
                     assert isinstance(decided, Dropped)
-        _assert_books(session, portfolio_ids, bars, clock, calendar, scenario.commission, terminal)
+        _assert_books(session, portfolio_ids, clock, calendar, scenario.commission, terminal)
     if clock.now() < _FINAL:
         _advance_across(clock, _FINAL)
     _process_open(session, portfolio_ids, clock, calendar, settings)
-    _assert_books(session, portfolio_ids, bars, clock, calendar, scenario.commission, terminal)
+    _assert_books(session, portfolio_ids, clock, calendar, scenario.commission, terminal)
 
 
 @_simulator_settings()
@@ -872,7 +861,7 @@ def test_order_queued_after_the_close_fills_at_the_next_open(simulator_engine) -
         decided = validate_player_order(
             PlayerOrder(ticker="AAPL", side="buy", notional_usd=Decimal("20")),
             snapshot,
-            _latest(bars, clock.now()),
+            latest_known_prices(session, ["AAPL"], clock.now()),
             _UNIVERSE,
             settings,
         )
@@ -907,25 +896,27 @@ def test_second_of_two_pending_sells_is_rejected(simulator_engine) -> None:
         settings = _league_settings(Decimal("0"))
         calendar = _calendar()
         agent_id, actual_id, _ghost_id = _seed(session, "balanced")
+        prior = _et(2031, 6, 2, 9, 30)
         first = _et(2031, 6, 2, 10, 0)
         fill_at = _et(2031, 6, 2, 10, 30)
         crash = _DAY2_OPEN
         later = _et(2031, 6, 3, 9, 45)
         bars = []
         for when, price in (
+            (prior, Decimal("50")),
             (first, Decimal("50")),
             (fill_at, Decimal("50")),
             (crash, Decimal("10")),
             (later, Decimal("10")),
         ):
             bars.append(BarInput(ticker="AAPL", t=when, o=price, h=price, l=price, c=price, v=100, feed="iex"))
-        assert upsert_bars(session, bars) == 4
+        assert upsert_bars(session, bars) == 5
         clock = ManualClock(first)
         snapshot = _snapshot(session, actual_id)
         decided = validate_player_order(
             PlayerOrder(ticker="AAPL", side="buy", notional_usd=Decimal("100")),
             snapshot,
-            _latest(bars, clock.now()),
+            latest_known_prices(session, ["AAPL"], clock.now()),
             _UNIVERSE,
             settings,
         )
@@ -933,8 +924,8 @@ def test_second_of_two_pending_sells_is_rejected(simulator_engine) -> None:
         buy = _insert_order(session, actual_id, decided, clock.now(), calendar, source="player", rationale_id=None)
         _advance_across(clock, fill_at)
         process_order(session, buy.id, clock, calendar, settings)
-        _advance_across(clock, crash)
-        prices = _latest(bars, clock.now())
+        _advance_across(clock, crash + timedelta(minutes=1))
+        prices = latest_known_prices(session, ["AAPL"], clock.now())
         snapshot = _snapshot(session, actual_id)
         assert len(snapshot.positions) == 1
         orders, dropped = apply_risk(

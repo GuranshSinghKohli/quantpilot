@@ -11,9 +11,10 @@ A step is NOT done until every item below is shown with REAL command output in y
 
 ## Required checks after each step
 1. Full League test suite on a FRESH database:
-   - `alembic -c alembic_league.ini downgrade base` then `upgrade head` against 127.0.0.1:5433/quantpilot
+   - `alembic -c alembic_league.ini downgrade base` then `upgrade head` against 127.0.0.1:5433/quantpilot_test
+   - The dev database quantpilot is not the QA target. A downgrade there would drop league.bars.
    - `pytest tests/unit/league -v` — paste the full output
-2. `alembic -c alembic_league.ini check` — must report no drift. Paste output.
+2. `alembic -c alembic_league.ini check` against the same quantpilot_test URL — must report no drift. Paste output.
 3. Public schema untouched: the fingerprint test passes against the PUBLIC head revision (run `alembic upgrade head` on public first if behind).
 4. Scope check: `git status` and `git diff --stat` — only League paths changed. List any file outside League scope and why.
 5. Spec check: list every section of docs/QUANTPILOT_LEAGUE.md this step implements, and for each requirement say "tested by <test name>" or "NOT tested — reason".

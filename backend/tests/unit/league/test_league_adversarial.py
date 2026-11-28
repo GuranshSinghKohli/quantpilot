@@ -35,7 +35,16 @@ def league_conn():
 
 
 def test_default_url_points_at_the_local_compose_database() -> None:
-    assert DEFAULT_URL == "postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot"
+    assert DEFAULT_URL == "postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot_test"
+
+
+def test_suite_refuses_the_dev_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "LEAGUE_TEST_DATABASE_URL",
+        "postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot",
+    )
+    with pytest.raises(LeagueDatabaseRefused, match="quantpilot_test"):
+        _url()
 
 
 def test_offline_sql_refuses_a_database_that_is_not_quantpilot() -> None:

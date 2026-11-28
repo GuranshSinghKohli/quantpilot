@@ -17,6 +17,9 @@ override.tf.json
 # covered darwin_amd64 and would fail linux runners.
 .terraform.lock.hcl
 
+# Licensed Massive minute bars. The replay reads league.bars. Do not commit a dump.
+backend/tests/fixtures/bars_one_day/
+
 # Python
 __pycache__/
 *.py[cod]

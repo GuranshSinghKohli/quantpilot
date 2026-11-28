@@ -10,6 +10,8 @@ from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
 
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+# Dev data lives in quantpilot. The test suite and the QA downgrade use quantpilot_test.
+ALLOWED_DATABASES = frozenset({"quantpilot", "quantpilot_test"})
 
 
 class LeagueDatabaseRefused(RuntimeError):
@@ -32,22 +34,24 @@ def assert_localhost_database_url(url: str) -> str:
         raise LeagueDatabaseRefused(
             f"League migrations refuse host {host!r}. Only localhost is allowed; RDS and other hosts are not."
         )
-    if parsed.database != "quantpilot":
+    if parsed.database not in ALLOWED_DATABASES:
         raise LeagueDatabaseRefused(
-            f"League migrations refuse database {parsed.database!r}. Only quantpilot is allowed."
+            f"League migrations refuse database {parsed.database!r}. "
+            "Only quantpilot and quantpilot_test are allowed."
         )
     return url
 
 
 def assert_league_database(connection) -> None:
-    """Refuse anything other than the local quantpilot database that already has public.users.
+    """Refuse anything other than quantpilot or quantpilot_test, and require public.users.
 
     Call this after connecting and before CREATE SCHEMA league.
     """
     name = connection.execute(text("SELECT current_database()")).scalar()
-    if name != "quantpilot":
+    if name not in ALLOWED_DATABASES:
         raise LeagueDatabaseRefused(
-            f"League migrations refuse database {name!r}. Only quantpilot is allowed."
+            f"League migrations refuse database {name!r}. "
+            "Only quantpilot and quantpilot_test are allowed."
         )
     users = connection.execute(
         text(

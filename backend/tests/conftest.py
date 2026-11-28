@@ -17,6 +17,13 @@ _TEST_DB = Path(__file__).resolve().parent / "_test_session.db"
 if _TEST_DB.exists():
     _TEST_DB.unlink()
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB.as_posix()}"
+# League tests open their own engine. This does not replace DATABASE_URL, so
+# the rest of the suite stays on the throwaway sqlite file. The name is
+# quantpilot_test. A URL pointed at the dev database quantpilot is refused.
+os.environ.setdefault(
+    "LEAGUE_TEST_DATABASE_URL",
+    "postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot_test",
+)
 
 # Same rule for the lake: nothing under test may reach backend/data/lake or the
 # real bucket. Tests that need S3 build their own store (see tests/s3/).

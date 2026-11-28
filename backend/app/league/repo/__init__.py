@@ -1,6 +1,6 @@
 """League repository. Functions take a Session. None of them commit."""
 
-from app.league.repo.bars import first_bar_after, upsert_bars
+from app.league.repo.bars import first_bar_after, latest_known_prices, upsert_bars
 from app.league.repo.errors import (
     FillBeforeOrder,
     FillNotPositive,
@@ -36,6 +36,7 @@ __all__ = [
     "create_order",
     "create_portfolio",
     "first_bar_after",
+    "latest_known_prices",
     "get_portfolio",
     "record_fill",
     "set_order_status",

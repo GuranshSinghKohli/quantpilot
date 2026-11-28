@@ -35,6 +35,15 @@ class XNYSCalendar:
         self._first: date = self._cal.first_session.date()
         self._last: date = self._cal.last_session.date()
 
+    def session_bounds(self, day: date) -> tuple[datetime, datetime] | None:
+        """[open, close) for that New York date. None when the date is not a session.
+
+        A date outside the loaded range raises CalendarUnavailable.
+        """
+        probe = datetime(day.year, day.month, day.day, 12, 0, tzinfo=_NY)
+        self._require_known_day(_as_utc(probe))
+        return self._bounds(_as_utc(probe))
+
     def is_open(self, t: datetime) -> bool:
         moment = _as_utc(t)
         self._require_known_day(moment)

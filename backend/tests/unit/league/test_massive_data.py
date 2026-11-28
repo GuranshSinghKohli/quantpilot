@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from decimal import Decimal
 
 import httpx
@@ -253,6 +254,43 @@ def test_backfill_is_idempotent_and_stores_fractional_volume(bars_session) -> No
     assert stored.v == Decimal("10.5")
     assert stored.feed == "massive"
     assert stored.t == _OPEN
+
+
+def test_backfill_exits_before_a_request_when_the_key_is_empty(monkeypatch, capsys) -> None:
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[4] / "scripts" / "backfill_bars.py"
+    spec = importlib.util.spec_from_file_location("backfill_bars_under_test", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    secret = "do-not-print-this-key"
+
+    class _Key:
+        def get_secret_value(self) -> str:
+            return ""
+
+    class _Settings:
+        DATABASE_URL = "postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot"
+        MARKET_API_KEY = _Key()
+        MARKET_BASE_URL = "https://api.massive.com"
+        MARKET_REQUESTS_PER_MINUTE = 5
+        unused_secret = secret
+
+    def explode(*_args, **_kwargs):
+        raise AssertionError("request")
+
+    monkeypatch.setattr(module, "get_settings", lambda: _Settings())
+    monkeypatch.setattr(module, "fetch_minute_bars", explode)
+    monkeypatch.setattr(module, "SessionLocal", explode)
+    code = module.main(["--start", "2026-11-24", "--end", "2026-11-24", "--tickers", "AAPL"])
+    captured = capsys.readouterr()
+    assert code == 2
+    assert captured.out == ""
+    assert captured.err == "MARKET_API_KEY is not set\n"
+    assert secret not in captured.out
+    assert secret not in captured.err
 
 
 @pytest.mark.skipif(os.environ.get("LEAGUE_MASSIVE_SMOKE") != "1", reason="set LEAGUE_MASSIVE_SMOKE=1 to call Massive")
