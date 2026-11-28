@@ -359,6 +359,89 @@ def test_agent_order_requires_an_existing_rationale(league_conn) -> None:
     )
 
 
+def test_ungrounded_rationale_accepts_an_empty_graph_path(league_conn) -> None:
+    league_conn.execute(
+        text(
+            """
+            INSERT INTO league.rationales
+                (id, cycle_id, summary, confidence, news_ids, graph_path,
+                 validated, system, grounding)
+            VALUES
+                (:id, :cycle_id, 'because', 0.5, ARRAY['n1'], '[]'::jsonb, true, false, false)
+            """
+        ),
+        {"id": str(uuid.uuid4()), "cycle_id": str(uuid.uuid4())},
+    )
+
+
+def test_ungrounded_rationale_still_rejects_empty_or_blank_news(league_conn) -> None:
+    _reject(
+        league_conn,
+        "ck_rationales_news_or_system",
+        """
+        INSERT INTO league.rationales
+            (id, cycle_id, summary, confidence, news_ids, graph_path,
+             validated, system, grounding)
+        VALUES
+            (:id, :cycle_id, 'because', 0.5, ARRAY[]::text[], '[]'::jsonb, true, false, false)
+        """,
+        {"id": str(uuid.uuid4()), "cycle_id": str(uuid.uuid4())},
+    )
+    _reject(
+        league_conn,
+        "ck_rationales_news_or_system",
+        """
+        INSERT INTO league.rationales
+            (id, cycle_id, summary, confidence, news_ids, graph_path,
+             validated, system, grounding)
+        VALUES
+            (:id, :cycle_id, 'because', 0.5, ARRAY[''], '[]'::jsonb, true, false, false)
+        """,
+        {"id": str(uuid.uuid4()), "cycle_id": str(uuid.uuid4())},
+    )
+
+
+def test_grounded_nonsystem_rationale_rejects_an_empty_graph_path(league_conn) -> None:
+    _reject(
+        league_conn,
+        "ck_rationales_graph_or_system",
+        """
+        INSERT INTO league.rationales
+            (id, cycle_id, summary, confidence, news_ids, graph_path,
+             validated, system, grounding)
+        VALUES
+            (:id, :cycle_id, 'because', 0.5, ARRAY['n1'], '[]'::jsonb, true, false, true)
+        """,
+        {"id": str(uuid.uuid4()), "cycle_id": str(uuid.uuid4())},
+    )
+
+
+def test_two_agents_with_the_same_name_in_one_league_are_rejected(league_conn) -> None:
+    ids = _ids(league_conn)
+    _reject(
+        league_conn,
+        "uq_agents_league_name",
+        """
+        INSERT INTO league.agents
+            (id, player_id, league_id, name, risk_level, style, mode, config_version)
+        VALUES
+            (:id, :player, :league, 'Check', 'balanced', 'momentum', 'autopilot', 1)
+        """,
+        {"id": str(uuid.uuid4()), **ids},
+    )
+    league_conn.execute(
+        text(
+            """
+            INSERT INTO league.agents
+                (id, player_id, league_id, name, risk_level, style, mode, config_version)
+            VALUES
+                (:id, :player, :league, 'Other', 'balanced', 'momentum', 'autopilot', 1)
+            """
+        ),
+        {"id": str(uuid.uuid4()), **ids},
+    )
+
+
 def test_nonsystem_rationale_rejects_an_empty_graph_path(league_conn) -> None:
     with pytest.raises(IntegrityError):
         with league_conn.begin_nested():

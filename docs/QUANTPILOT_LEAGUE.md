@@ -1,10 +1,18 @@
 # QuantPilot League — Design Doc
 
-A fantasy league for AI trading agents. Every player gets $1,000 in paper money and an AI agent that trades for them based on their interests and risk style. Every trade is explained by a verifiable path through QuantPilot's knowledge graph, from a news event to the stock it affects.
+An AI agent arena on the research desk. A fixed roster of agents, each with $1,000 of paper money, trades the same US universe on the same days. A grounded agent must cite real news and a path through QuantPilot's knowledge graph. An ungrounded agent is the plain-LLM baseline: news only, no graph. The Evaluation Lab runs every config over the same historical bars and reports the difference.
 
-Status: v1 design · Owner: Guransh Singh Kohli · Last updated: November 2026
+Status: v1 design, arena pivot November 2026 · Owner: Guransh Singh Kohli · Last updated: 28 November 2026
+
+This project is built to learn and for a portfolio. It does not have real users. There is no signup, no human league, and no player-facing game.
 
 This file is the League spec and the single source of truth. In League instructions, "DESIGN.md" means this file. Root `DESIGN.md` is the QuantPilot UI design system. It stays untouched. The League frontend reuses that file's colors, typography, spacing, and components. The 3D and effects libraries below are additions on top of it, not replacements.
+
+Arena pivot, November 2026. Section 6.2 is applied in undeployed migration 0001. The test database is rebuilt from that file. The dev database `quantpilot` is not migrated by this step, so its 10140 bars stay.
+
+- Removed from the product: human leagues, invite codes, league membership, player-facing seasons, achievements, XP, levels, the trophy room, approve mode, weekly recap cards and OG images, player onboarding, and a player-order UI.
+- Kept in the simulator, already built and tested, and not exposed in the UI: `validate_player_order` and orders with `source = 'player'`.
+- Added: the Agent Arena (section 1), the Evaluation Lab (section 11), per-cycle metrics (section 17), and the Week 4 screens (section 3).
 
 Amendments recorded before Week 1 code, against the November 2026 PDF:
 
@@ -13,7 +21,7 @@ Amendments recorded before Week 1 code, against the November 2026 PDF:
 - League models use their own `MetaData(schema="league")` and the existing sync engine and session factory (`psycopg2`). No `asyncpg`. Database access goes through `backend/app/league/repo/`. Fill and risk are pure functions.
 - Market data is Massive (formerly Polygon), the client QuantPilot already uses. Week 1 is the free Stocks Basic plan: historical 1-minute aggregates, 5 calls/minute. `DATA_DELAY_MINUTES` stays 0. Live play is later and would use Massive Starter with `DATA_DELAY_MINUTES=15`. There is no Alpaca client and no IEX latency check.
 - One-minute bars are stored in `league.bars`. Redis keeps only the latest price. Fills use the first existing bar strictly after the order time.
-- `league.rationales.system` defaults to false. Only the simulator may set it true. An empty graph path and empty news ids are allowed only then. The UI labels those trades "Auto stop-loss".
+- `league.rationales.system` defaults to false. Only the simulator may set it true. An empty graph path and empty news ids are allowed then. An ungrounded rationale (`grounding=false`) may also omit the graph path. It still needs real news ids. The UI labels system trades "Auto stop-loss".
 - Tests and the one-day replay read `backend/tests/fixtures/universe_small.csv`. `scripts/build_universe.py` writes `config/universe.csv`. The loader path is `UNIVERSE_PATH`.
 
 ## 0. How to use this document
@@ -29,83 +37,84 @@ This is the single source of truth for building QuantPilot League. Follow it exa
 
 ### 1.1 What it is
 
-QuantPilot League extends the existing QuantPilot stock-intelligence platform (Kafka + PySpark news pipelines, Neo4j company knowledge graph, LangGraph research agents, FastAPI, PostgreSQL) into a multiplayer game:
+QuantPilot League extends the existing research desk (Kafka + PySpark news pipelines, Neo4j company knowledge graph, LangGraph research agents, FastAPI, PostgreSQL) into an agent arena:
 
-- A player signs up, picks their interests (e.g. AI chips, clean energy), risk level, and style.
-- The player gets an AI agent with a $1,000 paper portfolio inside a league (a group of players competing over a season).
-- The agent trades automatically on real US market prices, using QuantPilot's news pipeline and knowledge graph.
-- Every trade comes with an explanation card: a plain-English summary, the news articles it relied on, and the graph path (e.g. TSMC —SUPPLIES→ NVIDIA —COMPETES_WITH→ AMD), rendered as an interactive 3D graph.
-- Players compete on a leaderboard, earn achievements, and can override their agent to see who does better: them or the AI.
+- A fixed roster of agent configs. Each config is one agent with its own $1,000 paper portfolio.
+- Every agent trades the same universe on the same days. The scheduler runs them on every XNYS session.
+- They are ranked live against each other and against SPY.
+- A grounded trade shows the news ids and the graph path (for example TSMC —SUPPLIES→ NVIDIA —COMPETES_WITH→ AMD) as a 3D graph. An ungrounded trade shows the news ids and is marked `grounding=false`.
+- The Evaluation Lab (section 11) runs the same configs over one historical window and stores the comparison. The main experiment is grounded versus ungrounded, same model and same style.
+
+The roster is not the full cartesian product of every style, risk level, and model. That would spend the token budget on combinations the experiment does not need. The roster is a checked-in file, `config/arena_roster.csv`, with columns `name,style,risk_level,llm_model,grounding_enabled,interests`. Each grounded row has an ungrounded twin: the same style, risk level, model, and interests, with `grounding_enabled=false`. The first rows are chosen at the start of Week 2. They have to fit `AGENT_DAILY_TOKEN_BUDGET` and `MARKET_REQUESTS_PER_MINUTE`. The model string is the provider's model id. This spec does not pick one.
+
+`style` is `news_driven`, `momentum`, `value_tilt`, or `contrarian` (section 8.5). `risk_level` is `conservative`, `balanced`, or `aggressive` (section 9). `grounding_enabled=true` means the cycle loads the Neo4j subgraph and a rationale is stored only when the graph path validates. `grounding_enabled=false` means news only. The graph-path requirement is off. The rationale is stored with `grounding=false`.
+
+Both kinds still go through `apply_risk`. Both must cite news ids that exist, are not blank, and are not published after the game clock. A stop-loss is still `system=true` and is not an LLM rationale.
+
+All of these agents belong to one system player and one arena league and season, so the foreign keys already in section 6 still resolve. That ownership is bookkeeping. It is not a human membership. Section 6.2 says what has to change so more than one agent can sit on that one player.
 
 ### 1.2 What makes it different from "an LLM picks stocks"
 
 | Typical AI trading project | QuantPilot League |
 | --- | --- |
-| LLM says "buy X" with a vague reason | Every trade cites real news IDs and a graph path that is validated against Neo4j before the trade is allowed |
-| Fills at whatever price is convenient | Realistic simulator: market hours, next-bar fills, slippage, no look-ahead |
+| LLM says "buy X" with a vague reason | A grounded trade cites real news ids and a graph path checked against Neo4j. An ungrounded trade still cites real news ids, and the row is flagged |
+| Fills at whatever price is convenient | Simulator: market hours, next-bar fills, slippage, no look-ahead |
 | LLM controls position size | Deterministic risk engine (plain Python) has the final say |
-| Single user, demo only | Multiplayer leagues, leaderboards, seasons, real users |
-| "It made money" claims | Honest backtests vs. SPY, including losing periods |
+| One demo prompt | A fixed roster, ranked against each other and against SPY, plus a paired grounded/ungrounded run |
+| "It made money" claims | The lab reports return, Sharpe, and drawdown, including the losing windows, and it states the LLM-knowledge caveat (section 11) |
 
-### 1.3 Target users (v1)
+### 1.3 Who it is for
 
-University students (start with Waterloo) who are curious about markets but don't want to risk real money.
+The author, as a learning project and a portfolio piece. There is no user account, no invite, and no launch to a club.
 
 ## 2. Core concepts and glossary
 
 | Term | Definition |
 | --- | --- |
-| Player | A signed-up user. |
-| League | A group of players competing in one season. Can be public (global) or private (invite code). |
-| Season | A fixed time window for a league (default 4 weeks). Portfolios reset each season. |
-| Agent | The AI trader owned by one player in one league. Has a config (interests, risk, style). |
-| Portfolio | Cash + positions for one agent in one season. Starts at $1,000.00 cash. |
-| Ghost portfolio | A shadow copy of the portfolio that only follows the agent's decisions, ignoring player overrides. Used for "You vs. your agent". |
-| Decision cycle | One run of the agent: gather context → analyze → propose orders → risk check → execute → explain. |
-| Order | A request to buy/sell a ticker. v1 supports market orders only. |
-| Fill | The simulated execution of an order at a specific price and time. |
-| Rationale | The explanation attached to every agent order: summary, evidence (news IDs), graph path, confidence. |
-| Universe | The set of tradable tickers (default: S&P 500 constituents + a fixed ETF list, US only). |
-| Game clock | The time the simulator considers "now". Equals real time minus `DATA_DELAY_MINUTES` (section 7.2). |
+| Arena | The one system league. Every roster agent trades inside it. |
+| Roster | The checked-in list of agent configs. Not a user-built agent. |
+| Agent | One config: style, risk level, LLM model, `grounding_enabled`, and interests. One paper portfolio. |
+| Portfolio | Cash + positions for one agent. Starts at $1,000.00. The arena uses `kind = 'actual'` only. |
+| Ghost portfolio | Still in the schema and the tests. The arena does not create one. It existed for a human-versus-agent view that this product does not have. |
+| Player order | Still accepted by `validate_player_order` and by `source = 'player'`. Not exposed in the UI and not sent by the arena scheduler. |
+| Decision cycle | One run of the agent: gather context → analyze → propose orders → validate → risk check → execute → explain. |
+| Order | A request to buy or sell. Market orders only. |
+| Fill | The simulated execution at one price and time. |
+| Rationale | The explanation on an agent order: summary, news ids, graph path, confidence, and `grounding`. |
+| Grounded | `grounding_enabled=true`. The path is required and checked against Neo4j. |
+| Ungrounded | `grounding_enabled=false`. News only. The path may be empty. `rationales.grounding` is false. |
+| Universe | Tradable tickers. Default: S&P 500 constituents plus the fixed ETF list, US only. |
+| Game clock | The time the simulator treats as now. Real time minus `DATA_DELAY_MINUTES` (section 7.2). |
+| Evaluation run | One lab job: every roster config, one historical window, one seed, stored results. |
 
 ## 3. User experience (screens and flows)
+
+Week 4. No screen here is built. There is no onboarding and no form that creates an agent.
 
 ### 3.1 Screens
 
 | Route | Screen | Purpose |
 | --- | --- | --- |
-| `/` | Landing | 3D "market galaxy" hero, pitch, sign-up CTA |
-| `/onboarding` | Agent builder | 4 steps: interests → risk → style → name + avatar |
-| `/dashboard` | Home | Portfolio value (animated), equity curve vs. SPY, positions, latest trades feed |
-| `/trades/[id]` | Trade detail | Explanation card + 3D graph path + news evidence |
-| `/leagues` | Leagues list | Join public league, create/join private league via code |
-| `/leagues/[id]` | League page | Leaderboard (live), season countdown, members |
-| `/agent` | Agent settings | Edit config (locked fields during a season: see 3.3), autopilot vs. approve mode |
-| `/versus` | You vs. your agent | Actual portfolio vs. ghost portfolio chart |
-| `/achievements` | Trophy room | 3D trophies, XP, level |
-| `/recap/[seasonId]/[week]` | Weekly recap | Shareable summary card (OG image) |
-| `/backtest` | Backtest lab | Run your agent config on a past window, compare vs. SPY |
+| `/` | Landing | 3D market galaxy. Describes the arena. No sign-up |
+| `/arena` | Leaderboard | Live rank of the roster against each other and against SPY |
+| `/agents/[id]` | Agent | Equity curve vs SPY, positions, trade feed |
+| `/trades/[id]` | Trade detail | Why this agent traded: summary, news, and the 3D graph when the rationale is grounded |
+| `/evaluation` | Evaluation Lab | Stored runs. The grounded-versus-ungrounded table is the first view |
+| `/evaluation/[id]` | One run | Per-config return vs SPY, Sharpe, max drawdown, trade count, validation rejects, unsupported-claim rate, cost, latency |
 
-### 3.2 Onboarding flow
+### 3.2 What is not on screen
 
-1. Interests — pick 1–5 themes from a fixed list (section 8.2). Each theme maps to nodes in Neo4j.
-2. Risk level — `conservative`, `balanced`, `aggressive` (maps to hard limits, section 9).
-3. Style — `news_driven`, `momentum`, `value_tilt`, `contrarian` (changes the prompt and scoring, section 8.4).
-4. Name + avatar — agent name (3–24 chars) and one of the preset 3D avatars.
-5. Optional exclusions — tickers or sectors the agent must never buy.
-6. Player is placed in the current public league season (or joins a private one by code).
+Human leagues, invite codes, membership, player-facing seasons, achievements, XP, levels, a trophy room, approve mode, weekly recap cards, OG images, player onboarding, and a player-order ticket. `validate_player_order` stays in the simulator and is not called from the UI.
 
-### 3.3 Config changes mid-season
+### 3.3 Config changes
 
-- Interests and style: may be changed once per week; change takes effect at the next trading day open.
-- Risk level: locked for the season (prevents gaming the leaderboard).
-- Mode (autopilot vs. approve): can change any time.
+The roster file is the config. Editing it is a code change, not a click in the app. A live agent does not change style, risk, model, or grounding in the middle of a session. The lab reads the same file, so a run names the roster it used.
 
 ### 3.4 Modes
 
-- Autopilot (default): agent orders execute automatically after the risk check.
-- Approve mode: agent orders become `pending_approval`; the player has 30 minutes (game clock) to approve or reject; unapproved orders expire.
-- Manual override: the player can place their own market orders anytime. These affect the real portfolio but not the ghost portfolio.
+- Grounded: the cycle loads candidate paths from Neo4j. Validation requires a non-empty path (section 8.4).
+- Ungrounded: the cycle does not load paths. Validation does not require a path. News rules still apply. The stored rationale has `grounding=false`.
+- Execution is automatic after the risk check. There is no approve step. `pending_approval` stays in the status check so the existing tests still mean something. `create_order` does not write that status. The UI does not send it.
 
 ## 4. Tech stack
 
@@ -129,15 +138,14 @@ League models use `MetaData(schema="league")` and the app's single engine. `app.
 | Market data | Massive (formerly Polygon) via the existing `SourceClient` | Week 1: Stocks Basic, historical 1-minute aggregates, 5 calls/minute. The League wrapper does not change `backend/app/market/`. See 7.2. |
 | Market calendar | `exchange_calendars`, exchange `XNYS`, offline | Session open/close, holidays, early closes. No network call. |
 | News | Existing Massive news adapter (`NEWS_API_KEY`) | League does not add a second news vendor. |
-| Cache / leaderboard / pub-sub | Redis (`redis` Python package, asyncio API) | Latest prices, sorted-set leaderboards, pub/sub to the WebSocket hub, rate limits |
-| Scheduler | APScheduler (`apscheduler`, `AsyncIOScheduler`) | Decision cycles, leaderboard snapshots, season rollover |
+| Cache / leaderboard / pub-sub | Redis (`redis` Python package, asyncio API) | Latest prices, the arena sorted set, pub/sub to the WebSocket hub, the lab's response cache |
+| Scheduler | APScheduler (`apscheduler`, `AsyncIOScheduler`) | Decision cycles on each XNYS session, leaderboard snapshots, cycle metrics |
 | Kafka client | `confluent-kafka` (or `aiokafka`) | Produce/consume from Python services |
-| Auth | Existing QuantPilot auth (section 6.1) | League routes reuse `public.users` and the current bearer JWT. Not wired in Week 1. |
+| Auth | Existing QuantPilot auth (section 6.1) | The desk already has it. The arena UI is read-only and does not add accounts. Not wired in Week 1 or Week 2. |
 | Analytics/maths | pandas, numpy | Metrics (returns, Sharpe, drawdown), backtests |
 | HTTP client | httpx | External calls |
 | Logging | structlog | Structured logs with `cycle_id`, `agent_id` |
 | Testing / lint | pytest, pytest-asyncio, hypothesis, ruff, mypy | Quality |
-| OG images | Next.js `ImageResponse` from `next/og` | Shareable recap cards |
 
 ### 4.3 Frontend core
 
@@ -151,11 +159,10 @@ The League UI follows root `DESIGN.md`: its colors, typography, spacing, and exi
 | `lucide-react` | Icons |
 | `@tanstack/react-query` | Server state, caching, refetching |
 | `zustand` | Client state (live prices, WebSocket status, UI) |
-| `zod` + `react-hook-form` + `@hookform/resolvers` | Forms + validation (onboarding, agent settings) |
-| Existing QuantPilot session | Auth. The League UI does not add Supabase. |
+| Existing QuantPilot session | The desk's auth. The arena UI does not add a League account and does not add Supabase. |
 | `date-fns` + `date-fns-tz` | Market-time formatting (America/New_York) |
 | `clsx` + `tailwind-merge` | Class utilities (shadcn standard) |
-| `sonner` | Toast notifications ("Your agent bought 2.1 AMD") |
+| `sonner` | Toast when a roster agent fills |
 | `cmdk` | Command palette (search tickers, jump to pages) |
 | `vaul` | Mobile bottom-sheet drawers |
 
@@ -166,26 +173,26 @@ The League UI follows root `DESIGN.md`: its colors, typography, spacing, and exi
 | `three` | 3D engine | Peer dependency of the R3F packages below |
 | `@react-three/fiber` | React renderer for three.js | v9 pairs with React 19 |
 | `@react-three/drei` | Helpers: `OrbitControls`, `Float`, `Text`, `Html`, `Environment`, `useGLTF`, `Instances`, `Sparkles`, `Stars` | Use `Instances` for the market galaxy (500+ stocks) |
-| `@react-three/postprocessing` | Bloom, vignette, chromatic aberration | Bloom on glowing nodes in the galaxy and trophies |
-| `react-force-graph-3d` | 3D knowledge-graph explorer on the trade detail page | Built on three.js; load with `next/dynamic` and `ssr: false` |
+| `@react-three/postprocessing` | Bloom, vignette, chromatic aberration | Bloom on glowing nodes in the galaxy |
+| `react-force-graph-3d` | 3D graph on a grounded trade | Built on three.js; load with `next/dynamic` and `ssr: false`. An ungrounded trade does not mount it |
 | `react-force-graph-2d` | 2D fallback for mobile / low-power devices | Same data format as 3D |
 | `lightweight-charts` | TradingView-style candlestick and line charts (price, equity curve) | Client-only; create the chart in `useEffect` |
-| `recharts` | Simple charts: sector allocation donut, win-rate bars, backtest comparisons | |
+| `recharts` | Lab comparisons: grounded vs ungrounded, return and drawdown | |
 | `motion` | Animations: page transitions, list reordering on the leaderboard, layout animations | The package formerly called `framer-motion`; import from `motion/react` |
 | `gsap` + `@gsap/react` | Scroll-driven landing page sequences (`ScrollTrigger`) | Use the `useGSAP` hook for cleanup |
-| `@number-flow/react` | Smooth animated numbers for portfolio value and rank changes | |
-| `canvas-confetti` | Confetti on achievement unlock / season win | Respect reduced motion |
-| `@tsparticles/react` + `@tsparticles/slim` | Particle background on leaderboard / season finale | Use the slim bundle |
+| `@number-flow/react` | Animated equity and rank on the arena board | |
+| `@tsparticles/react` + `@tsparticles/slim` | Particle background on the arena leaderboard | Use the slim bundle. Not a season finale |
 | `@lottiefiles/dotlottie-react` | Small vector animations (agent "thinking", empty states) | Use free LottieFiles assets; check each asset's license |
 | Magic UI and Aceternity UI components | Copy-paste effect components (animated borders, shimmer buttons, marquee, spotlight cards) | Installed through the shadcn CLI registry or copied manually; they rely on `motion` and Tailwind |
 
 3D and effects guidelines:
 
 - Landing hero — "Market Galaxy": each universe stock is an instanced sphere (`drei` `Instances`); position by sector cluster, size by market cap, color by today's % change (green/red), bloom on big movers. Max ~600 instances.
-- Trade detail — "Why did my agent buy this?": `react-force-graph-3d` showing the rationale's graph path highlighted (thick glowing links, other neighbors dimmed). Clicking a node opens a side panel with the company and linked news.
-- Trophy room: 3D trophies as `.glb` models loaded with `useGLTF` (use CC0 models, e.g. from Poly Pizza or Kenney; record the license in `/public/models/LICENSES.md`).
+- Trade detail — "Why did this agent trade?": for a grounded rationale, `react-force-graph-3d` shows the path (thick links, other neighbors dimmed). A node opens a side panel with the company and the cited news. An ungrounded rationale shows the news and the flag `grounding=false`. It does not draw an empty graph.
 - Performance: all 3D components are lazy-loaded with `next/dynamic` (`ssr: false`); cap device pixel ratio at 2 (`<Canvas dpr={[1, 2]}>`); fall back to 2D on mobile or when WebGL is unavailable.
-- Accessibility: honor `prefers-reduced-motion` (disable confetti, particles, auto-rotation; use `motion`'s `useReducedMotion`). All numbers shown in 3D must also be available as text.
+- Accessibility: honor `prefers-reduced-motion` (disable particles and auto-rotation; use `motion`'s `useReducedMotion`). All numbers shown in 3D must also be available as text.
+
+Removed from this section because nothing left uses them: `canvas-confetti`, and the trophy-room `.glb` models (`useGLTF` on `drei` stays, because the galaxy still uses `drei`). `next/og` was in section 4.2 and is removed with the recap cards. `zod`, `react-hook-form`, and `@hookform/resolvers` were only there for onboarding and agent settings, so they are not in section 4.3.
 
 ### 4.5 Infrastructure and deployment
 
@@ -228,9 +235,9 @@ Sources
 | marketdata | Week 2+: pull 1-min bars for the universe on a schedule, under the Massive rate limit; upsert every fetched session bar into `league.bars` (section 7.2); write the latest price to Redis; publish `market.bars`. No WebSocket in Week 1. | 1 |
 | news-ingest | Existing QuantPilot ingest; publishes `news.raw` | 1 |
 | enrichment | Existing PySpark job, extended to output `events.impact` (section 8.3) | 1 |
-| scheduler | APScheduler: triggers decision cycles, leaderboard snapshots, metrics, season rollover | 1 |
+| scheduler | APScheduler: decision cycles each XNYS session, leaderboard snapshots, cycle metrics | 1 |
 | agent-worker | Consumes cycle triggers; runs the LangGraph decision graph; publishes `orders.proposed` | 2–4 (horizontal) |
-| simulator | Consumes `orders.proposed` and player orders; applies the risk engine; fills; writes Postgres; publishes `orders.filled` | exactly 1 (single writer for portfolios) |
+| simulator | Consumes `orders.proposed`; applies the risk engine; fills; writes Postgres; publishes `orders.filled`. `source = 'player'` still fills if a row exists. The arena does not produce those rows | exactly 1 (single writer for portfolios) |
 
 ### 5.2 Kafka topics
 
@@ -241,7 +248,7 @@ Sources
 | `news.enriched` | news_id | `{id, tickers[], themes[], sentiment, published_at}` | enrichment → agent-worker |
 | `events.impact` | event_id | `{event_id, news_id, root_ticker, impact_score, affected:[{ticker, path_id, hops}]}` | enrichment → scheduler |
 | `agent.cycle` | agent_id | `{agent_id, cycle_id, trigger: "scheduled"\|"event", event_id?}` | scheduler → agent-worker |
-| `orders.proposed` | portfolio_id | `{order_id, portfolio_id, ticker, side, notional_usd, source: "agent"\|"player", rationale_id?}` | agent-worker/api → simulator |
+| `orders.proposed` | portfolio_id | `{order_id, portfolio_id, ticker, side, notional_usd, source: "agent", rationale_id}` | agent-worker → simulator |
 | `orders.filled` | portfolio_id | `{order_id, fill_price, qty, filled_at}` | simulator → api (WebSocket fan-out) |
 
 Keying by `portfolio_id` keeps all orders for one portfolio in order on one partition.
@@ -256,13 +263,15 @@ League models declare `MetaData(schema="league")` and use the app's single engin
 
 All League reads and writes go through `backend/app/league/repo/`. The fill engine and the risk engine are pure functions: values in, values out, no session. The simulator worker loads rows through the repository, calls those functions, and writes the results back through the repository.
 
-Week 1 repository functions, all taking the caller's `Session` and none of them committing: `upsert_bars`, `first_bar_after`, `create_portfolio`, `get_portfolio`, `create_order`, `set_order_status`, and `record_fill(order_id, fill, commission)`. `record_fill` is the only public function that changes cash or positions. `_apply_fill` is private. Inside `session.begin_nested()` it locks the order, then the portfolio (`SELECT ... FOR UPDATE`, that order). Both selects set `populate_existing` so a row already in the session is overwritten with the committed values. It inserts the fill, sets `status` to `filled`, and applies the section 7.4 cash formulas. The caller commits. Before any cash math, `record_fill` quantizes `qty` to 6 decimal places with `ROUND_DOWN` for both buys and sells, and `price` to 4 decimal places with `ROUND_CEILING` on a buy and `ROUND_FLOOR` on a sell. If either quantized value is `<= 0`, it raises `FillNotPositive` and writes nothing. A raw `price <= 0` or `qty <= 0`, a `bar_time <= game_time`, and a negative commission (`InvalidCommission`) are also rejected before any write. Cash then uses those quantized inputs. Debits quantize to 4 decimal places with `ROUND_CEILING` and credits with `ROUND_FLOOR`. `positions.cost_basis` stores the unrounded product `qty * price` of those inputs. A buy adds that product. A partial sell sets `cost_basis` to `cost_basis * new_qty / old_qty`, kept at 10 decimal places. `avg_cost` is `cost_basis / qty`, `ROUND_HALF_EVEN` to 4 decimal places, recomputed from `cost_basis` on every fill. `filled`, `rejected`, `expired`, and `cancelled` are terminal. `set_order_status` may move `accepted` to `queued`, `rejected`, `expired`, or `cancelled`, and `queued` to `accepted`, `rejected`, `expired`, or `cancelled`. `process_order` locks the order the same way before it reads the status, and returns without writing when that status is no longer `accepted` or `queued`. Any other move raises `StatusTransitionNotAllowed`. Only `record_fill` may set `filled`. `create_order` does not accept `pending_approval` until approve mode (week 3). A Hypothesis test of `record_fill` checks cash, quantity, and `avg_cost` on random buy and sell sequences. The default profile runs 20 examples. `HYPOTHESIS_PROFILE=thorough` runs 300. The test does not set its own example count, so the profile is what selects it.
+Week 1 repository functions, all taking the caller's `Session` and none of them committing: `upsert_bars`, `first_bar_after`, `create_portfolio`, `get_portfolio`, `create_order`, `set_order_status`, and `record_fill(order_id, fill, commission)`. `record_fill` is the only public function that changes cash or positions. `_apply_fill` is private. Inside `session.begin_nested()` it locks the order, then the portfolio (`SELECT ... FOR UPDATE`, that order). Both selects set `populate_existing` so a row already in the session is overwritten with the committed values. It inserts the fill, sets `status` to `filled`, and applies the section 7.4 cash formulas. The caller commits. Before any cash math, `record_fill` quantizes `qty` to 6 decimal places with `ROUND_DOWN` for both buys and sells, and `price` to 4 decimal places with `ROUND_CEILING` on a buy and `ROUND_FLOOR` on a sell. If either quantized value is `<= 0`, it raises `FillNotPositive` and writes nothing. A raw `price <= 0` or `qty <= 0`, a `bar_time <= game_time`, and a negative commission (`InvalidCommission`) are also rejected before any write. Cash then uses those quantized inputs. Debits quantize to 4 decimal places with `ROUND_CEILING` and credits with `ROUND_FLOOR`. `positions.cost_basis` stores the unrounded product `qty * price` of those inputs. A buy adds that product. A partial sell sets `cost_basis` to `cost_basis * new_qty / old_qty`, kept at 10 decimal places. `avg_cost` is `cost_basis / qty`, `ROUND_HALF_EVEN` to 4 decimal places, recomputed from `cost_basis` on every fill. `filled`, `rejected`, `expired`, and `cancelled` are terminal. `set_order_status` may move `accepted` to `queued`, `rejected`, `expired`, or `cancelled`, and `queued` to `accepted`, `rejected`, `expired`, or `cancelled`. `process_order` locks the order the same way before it reads the status, and returns without writing when that status is no longer `accepted` or `queued`. Any other move raises `StatusTransitionNotAllowed`. Only `record_fill` may set `filled`. `create_order` does not accept `pending_approval`. Approve mode is not in the product. The status value stays in the check so the existing status tests still apply. A Hypothesis test of `record_fill` checks cash, quantity, and `avg_cost` on random buy and sell sequences. The default profile runs 20 examples. `HYPOTHESIS_PROFILE=thorough` runs 300. The test does not set its own example count, so the profile is what selects it.
 
 `league.portfolios` is the paper cash book. It has nothing to do with `public.portfolios`, which is the existing watchlist.
 
 All money is `NUMERIC(14,4)`. Quantities are `NUMERIC(18,6)` (fractional shares). All timestamps are `TIMESTAMPTZ` in UTC.
 
 There is no `league.users` table and no Supabase user id.
+
+The block below is migration 0001, including the arena columns. Tests rebuild `quantpilot_test` from this file. Gamification tables stay until a later cleanup migration.
 
 ```
 league.players          (id UUID PK,
@@ -277,9 +286,11 @@ league.seasons          (id UUID PK, league_id UUID FK, number INT, starts_at TI
 league.league_members   (league_id FK, player_id UUID FK players, joined_at,
                          PRIMARY KEY (league_id, player_id))
 league.agents           (id UUID PK, player_id UUID FK players, league_id FK, name TEXT, risk_level TEXT,
-                         style TEXT, interests TEXT[] DEFAULT '{}', excluded_tickers TEXT[] DEFAULT '{}',
+                         style TEXT, llm_model TEXT NOT NULL DEFAULT 'unconfigured',
+                         grounding_enabled BOOLEAN NOT NULL DEFAULT true,
+                         interests TEXT[] DEFAULT '{}', excluded_tickers TEXT[] DEFAULT '{}',
                          excluded_sectors TEXT[] DEFAULT '{}', mode TEXT CHECK (mode IN ('autopilot','approve')),
-                         config_version INT, created_at, UNIQUE (player_id, league_id))
+                         config_version INT, created_at, UNIQUE (league_id, name))
 league.agent_config_history (id UUID PK, agent_id FK, config JSONB, effective_from TIMESTAMPTZ)
 league.portfolios       (id UUID PK, agent_id FK, season_id FK, kind TEXT CHECK (kind IN ('actual','ghost')),
                          cash NUMERIC(14,4) CHECK (cash >= 0), created_at,
@@ -306,17 +317,23 @@ league.fills            (id UUID PK, order_id FK UNIQUE, price NUMERIC(14,4) CHE
                          slippage_bps NUMERIC(6,2), bar_time TIMESTAMPTZ, filled_at TIMESTAMPTZ)
 league.rationales       (id UUID PK, cycle_id UUID NULL, summary TEXT, confidence NUMERIC(3,2),
                          news_ids TEXT[] DEFAULT '{}', graph_path JSONB, validated BOOL,
-                         system BOOLEAN NOT NULL DEFAULT false, created_at,
+                         system BOOLEAN NOT NULL DEFAULT false,
+                         grounding BOOLEAN NOT NULL DEFAULT true, created_at,
                          CHECK (confidence >= 0 AND confidence <= 1),
                          CHECK (system OR (cardinality(news_ids) > 0
                                 AND array_position(news_ids, NULL) IS NULL
                                 AND NOT ('' = ANY(news_ids)))),
-                         CHECK (system OR jsonb_array_length(graph_path) > 0),
+                         CHECK (system OR grounding = false OR jsonb_array_length(graph_path) > 0),
                          CHECK (system = true OR cycle_id IS NOT NULL))
 league.agent_cycles     (id UUID PK, agent_id FK, trigger TEXT, event_id TEXT NULL,
                          started_at, finished_at TIMESTAMPTZ NULL, status TEXT,
                          tokens_in INT DEFAULT 0, tokens_out INT DEFAULT 0,
-                         cost_usd NUMERIC(8,4) DEFAULT 0, error TEXT NULL)
+                         cost_usd NUMERIC(8,4) DEFAULT 0,
+                         latency_ms INT NULL,
+                         proposals_made INT DEFAULT 0, proposals_rejected INT DEFAULT 0,
+                         proposals_dropped INT DEFAULT 0,
+                         rejection_reasons JSONB DEFAULT '[]', drop_reasons JSONB DEFAULT '[]',
+                         error TEXT NULL)
 league.equity_snapshots (portfolio_id FK, t TIMESTAMPTZ,
                          equity NUMERIC(14,4) CHECK (equity >= 0),
                          cash NUMERIC(14,4) CHECK (cash >= 0),
@@ -338,9 +355,11 @@ league.bars             (ticker TEXT, t TIMESTAMPTZ,
 
 `league.rationales.system` defaults to false. Who may set `system = true` is an application rule: only the stop-loss path. That ban is tested when the agent code exists (week 2). The database does not enforce it. `cycle_id` is nullable. The database requires `system = true OR cycle_id IS NOT NULL`, so a stop-loss row can omit the cycle and an agent rationale cannot.
 
-A non-system rationale must have at least one news id, and none of those ids may be null or blank. Postgres enforces that with `system OR (cardinality(news_ids) > 0 AND array_position(news_ids, NULL) IS NULL AND NOT ('' = ANY(news_ids)))`. `graph_path` must be a non-empty JSON array unless `system` is true: `system OR jsonb_array_length(graph_path) > 0`. Checking each edge against Neo4j stays in application code (week 2). `validated = true` on an agent rationale is also an application rule. The UI labels system trades "Auto stop-loss" and does not draw a graph for them.
+A non-system rationale must have at least one news id, and none of those ids may be null or blank. Postgres enforces that with `system OR (cardinality(news_ids) > 0 AND array_position(news_ids, NULL) IS NULL AND NOT ('' = ANY(news_ids)))`. That check stays. An ungrounded agent is non-system, so it still has to cite real news ids. `grounding=false` does not relax it.
 
-`agent_cycles.finished_at` is nullable while the cycle is running. `tokens_in` and `tokens_out` default to 0. `cost_usd` defaults to 0. The text arrays `interests`, `excluded_tickers`, `excluded_sectors`, and `news_ids` default to `'{}'`.
+`ck_rationales_graph_or_system` is `system OR grounding = false OR jsonb_array_length(graph_path) > 0`. `grounding` defaults to true, so a row that omits the flag still needs a non-empty path when `system` is false. A stop-loss (`system=true`) may have an empty path. An ungrounded rationale (`grounding=false`) may have an empty path. Checking each edge against Neo4j stays in application code (week 2), and only when `grounding` is true. `validated = true` on an agent rationale is also an application rule. The UI labels system trades "Auto stop-loss" and does not draw a graph for them.
+
+`agent_cycles.finished_at` is nullable while the cycle is running. `tokens_in`, `tokens_out`, `proposals_made`, `proposals_rejected`, and `proposals_dropped` default to 0. `cost_usd` defaults to 0. `latency_ms` is null until the cycle finishes. `rejection_reasons` and `drop_reasons` default to `'[]'`. The text arrays `interests`, `excluded_tickers`, `excluded_sectors`, and `news_ids` default to `'{}'`. `agents.llm_model` defaults to `'unconfigured'`. `agents.grounding_enabled` defaults to true.
 
 `league.bars` is the durable 1-minute bar store. The marketdata poller upserts each fetched bar with `ON CONFLICT (ticker, t) DO NOTHING`. The repository reads this table for fills (section 7.4). Redis does not store the bar history. `league.bars.v` is `NUMERIC(20,6)`, the same width as `public.market_bars.volume` after migration 0013. Massive sends `v` as a fractional number. The column keeps that fraction. A bar is not dropped because its volume is not a whole share.
 
@@ -358,18 +377,39 @@ Invariants enforced by application code, not by a constraint:
 - `status = 'filled'` exists only together with its fill row. Only `record_fill` sets that status, and only inside the savepoint that also inserts the fill and updates cash and the position. `filled`, `rejected`, `expired`, and `cancelled` do not change again. `create_order` and `set_order_status` reject `filled`.
 - `source = 'agent'` implies the referenced rationale has `validated = true`. Week 2.
 - Only the stop-loss path sets `rationales.system = true`. Week 2.
-- Each `graph_path` element is a real Neo4j edge. Week 2. The database only requires a non-empty array when `system` is false.
+- Each `graph_path` element is a real Neo4j edge. Week 2, and only when `grounding` is true.
+- The arena calls `require_configured_model` before a cycle. `llm_model` of `'unconfigured'` or blank raises `UnconfiguredModel`. The database default is allowed as a stored value. The scheduler is Week 2. The gate is tested now.
+- A rationale's `grounding` flag equals that agent's `grounding_enabled`. The database does not check this. The Week 2 path that inserts rationales does, and that path gets the test. It is not built yet.
 
-### 6.1 Existing auth (reused later, not in Week 1)
+### 6.2 Arena columns in 0001
+
+Applied in `backend/alembic_league/versions/0001_league_schema.py`. The test database is rebuilt from that file. Inserts that omit the new columns still succeed, because each new column has a server default. The model omits the column or sends the default. It does not send NULL over the default.
+
+- `agents.llm_model TEXT NOT NULL DEFAULT 'unconfigured'`
+- `agents.grounding_enabled BOOLEAN NOT NULL DEFAULT true`
+- `rationales.grounding BOOLEAN NOT NULL DEFAULT true`
+- `ck_rationales_graph_or_system`: `system OR grounding = false OR jsonb_array_length(graph_path) > 0`
+- `UNIQUE (league_id, name)` named `uq_agents_league_name`. This replaced `UNIQUE (player_id, league_id)`, so one system player can hold the roster. Names are unique inside one league.
+- `agent_cycles.latency_ms INTEGER NULL`
+- `agent_cycles.proposals_made`, `proposals_rejected`, `proposals_dropped` `INTEGER NOT NULL DEFAULT 0`
+- `agent_cycles.rejection_reasons` and `drop_reasons` `JSONB NOT NULL DEFAULT '[]'`
+
+`achievements`, `user_achievements`, `league_members`, `leagues.invite_code`, `players.xp`, `players.avatar_id`, `portfolios.kind = 'ghost'`, `orders.source = 'player'`, and `pending_approval` stay. `test_metadata_contains_only_league_tables` asserts that table set. The fingerprint test asserts `uq_user_achievements_player_achievement_season` is `NULLS NOT DISTINCT`. A later cleanup migration drops the unused gamification objects, and only after those tests are rewritten on purpose.
+
+The arena seed, when it is built, is one `public.users` row, one `league.players` row (`display_name` Arena, `xp` 0, a placeholder `avatar_id`), one `league.leagues` row (name Arena, `invite_code` NULL, that player as owner), and one `league.seasons` row (`status` active, `starting_cash` 1000, no rollover). Each roster row is one `league.agents` row on that player and league, plus one `actual` portfolio. No `league_members` row. No ghost portfolio.
+
+Evaluation result tables are a Week 3 migration. Adding them to 0001 would change the table set the migration test asserts.
+
+### 6.1 Existing auth (reused by the desk, not by the arena)
 
 QuantPilot already authenticates `public.users`. League does not add a second account system.
 
 - `POST /auth/register` stores `public.users` (integer id, email, bcrypt password hash) and a `public.portfolios` watchlist row named "Default".
 - `POST /auth/login` checks the password and returns an HS256 JWT. The `sub` claim is that integer user id. Expiry comes from `JWT_EXPIRE_DAYS`.
 - Callers send `Authorization: Bearer <token>`. `get_current_user` loads `public.users` by that id. The reserved anonymous email is not a signed-in user.
-- A later League route uses that same dependency, then loads `league.players` where `user_id` equals `public.users.id`.
+- The arena seed inserts one `public.users` row and one `league.players` row for the system player (section 6.2). The UI does not register a person and does not look up a player from a JWT.
 
-Week 1 does not add League routes and does not create player rows from signup.
+Week 1 does not add League routes. The arena does not add a signup route.
 
 ## 7. Market simulator
 
@@ -379,7 +419,7 @@ Default contents: current S&P 500 constituents plus these ETFs: SPY, QQQ, DIA, I
 
 The loader reads `UNIVERSE_PATH`. The default is `config/universe.csv`. Columns are exactly `ticker`, `name`, `sector`, and `market_cap`. A missing or extra column fails and the error names the columns. `market_cap` may be empty. The loader does not invent a market cap. The file is opened as `utf-8-sig`, and whitespace is stripped from headers and values. A ticker must match `^[A-Z][A-Z.]{0,5}$`, must not end with a dot, and is stored and looked up in that uppercase form. If the file is missing, the loader fails with an error that names the path. `load_universe` returns a frozen universe with lookup by ticker and by sector.
 
-`backend/tests/fixtures/universe_small.csv` is the Week 1 fixture, about 25 liquid names across sectors. It includes AAPL, MSFT, NVDA, AMD, TSM, GOOGL, AMZN, META, JPM, XOM, UNH, TSLA, SPY, QQQ, XLK, and SMH. Tests and the one-day replay pass this path. It is not the season universe.
+`backend/tests/fixtures/universe_small.csv` is the Week 1 fixture, about 25 liquid names across sectors. It includes AAPL, MSFT, NVDA, AMD, TSM, GOOGL, AMZN, META, JPM, XOM, UNH, TSLA, SPY, QQQ, XLK, and SMH. Tests and the one-day replay pass this path. It is not the arena universe. The arena universe is the file `scripts/build_universe.py` writes. That script is step 12 and is not built yet.
 
 `scripts/build_universe.py` writes `config/universe.csv`:
 
@@ -391,7 +431,7 @@ The loader reads `UNIVERSE_PATH`. The default is `config/universe.csv`. Columns 
 - `market_cap` is left empty. The script does not look up or invent a market cap.
 - It prints a summary: total tickers written, how many were dropped, and why.
 
-The season file is refreshed by running that script, not by editing prices by hand. Long-only. US stocks and ETFs only. No options, crypto, shorting, or margin.
+The arena file is refreshed by running that script, not by editing prices by hand. Long-only. US stocks and ETFs only. No options, crypto, shorting, or margin.
 
 ### 7.2 Prices and the game clock
 
@@ -449,7 +489,7 @@ A unit test builds a bar series with a gap and asserts the fill uses the first b
 ### 7.5 Orders accepted by the simulator
 
 - Agent orders: notional USD (e.g. "buy $120 of AMD") or sell fraction of position (e.g. "sell 50% of AMD"). The risk engine converts "sell X% of position" into a quantity when it creates the order: `floor` to 6 decimal places of the shares held times that percent, never more than the shares held. `decide_fill` still accepts `fraction`. `process_order` does not: the order it sees already has a quantity.
-- Player orders: notional USD or quantity.
+- Player orders: notional USD or quantity. `validate_player_order` still accepts them. They are not exposed in the UI. The arena scheduler does not create them.
 - Minimum order size: $5 for `apply_risk` and for player orders. A stop-loss sells the full quantity even when that is under $5. The check belongs to the risk engine, not the fill engine.
 
 ### 7.6 Corporate actions (v1)
@@ -526,7 +566,7 @@ class CycleState(BaseModel):
     game_time: datetime
     trigger: Literal["scheduled", "event"]
     event_id: str | None
-    config: AgentConfig              # interests, risk_level, style, exclusions
+    config: AgentConfig              # style, risk_level, llm_model, grounding_enabled, interests, exclusions
     portfolio: PortfolioSnapshot     # cash, positions with current prices, equity
     news: list[NewsItem]             # last 24h, filtered to interest subgraph, published_at <= game_time
     paths: list[GraphPath]           # candidate second-order paths from Neo4j
@@ -537,12 +577,12 @@ class CycleState(BaseModel):
 
 | Node | Type | What it does |
 | --- | --- | --- |
-| `gather_context` | Code | Loads config, portfolio, prices (Redis), news (Postgres/Kafka store) and candidate paths (Cypher). Caps: 20 news items, 15 paths. |
+| `gather_context` | Code | Loads config, portfolio, prices (Redis), and news (Postgres/Kafka store). Caps: 20 news items. When `grounding_enabled` is true, also loads up to 15 candidate paths (Cypher). When it is false, `paths` is empty and no Cypher query runs. |
 | `analyze_second_order` | LLM | Given news + paths, writes a short analysis of which companies are likely helped/hurt and why. |
 | `propose_orders` | LLM (structured output) | Returns JSON only, matching `OrderProposal[]` (below). May return an empty list ("hold"). |
 | `validate_rationale` | Code | Checks every proposal (rules below). On failure, sends errors back to `propose_orders` once (`MAX_RETRIES = 1`). |
 | `risk_check` | Code | Applies section 9 limits; resizes or drops orders. The LLM never decides final size. |
-| `submit_orders` | Code | Writes `rationales` + `orders`, publishes `orders.proposed` for both the actual and ghost portfolio. |
+| `submit_orders` | Code | Writes `rationales` + `orders` on the actual portfolio and publishes `orders.proposed`. The rationale's `grounding` flag copies `grounding_enabled`. The arena does not write a ghost portfolio. |
 
 `OrderProposal` schema (LLM output):
 
@@ -567,8 +607,8 @@ Validation rules (all must pass):
 
 1. `ticker` is in the universe, not excluded, and (for buys) inside the agent's interest subgraph.
 2. Every `news_id` exists, has `published_at <= game_time`, and is within the last 72 hours.
-3. The `graph_path` is non-empty, ≤ 3 hops, ends at `ticker`, and every edge exists in Neo4j with `valid_from <= game_time` (checked with one Cypher query per path). This rule, and the news-id rule above, apply only when `system` is false. A system stop-loss rationale may have an empty path and empty `news_ids` (section 6).
-4. At least one cited news item mentions a company on the path. Same exception: not required when `system` is true.
+3. Graph path. When `grounding_enabled` is true, `graph_path` is non-empty, ≤ 3 hops, ends at `ticker`, and every edge exists in Neo4j with `valid_from <= game_time` (one Cypher query per path). When `grounding_enabled` is false, the path may be empty and is not checked. A system stop-loss rationale may have an empty path and empty `news_ids` (section 6). The database allows that empty path when `grounding=false` or `system=true`.
+4. When `grounding_enabled` is true, at least one cited news item mentions a company on the path. Not required when `system` is true, and not required when `grounding_enabled` is false.
 5. `summary` ≤ 280 characters; `confidence` in [0, 1].
 6. Sells only for tickers currently held.
 
@@ -585,11 +625,12 @@ A proposal that fails after the retry is dropped and logged (`agent_cycles.error
 
 ### 8.6 LLM usage and cost controls
 
-- Use a fast, cheap model for `analyze_second_order` and `propose_orders`; a stronger model only for weekly recaps. Model names live in config (`LLM_FAST_MODEL`, `LLM_STRONG_MODEL`).
+- The roster names the model per agent (`agents.llm_model`). `require_configured_model` refuses `'unconfigured'` and a blank id before a cycle. `LLM_FAST_MODEL` and `LLM_STRONG_MODEL` are not a second hidden choice. There is no weekly-recap model.
+- Week 2 adds a provider-agnostic call. The same cycle code can call a frontier model or an open-weight model (OpenRouter or a local Ollama). The roster column is the model id. The provider is chosen from that id. No provider client is built in this step.
 - Temperature 0.2. Structured output via the provider's JSON/tool-calling mode.
 - Per-agent daily token budget (`AGENT_DAILY_TOKEN_BUDGET`, default 60k). When exceeded, the agent holds until the next day.
-- Log tokens and cost per cycle (`agent_cycles`).
-- Cache identical prompts (hash of inputs) in Redis for 10 min — useful for agents with the same config reacting to the same event.
+- Every cycle logs tokens, cost, latency, proposals made, proposals rejected by validation (with reasons), and proposals dropped by risk (with reasons). Section 17. Those columns are on `agent_cycles` in migration 0001.
+- Live cycles cache identical prompts in Redis for 10 minutes. The cache key is a hash of the model inputs: model id, roster config, game time, news ids, and the portfolio snapshot. The Evaluation Lab stores that response with the run so a second run with the same hash does not call the model (section 11).
 
 ## 9. Risk engine (deterministic)
 
@@ -628,117 +669,113 @@ Stop-loss: `check_stop_losses(positions, prices, risk_level)` is a pure function
 
 The connector that later submits these sells must not create a second stop-loss sell while one is already pending for that ticker. `check_stop_losses` does not see open orders, so that check belongs to the connector. The connector is not part of this step.
 
-Player orders (`validate_player_order`): a buy must be in the universe (`not in universe`). A sell of a held ticker is allowed even if it has left the universe. The order ticker's price must exist and be > 0 (`MissingPrice` otherwise). Cash and no-shorting apply, plus the $5 minimum. A buy's notional plus commission must fit in current cash. The order is accepted or dropped. It is not resized. Position limits, the cash buffer, exclusions, and the interest set do not apply to players.
+Player orders (`validate_player_order`): a buy must be in the universe (`not in universe`). A sell of a held ticker is allowed even if it has left the universe. The order ticker's price must exist and be > 0 (`MissingPrice` otherwise). Cash and no-shorting apply, plus the $5 minimum. A buy's notional plus commission must fit in current cash. The order is accepted or dropped. It is not resized. Position limits, the cash buffer, exclusions, and the interest set do not apply to players. This function stays. It is not exposed in the UI. The arena does not call it.
 
-## 10. Scoring, leaderboards and gamification
+## 10. Scoring and the arena board
+
+There is no XP, no level, no achievement, and no season award.
 
 ### 10.1 Metrics (per portfolio)
 
 - Equity = cash + Σ(qty × latest known price). The price is the close of the newest bar with `t + 1 minute <= now` (section 7.2).
 - Return = equity / starting_cash − 1.
-- Excess return vs. SPY = return − SPY return over the same window.
-- Sharpe (season) = mean(daily returns) / std(daily returns) × √252, risk-free = 0; shown only after ≥ 5 trading days.
+- Excess return vs. SPY = return − SPY return over the same window. SPY's window return is the first session open to the last session close in that window, the same definition the one-day replay prints.
+- Sharpe = mean(daily returns) / std(daily returns) × √252, risk-free = 0. Shown only after ≥ 5 trading days. If the standard deviation is 0, the value is omitted, not invented.
 - Max drawdown = max over t of (peak equity up to t − equity_t) / peak.
-- Win rate = % of closed round-trips with positive P&L.
+- Trade count = filled orders.
 
 ### 10.2 Leaderboard
 
-Redis sorted set `lb:{season_id}` with score = return (higher is better); tie-break by Sharpe, then earlier join.
+Redis sorted set `lb:arena` with score = return (higher is better). Tie-break by Sharpe, then by agent name.
 
-Recomputed every 5 minutes during market hours and at close; pushed to clients via WebSocket. Daily close snapshot stored in Postgres for history.
+Recomputed every 5 minutes during market hours and at the close. Pushed over the WebSocket. The daily close is also a row in `league.equity_snapshots`.
 
-Separate tabs: Overall, Beat SPY, Best Sharpe, Agent-only (ghost).
+The board is the roster plus a SPY row. SPY is not an agent and has no portfolio. Its return is the benchmark in section 10.1. There is no ghost tab and no human tab.
 
-### 10.3 Achievements (v1 list)
+## 11. Evaluation Lab
 
-| ID | Name | Condition | XP |
-| --- | --- | --- | --- |
-| `first_trade` | Opening Bell | Agent's first filled trade | 50 |
-| `diversified` | Spread the Love | Hold 5+ sectors at once | 100 |
-| `beat_spy_week` | Index Slayer | Beat SPY over a calendar week | 150 |
-| `called_it` | Called It | An agent buy gains ≥ 10% within 5 trading days | 200 |
-| `diamond_hands` | Diamond Hands | Hold a position for 20 trading days | 150 |
-| `overrule_win` | Trust Your Gut | Your overrides beat your ghost portfolio for a week | 200 |
-| `podium` | Podium | Finish a season top 3 in a league with ≥ 5 players | 500 |
-| `champion` | Champion | Finish a season #1 in a league with ≥ 5 players | 1000 |
+Week 3. Not built.
 
-Level = `floor(sqrt(XP / 100)) + 1`.
+Input: the roster file, a start date, an end date, and a seed. The window is capped at 6 months for one run. Decision times are the section 8.1 clock: 10:00, 12:30, and 15:30 America/New_York on each XNYS session in the window, plus the event trigger when an impact event is inside the window.
 
-### 10.4 Seasons
+Engine: the same decision graph, simulator, and risk engine, with an injected clock. Fills read `league.bars`. The bars come from `scripts/backfill_bars.py`. The run does not invent a price. The same fill rule applies: first in-session bar with `t > decision_time` and `t <= sim_time`. Marks use `latest_known_prices`.
 
-Default length 4 weeks, starting on a Monday at market open.
-
-At season end: final snapshot, awards, recap; new season created automatically; portfolios reset to starting cash. Agent configs carry over.
-
-### 10.5 Weekly recap
-
-Generated every Friday after close by the strong model from structured data (never invents numbers: the model receives the computed metrics and must only reference them). Rendered as a page and as an OG image via `next/og`.
-
-## 11. Backtesting
-
-Input: agent config, start/end date (max 6 months), decision frequency (`daily` default to control cost).
-
-Engine: the same decision graph, simulator and risk engine, with an injected `Clock` that replays historical time. Fills read `league.bars` (loaded by `scripts/backfill_bars.py` or the poller). The same `t > decision_time` and `t <= sim_time` rule applies.
-
-No look-ahead rules:
+No look-ahead:
 
 - News filtered to `published_at <= sim_time`.
-- Graph edges filtered to `valid_from <= sim_time`.
+- Graph edges filtered to `valid_from <= sim_time`. A relationship that was not known yet is not a path.
 - Fills use the first bar strictly after the decision time, and not after `sim_time`.
+- A minute bar's close is used only once `t + 1 minute <= sim_time`.
 
-Output: equity curve vs. SPY, return, Sharpe, max drawdown, trades with rationales.
+Every config in the roster is run on that same window. The stored row per config is:
 
-Limitation (show in UI): the LLM may have prior knowledge of past events from its training data, so backtests can be optimistic. Prefer windows after the model's knowledge cutoff when possible.
+- return vs SPY
+- Sharpe
+- max drawdown
+- trade count
+- `validation_reject_rate`
+- `unsupported_claim_rate`
+- LLM cost per agent-day
+- latency
 
-Backtests run as background jobs (Redis queue); results stored in Postgres (`backtests`, `backtest_trades` tables, same shape as live).
+`validation_reject_rate` = proposals failing any validation rule / proposals made. It is reported for grounded agents only. Those failures are blocked, so the order is not submitted.
+
+`unsupported_claim_rate` is comparable across grounded and ungrounded agents. The lab runs shadow validation on every proposal in both modes. Grounded agents are blocked when a check fails. Ungrounded agents are only recorded. A proposal is unsupported when any cited news id is missing, published after the decision time, or older than 72 hours, or when none of the cited news mentions the traded ticker or a company linked to it in Neo4j within 3 hops. The evaluator checks that graph link. The agent does not. A missing graph path on an ungrounded proposal does not count as unsupported, because the evaluator looks up the link itself. Universe, exclusion, and "not held" failures count in `validation_reject_rate` and do not count as unsupported claims.
+
+The Week 3 experiment is three configs on the same style and the same window: grounded open-weight, grounded frontier, and ungrounded frontier. The stored comparison is `unsupported_claim_rate`, return vs SPY, and cost per agent-day. Each grounded roster row still has an ungrounded twin for the same model. The results page shows the three-way comparison first.
+
+Reproducible: the seed is stored on the run. An LLM response is cached by the hash from section 8.6. A rerun with the same hash reads the stored response and does not call the provider. The cache is part of the run, not only the 10-minute Redis entry.
+
+Limitation, shown on the results page: the LLM may already know how a past event turned out, because that event can be in its training data. A backtest can look better than a live run for that reason. Prefer a window after the model's knowledge cutoff when the provider documents one. The page states the cutoff it used, or "not documented" when the provider does not.
+
+Results live in a later migration, not in 0001: `league.evaluation_runs` and `league.evaluation_results`. The run row stores the seed, the roster hash, the window, and the model cutoff note. The result row stores one config's metrics. Those tables are Week 3. Adding them now would change the table set the migration test asserts.
+
+## 11a. Backtesting note
+
+Section 11 is the lab. The one-day replay in section 7.2 is the Week 1 check that the simulator holds its invariants on real bars. It is not the lab. It does not call an LLM.
 
 ## 12. API
 
-All endpoints under `/api/v1`. Auth is the existing QuantPilot bearer JWT (section 6.1), not Supabase. Errors: `{ "error": { "code": "STRING", "message": "..." } }`. These routes are not part of Week 1.
+All endpoints under `/api/v1`. Errors: `{ "error": { "code": "STRING", "message": "..." } }`. These routes are Week 4. They are read-only. There is no route that creates an agent, joins a league, places a player order, or approves an order.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/me` | Current user, XP, level |
-| POST | `/agents` | Create agent `{league_id, name, risk_level, style, interests[], excluded_tickers[], excluded_sectors[], mode}` |
-| GET | `/agents/{id}` | Agent config + status |
-| PATCH | `/agents/{id}` | Update allowed fields (section 3.3 rules) |
-| GET | `/portfolios/{id}` | Cash, positions (with live prices), equity, metrics |
-| GET | `/portfolios/{id}/equity?range=1d\|1w\|season` | Equity series + SPY series |
-| GET | `/portfolios/{id}/orders?cursor=` | Paginated orders with fills |
-| POST | `/portfolios/{id}/orders` | Player order `{ticker, side, notional_usd?, qty?}` |
-| POST | `/orders/{id}/approve` · `/orders/{id}/reject` | Approve mode actions |
-| GET | `/rationales/{id}` | Summary, news, graph path (nodes + edges for the 3D view) |
-| GET · POST | `/leagues` · `/leagues/join` | List / create / join by invite code |
-| GET | `/leagues/{id}/leaderboard?tab=` | Ranked list |
-| GET | `/seasons/{id}/recap?week=` | Weekly recap data |
-| GET | `/achievements` | All + unlocked |
-| POST · GET | `/backtests` · `/backtests/{id}` | Start / poll backtest |
-| GET | `/market/universe` · `/market/quote/{ticker}` | Universe list, latest price. The badge is "Massive prices" when `DATA_DELAY_MINUTES` is 0, and "Prices delayed N min" otherwise. |
+| GET | `/arena` | Roster ranked by return, with the SPY benchmark |
+| GET | `/agents/{id}` | Config: style, risk, model, grounding, interests |
+| GET | `/agents/{id}/equity?range=1d\|1w\|all` | Equity series plus the SPY series |
+| GET | `/agents/{id}/orders?cursor=` | Orders with fills |
+| GET | `/rationales/{id}` | Summary, news, graph path when grounded, and the grounding flag |
+| GET | `/evaluation` | Stored lab runs |
+| GET | `/evaluation/{id}` | One run, one row per config, twin pairs first |
+| GET | `/market/universe` · `/market/quote/{ticker}` | Universe list, latest known price. The badge is "Massive prices" when `DATA_DELAY_MINUTES` is 0, and "Prices delayed N min" otherwise. |
 
-WebSocket: `GET /ws?token=<JWT>`. Client subscribes with `{"op":"sub","channels":["portfolio:{id}","league:{id}","prices:{ticker}"]}`.
+WebSocket: `GET /ws`. No token. Client subscribes with `{"op":"sub","channels":["arena","agent:{id}","prices:{ticker}"]}`.
 
 Server messages:
 
 ```json
-{"type":"fill","portfolio_id":"...","order_id":"...","ticker":"AMD","side":"buy","qty":0.83,"price":144.21}
-{"type":"equity","portfolio_id":"...","equity":1043.17,"t":"..."}
-{"type":"leaderboard","league_id":"...","top":[{"user":"...","return":0.043,"rank":1}]}
-{"type":"achievement","id":"called_it"}
+{"type":"fill","agent_id":"...","portfolio_id":"...","order_id":"...","ticker":"AMD","side":"buy","qty":0.83,"price":144.21}
+{"type":"equity","agent_id":"...","equity":1043.17,"t":"..."}
+{"type":"leaderboard","top":[{"agent":"...","return":0.043,"rank":1}],"spy_return":0.01}
 {"type":"price","ticker":"AMD","c":144.35,"t":"..."}
 ```
 
-Redis pub/sub channels with the same names feed the WebSocket hub.
+Redis pub/sub channels with the same names feed the WebSocket hub. The price on the socket is a completed minute (section 7.2), not the bar that is still forming.
+
+### 12.1 Read-only MCP server
+
+Week 5. Not built. Tools are `get_leaderboard`, `get_agent_portfolio`, `explain_trade`, and `get_eval_results`. Each one reads. None of them creates, modifies, or cancels an order, and none of them changes a config. A test lists the registered tools and fails if any tool writes. Claude, OpenClaw, and Hermes can query the arena through this server. The server does not accept a write tool added later without that test failing.
 
 ## 13. Security, fairness and compliance
 
 - Paper money only. No broker trading endpoints are ever called. Massive is market data only. The calendar is a local library.
-- Not investment advice: persistent footer + onboarding checkbox: "This is a game with simulated money. Nothing here is financial advice."
-- Rate limits (Redis): player orders 30/min; API 120/min per user.
+- Not investment advice. The footer says the arena is simulated research, not a recommendation.
+- Rate limits (Redis): the read API is 120 requests/min per IP. There is no player-order route to limit.
 - Only the simulator writes portfolios, positions, and fills (single writer), and it does so through `backend/app/league/repo/`. The marketdata poller is the writer for `league.bars`, also through that repository. Fill and risk functions do not hold a session.
-- Validate every input with Pydantic/Zod; tickers must match `^[A-Z][A-Z.]{0,5}$`, must not end with a dot, and must be in the universe.
-- Store no sensitive personal data beyond email/display name.
+- Validate every input with Pydantic. Tickers must match `^[A-Z][A-Z.]{0,5}$`, must not end with a dot, and must be in the universe.
+- The arena stores no account email. The one system `public.users` row is a local bookkeeping row, not a person.
 - Respect data-provider terms: do not redistribute raw market data feeds; show derived values in-app only.
-- Anti-cheat: risk level locked per season; config edits rate-limited; all orders timestamped on the game clock server-side.
+- The roster is fixed for a session. Orders are timestamped on the game clock. There is no human config to lock.
 
 ## 14. Repository structure
 
@@ -765,12 +802,12 @@ quantpilot/
 ├─ frontend/             # existing Next.js app; follows root DESIGN.md. Not renamed to web/
 │  ├─ app/               # routes from section 3.1
 │  ├─ components/
-│  │  ├─ three/          # MarketGalaxy, GraphPath3D, Trophy, AgentAvatar
-│  │  ├─ charts/         # EquityChart (lightweight-charts), AllocationDonut (recharts)
-│  │  ├─ effects/        # Confetti, Particles, NumberTicker (Magic UI/Aceternity copies)
+│  │  ├─ three/          # MarketGalaxy, GraphPath3D
+│  │  ├─ charts/         # EquityChart (lightweight-charts), LabComparison (recharts)
+│  │  ├─ effects/        # Particles, NumberTicker (Magic UI/Aceternity copies)
 │  │  └─ ui/             # shadcn components
-│  ├─ lib/               # api client, ws client, zod schemas; existing auth, no Supabase
-│  └─ public/models/     # .glb files + LICENSES.md
+│  ├─ lib/               # api client, ws client; existing desk auth, no Supabase, no League account
+│  └─ public/             # no trophy models
 ├─ config/universe.csv          # written by scripts/build_universe.py
 ├─ scripts/backfill_bars.py
 ├─ scripts/build_universe.py
@@ -792,13 +829,13 @@ KAFKA_BOOTSTRAP=localhost:9092             NEO4J_URI=  NEO4J_USER=  NEO4J_PASSWO
 # LLM
 LLM_PROVIDER=anthropic|openai   LLM_FAST_MODEL=   LLM_STRONG_MODEL=   LLM_API_KEY=
 AGENT_DAILY_TOKEN_BUDGET=60000
-# Game
-STARTING_CASH=1000   SEASON_WEEKS=4   SLIPPAGE_BPS=5   COMMISSION_USD=0
+# Paper books
+STARTING_CASH=1000   SLIPPAGE_BPS=5   COMMISSION_USD=0
 FILL_TIMEOUT_MINUTES=30   EVENT_IMPACT_THRESHOLD=0.7   MAX_EVENT_CYCLES_PER_DAY=3
 MIN_ORDER_USD=5
 ```
 
-`DATA_DELAY_MINUTES=0` is the Week 1 default. Set it to 15 only when live play uses Massive Starter (section 7.2). There are no `ALPACA_*` settings. The Massive key is the existing app setting `MARKET_API_KEY`, with `MARKET_BASE_URL` and `MARKET_REQUESTS_PER_MINUTE` (default 5). League settings do not copy that key. `DATABASE_URL` is the app's sync URL. Local development uses `postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot`. The app opens one engine from it, and League uses `SessionLocal`. There is no `LEAGUE_DATABASE_URL`. League tests use `LEAGUE_TEST_DATABASE_URL`, default `postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot_test`. That name is a test environment variable, not an app setting. The QA downgrade runs there so it cannot drop bars in the dev database. There are no Supabase settings. `UNIVERSE_PATH` is the loader input (section 7.1).
+`DATA_DELAY_MINUTES=0` is the Week 1 default. Set it to 15 only when live play uses Massive Starter (section 7.2). There are no `ALPACA_*` settings. The Massive key is the existing app setting `MARKET_API_KEY`, with `MARKET_BASE_URL` and `MARKET_REQUESTS_PER_MINUTE` (default 5). League settings do not copy that key. `DATABASE_URL` is the app's sync URL. Local development uses `postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot`. The app opens one engine from it, and League uses `SessionLocal`. There is no `LEAGUE_DATABASE_URL`. League tests use `LEAGUE_TEST_DATABASE_URL`, default `postgresql://quantpilot:quantpilot@127.0.0.1:5433/quantpilot_test`. That name is a test environment variable, not an app setting. The QA downgrade runs there so it cannot drop bars in the dev database. There are no Supabase settings. `UNIVERSE_PATH` is the loader input (section 7.1). `SEASON_WEEKS` is still a field on `LeagueSettings` from Week 1. The arena does not read it and does not reset portfolios. `LLM_FAST_MODEL` and `LLM_STRONG_MODEL` are the same: still on the settings object, not what the roster uses. The roster column `llm_model` is the model id.
 
 ## 16. Testing strategy
 
@@ -806,43 +843,57 @@ MIN_ORDER_USD=5
 | --- | --- |
 | Fill engine | Fills use the first existing `league.bars` row with `t > order_time` and `t <= game_clock`; a gap test (no synthesized bar inside a hole); slippage direction; fractional qty rounding; expiry on halt; one Massive fallback fetch then expiry |
 | Risk engine | Each limit in section 9, per risk level, at the cap and one cent over; processing order; buys spend current cash only; player buys must be in the universe. Stop-loss at the threshold and one cent above. The pending-stop check is the connector's. Agent and LLM paths cannot set `rationales.system`. Only the stop-loss result may, and that row has empty `graph_path` and `news_ids` with `validated = true`. |
-| Property tests (hypothesis) | For random order sequences: cash never < 0, qty never < 0, equity = cash + Σ positions, ghost and actual diverge only via player orders |
-| No look-ahead | A minute bar's close is used only once `t + 1 minute <= now` (section 7.2). A backtest on synthetic data with a known future spike must not see it |
-| Rationale validation | Fake news IDs, future-dated news, non-existent edges, wrong path end → all rejected |
-| Agent graph | LLM mocked with fixed JSON; retry path; empty proposals |
-| API | Auth required; permission checks (can't read others' pending orders); rate limits |
-| Frontend | Component tests for leaderboard reordering and approve-mode flow; Playwright smoke test of onboarding → first trade visible |
+| Property tests (hypothesis) | For random order sequences: cash never < 0, qty never < 0, equity = cash + Σ positions, ghost and actual diverge only via player orders. The arena does not create a ghost book or a player order. The tests stay, because the simulator still implements both |
+| No look-ahead | A minute bar's close is used only once `t + 1 minute <= now` (section 7.2). A lab run on synthetic data with a known future spike must not see it |
+| Rationale validation | Database: an ungrounded rationale with an empty path is accepted (`test_ungrounded_rationale_accepts_an_empty_graph_path`); empty or blank news is still rejected (`test_ungrounded_rationale_still_rejects_empty_or_blank_news`); a grounded non-system rationale with an empty path is rejected (`test_grounded_nonsystem_rationale_rejects_an_empty_graph_path`). Neo4j edge checks are Week 2. The app rule that `rationales.grounding` equals `agents.grounding_enabled` is tested on the Week 2 insert path, which is not built. |
+| Agent graph | LLM mocked with fixed JSON; retry path; empty proposals; one grounded cycle and its ungrounded twin. `require_configured_model` refuses `'unconfigured'` (`test_unconfigured_model_is_refused`). The cycle itself is Week 2. |
+| API | Read-only arena and lab routes. No player-order route and no approve route. Week 4. Not tested yet |
+| Frontend | Leaderboard renders the roster and the SPY row. A grounded trade mounts the 3D path. An ungrounded trade does not. Week 4. Not tested yet |
 
 ## 17. Observability
 
 Structured logs (`structlog`) with `cycle_id`, `agent_id`, `order_id`.
 
-Admin page `/admin` (role-gated): cycles per hour, validation failure rate, LLM cost per day, fills per hour, WebSocket connections.
+From Week 2, every cycle writes:
 
-Alerts (simple): marketdata stale > 5 min during market hours; simulator lag > 2 min.
+- tokens in, tokens out, and cost in USD
+- latency, from `started_at` to `finished_at`
+- proposals made
+- proposals rejected by validation, each with the rule that failed
+- proposals dropped by risk, each with the section 9 reason
+
+The log line and the `agent_cycles` row carry the same counts. Those columns are in migration 0001.
+
+Week 2 also traces every cycle with LangSmith and OpenTelemetry. Both are already in the repo. The trace carries the prompt, the tool calls, the validation result, tokens, cost, and latency, and it is keyed by `cycle_id`. The trace is optional: with no keys it is a no-op. It never logs secrets. The Evaluation Lab reads these traces.
+
+`/admin` is a read-only page on the same machine: cycles per hour, validation failure rate, LLM cost per day, fills per hour, WebSocket connections. It is not a player admin and it is not role-gated for a human league. Week 4.
+
+Alerts: marketdata stale > 5 min during market hours; simulator lag > 2 min.
 
 ## 18. Build plan (5 weeks)
 
 | Week | Build | Done when |
 | --- | --- | --- |
-| 1 | Simulator core: `league` schema and its own Alembic version table, universe fixture plus `scripts/build_universe.py` (Massive reference check, not a broker asset list), game clock, Massive historical 1-minute backfill writing `league.bars`, offline XNYS calendar (`exchange_calendars`), pure fill and risk functions, repository, property tests, and a one-day replay that reads `league.bars`. Real bars are not committed. Tests use synthetic bars. No live poller and no IEX latency check. | A script places seeded orders for 1 day of bars already in `league.bars` and all invariants hold. `public` is unchanged. The replay does not fetch. |
-| 2 | Agent: impact events, interest subgraph, LangGraph cycle, rationale validation, scheduler | Agents trade on live data; every trade has a validated rationale |
-| 3 | API + auth + WebSocket; Next.js onboarding, dashboard (equity chart, positions, trade feed) | A new user can sign up and watch their agent trade |
-| 4 | Leagues, seasons, leaderboard, achievements, approve mode, you-vs-agent, trade detail 3D graph, landing galaxy | 5 friends in a private league with a live leaderboard |
-| 5 | Backtest lab, weekly recap + OG image, polish, deploy, launch to Waterloo clubs, demo video | Public URL live, first 25+ users |
+| 1 | Simulator, done: `league` schema (0001 now includes the arena columns in section 6.2), the small universe fixture, game clock, Massive historical 1-minute backfill into `league.bars`, offline XNYS calendar, pure fill and risk functions, repository, property tests, and a one-day replay that reads `league.bars`. Real bars are never committed. Tests use synthetic bars on `quantpilot_test`. No live poller and no IEX check. Next, before Week 2: step 12, `scripts/build_universe.py`, the S&P 500 list from Massive reference data (`GET /v3/reference/tickers/{ticker}`), not a broker asset list. | The replay script places seeded orders for one day of bars already in `league.bars` and the invariants hold. `public` is unchanged. The replay does not fetch. Step 12 prints how many symbols it wrote and how many it dropped, and it does not invent a market cap. |
+| 2 | The agent. News impact events, the interest subgraph, the LangGraph cycle, rationale validation against Neo4j, grounded and ungrounded modes, the provider-agnostic model call, LangSmith and OpenTelemetry traces keyed by `cycle_id`, the section 17 metrics, and the scheduler that runs the roster every XNYS session. The insert path checks that `rationales.grounding` equals `agents.grounding_enabled`. | One grounded cycle and its ungrounded twin trade on the same bars. The grounded trade has a validated path. The ungrounded trade has real news ids, an empty path, and `grounding=false`. Both went through `apply_risk`. The cycle row has tokens, cost, latency, and the reject and drop reasons. A trace exists when keys are set, and the same cycle is a no-op when they are absent. |
+| 3 | Evaluation Lab. Backfill the historical window into `league.bars`. A runner executes every roster config on that window. The stored experiment is grounded open-weight vs grounded frontier vs ungrounded frontier, same style and window. Same seed and the input-hash cache make a second run reuse the LLM responses. | One stored run reports, per config, return vs SPY, Sharpe, max drawdown, trade count, `validation_reject_rate`, `unsupported_claim_rate`, LLM cost per agent-day, and latency. The three-way comparison is the first table. The page states the knowledge-cutoff caveat. A rerun with the same hash does not call the provider. |
+| 4 | API, WebSocket, and the dashboard: arena leaderboard, per-agent equity vs SPY, trade feed, the 3D graph for a grounded trade, the lab results page, and the market-galaxy landing page. | The board moves when a fill is written. A grounded trade shows the path. An ungrounded trade shows the flag and does not mount the graph. |
+| 5 | Deploy. The arena runs every trading day. The read-only MCP server (section 12.1). README and a findings write-up. A demo video. | The daily job is on a schedule. The MCP test fails if any tool writes. The write-up includes a losing window if there is one, and the video shows one grounded path and the lab table. |
 
 ## 19. Out of scope for v1
 
-Real-money trading or broker integration · options, crypto, shorting, margin · limit/stop orders for players · dividends · chat between players · mobile native apps · non-US markets · user-written custom strategies/code · pruning or partitioning of `league.bars`.
+Real-money trading or broker integration · options, crypto, shorting, margin · dividends · mobile native apps · non-US markets · user-written strategies · pruning or partitioning of `league.bars`.
+
+Also out of scope, removed from this product: human leagues, invite codes, league membership, player-facing seasons, achievements, XP, levels, a trophy room, approve mode, weekly recap cards, OG images, player onboarding, a player-order UI, and a launch that needs real users. `validate_player_order` stays in the simulator and is not exposed.
 
 ## 20. Metrics to report (resume / demo)
 
-- Users, leagues, retention (weekly active players)
-- Agent cycles run, trades executed, % of LLM proposals rejected by rationale validation (shows the guardrail works)
-- Backtest results of each style vs. SPY (report honestly, including underperformance)
-- p95 latency: event published → agent trade filled
-- LLM cost per active agent per day
+- Roster size, cycles run, trades filled
+- `validation_reject_rate` for grounded agents, and `unsupported_claim_rate` across grounded open-weight, grounded frontier, and ungrounded frontier
+- Return, Sharpe, and max drawdown vs SPY, including a window that loses
+- p95 latency: event published → fill, and the cycle latency stored on `agent_cycles`
+- LLM cost per agent-day
 
 ## 21. Disclaimers
 
-QuantPilot League is a game using simulated money. It does not provide investment advice. Past or simulated performance does not predict future results.
+QuantPilot League is a simulated research arena. It does not provide investment advice. Past or simulated performance does not predict future results. An LLM backtest can be optimistic when the model has already seen the events (section 11).

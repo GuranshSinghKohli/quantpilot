@@ -90,6 +90,8 @@ def upgrade() -> None:
         sa.Column("name", sa.Text(), nullable=False),
         sa.Column("risk_level", sa.Text(), nullable=False),
         sa.Column("style", sa.Text(), nullable=False),
+        sa.Column("llm_model", sa.Text(), server_default=sa.text("'unconfigured'"), nullable=False),
+        sa.Column("grounding_enabled", sa.Boolean(), server_default=sa.text("true"), nullable=False),
         sa.Column(
             "interests",
             postgresql.ARRAY(sa.Text()),
@@ -115,7 +117,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["league_id"], ["league.leagues.id"], name="fk_agents_league_id"),
         sa.ForeignKeyConstraint(["player_id"], ["league.players.id"], name="fk_agents_player_id"),
         sa.PrimaryKeyConstraint("id", name="pk_agents"),
-        sa.UniqueConstraint("player_id", "league_id", name="uq_agents_player_league"),
+        sa.UniqueConstraint("league_id", "name", name="uq_agents_league_name"),
         schema=SCHEMA,
     )
     op.create_table(
@@ -229,6 +231,7 @@ def upgrade() -> None:
         sa.Column("graph_path", postgresql.JSONB(), nullable=False),
         sa.Column("validated", sa.Boolean(), nullable=False),
         sa.Column("system", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column("grounding", sa.Boolean(), server_default=sa.text("true"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.CheckConstraint(
             "confidence >= 0 AND confidence <= 1",
@@ -241,7 +244,7 @@ def upgrade() -> None:
             name="ck_rationales_news_or_system",
         ),
         sa.CheckConstraint(
-            "system OR jsonb_array_length(graph_path) > 0",
+            "system OR grounding = false OR jsonb_array_length(graph_path) > 0",
             name="ck_rationales_graph_or_system",
         ),
         sa.CheckConstraint(
@@ -272,6 +275,22 @@ def upgrade() -> None:
         sa.Column("tokens_in", sa.Integer(), server_default="0", nullable=False),
         sa.Column("tokens_out", sa.Integer(), server_default="0", nullable=False),
         sa.Column("cost_usd", sa.Numeric(8, 4), server_default="0", nullable=False),
+        sa.Column("latency_ms", sa.Integer(), nullable=True),
+        sa.Column("proposals_made", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("proposals_rejected", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("proposals_dropped", sa.Integer(), server_default="0", nullable=False),
+        sa.Column(
+            "rejection_reasons",
+            postgresql.JSONB(),
+            server_default=sa.text("'[]'::jsonb"),
+            nullable=False,
+        ),
+        sa.Column(
+            "drop_reasons",
+            postgresql.JSONB(),
+            server_default=sa.text("'[]'::jsonb"),
+            nullable=False,
+        ),
         sa.Column("error", sa.Text(), nullable=True),
         sa.ForeignKeyConstraint(["agent_id"], ["league.agents.id"], name="fk_agent_cycles_agent_id"),
         sa.PrimaryKeyConstraint("id", name="pk_agent_cycles"),

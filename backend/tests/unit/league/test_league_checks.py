@@ -324,7 +324,9 @@ def test_allowed_edges_and_column_defaults(league_conn) -> None:
     row = league_conn.execute(
         text(
             """
-            SELECT finished_at, tokens_in, tokens_out, cost_usd
+            SELECT finished_at, tokens_in, tokens_out, cost_usd, latency_ms,
+                   proposals_made, proposals_rejected, proposals_dropped,
+                   rejection_reasons, drop_reasons
             FROM league.agent_cycles WHERE id = :id
             """
         ),
@@ -334,6 +336,22 @@ def test_allowed_edges_and_column_defaults(league_conn) -> None:
     assert row.tokens_in == 0
     assert row.tokens_out == 0
     assert row.cost_usd == 0
+    assert row.latency_ms is None
+    assert row.proposals_made == 0
+    assert row.proposals_rejected == 0
+    assert row.proposals_dropped == 0
+    assert row.rejection_reasons == []
+    assert row.drop_reasons == []
+    agent = league_conn.execute(
+        text("SELECT llm_model, grounding_enabled FROM league.agents WHERE id = :agent"),
+        ids,
+    ).one()
+    assert agent.llm_model == "unconfigured"
+    assert agent.grounding_enabled is True
+    grounding = league_conn.execute(
+        text("SELECT grounding FROM league.rationales WHERE system = false"),
+    ).scalar_one()
+    assert grounding is True
     interests = league_conn.execute(
         text("SELECT interests FROM league.agents WHERE id = :agent"),
         ids,

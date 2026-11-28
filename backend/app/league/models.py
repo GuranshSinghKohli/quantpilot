@@ -125,7 +125,7 @@ class LeagueMember(LeagueBase):
 class Agent(LeagueBase):
     __tablename__ = "agents"
     __table_args__ = (
-        UniqueConstraint("player_id", "league_id", name="uq_agents_player_league"),
+        UniqueConstraint("league_id", "name", name="uq_agents_league_name"),
         CheckConstraint("mode IN ('autopilot', 'approve')", name="ck_agents_mode"),
     )
 
@@ -135,6 +135,12 @@ class Agent(LeagueBase):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     risk_level: Mapped[str] = mapped_column(Text, nullable=False)
     style: Mapped[str] = mapped_column(Text, nullable=False)
+    llm_model: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'unconfigured'")
+    )
+    grounding_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
     interests: Mapped[List[str]] = _text_array()
     excluded_tickers: Mapped[List[str]] = _text_array()
     excluded_sectors: Mapped[List[str]] = _text_array()
@@ -258,7 +264,7 @@ class Rationale(LeagueBase):
             name="ck_rationales_news_or_system",
         ),
         CheckConstraint(
-            "system OR jsonb_array_length(graph_path) > 0",
+            "system OR grounding = false OR jsonb_array_length(graph_path) > 0",
             name="ck_rationales_graph_or_system",
         ),
         CheckConstraint(
@@ -275,6 +281,7 @@ class Rationale(LeagueBase):
     graph_path: Mapped[Any] = mapped_column(JSONB, nullable=False)
     validated: Mapped[bool] = mapped_column(Boolean, nullable=False)
     system: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    grounding: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     created_at: Mapped[datetime] = _ts()
 
 
@@ -291,6 +298,16 @@ class AgentCycle(LeagueBase):
     tokens_in: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     tokens_out: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     cost_usd: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default="0")
+    latency_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    proposals_made: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    proposals_rejected: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    proposals_dropped: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    rejection_reasons: Mapped[Any] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    drop_reasons: Mapped[Any] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
