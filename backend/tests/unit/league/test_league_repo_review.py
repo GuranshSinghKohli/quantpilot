@@ -368,7 +368,7 @@ def test_allowed_status_transitions(league_session) -> None:
         set_order_status(session, order.id, target)
         session.expire_all()
         assert session.get(Order, order.id).status == target
-    for target in ("accepted", "expired", "cancelled"):
+    for target in ("accepted", "rejected", "expired", "cancelled"):
         order = _order(
             session,
             seed.portfolio_id,

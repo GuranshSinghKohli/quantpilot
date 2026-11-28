@@ -30,7 +30,7 @@ _FILLABLE_STATUSES = frozenset({"accepted", "queued"})
 _TERMINAL_STATUSES = frozenset({"filled", "rejected", "expired", "cancelled"})
 _TRANSITIONS = {
     "accepted": frozenset({"queued", "rejected", "expired", "cancelled"}),
-    "queued": frozenset({"accepted", "expired", "cancelled"}),
+    "queued": frozenset({"accepted", "rejected", "expired", "cancelled"}),
 }
 
 
@@ -109,7 +109,12 @@ def record_fill(
         raise FillNotPositive(f"price {fill.price} qty {fill.qty}")
 
     with session.begin_nested():
-        order = session.scalar(select(Order).where(Order.id == order_id).with_for_update())
+        order = session.scalar(
+            select(Order)
+            .where(Order.id == order_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
         if order is None:
             raise OrderNotFound(str(order_id))
         if fill.bar_time <= order.game_time:
@@ -120,7 +125,10 @@ def record_fill(
             raise OrderNotFillable(order.status)
 
         portfolio = session.scalar(
-            select(Portfolio).where(Portfolio.id == order.portfolio_id).with_for_update()
+            select(Portfolio)
+            .where(Portfolio.id == order.portfolio_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         if portfolio is None:
             raise PortfolioNotFound(str(order.portfolio_id))

@@ -205,11 +205,11 @@ def test_illegal_transitions_around_the_terminal_set(league_session) -> None:
     with pytest.raises(StatusTransitionNotAllowed):
         set_order_status(session, accepted.id, "accepted")
     queued = _order(session, seed.portfolio_id, ticker="QQQ", status="queued")
+    set_order_status(session, queued.id, "rejected")
+    still_queued = _order(session, seed.portfolio_id, ticker="QQ2", status="queued")
     with pytest.raises(StatusTransitionNotAllowed):
-        set_order_status(session, queued.id, "rejected")
-    with pytest.raises(StatusTransitionNotAllowed):
-        set_order_status(session, queued.id, "queued")
-    set_order_status(session, queued.id, "cancelled")
+        set_order_status(session, still_queued.id, "queued")
+    set_order_status(session, still_queued.id, "cancelled")
     with pytest.raises(StatusTransitionNotAllowed):
         set_order_status(session, queued.id, "accepted")
     with pytest.raises(StatusNotAllowed):
@@ -221,6 +221,7 @@ def test_illegal_transitions_around_the_terminal_set(league_session) -> None:
         )
     session.expire_all()
     assert session.get(Order, accepted.id).status == "accepted"
-    assert session.get(Order, queued.id).status == "cancelled"
+    assert session.get(Order, queued.id).status == "rejected"
+    assert session.get(Order, still_queued.id).status == "cancelled"
     assert session.get(Order, dust.id).status == "accepted"
     assert session.scalar(select(func.count()).select_from(Fill).where(Fill.order_id == dust.id)) == 0

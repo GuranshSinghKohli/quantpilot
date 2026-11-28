@@ -38,12 +38,22 @@ def upsert_bars(session: Session, bars: Sequence[BarInput]) -> int:
 
 
 def first_bar_after(
-    session: Session, ticker: str, after_t: datetime, until_t: datetime
+    session: Session,
+    ticker: str,
+    after_t: datetime,
+    until_t: datetime,
+    *,
+    inclusive: bool = False,
 ) -> Bar | None:
-    """First bar with after_t < t <= until_t. A missing minute is skipped."""
+    """First bar in (after_t, until_t], or [after_t, until_t] when inclusive.
+
+    A missing minute is skipped. The default stays strict so a bar at exactly
+    ``after_t`` is not a fill for an order accepted at that time.
+    """
+    lower = Bar.t >= after_t if inclusive else Bar.t > after_t
     return session.scalar(
         select(Bar)
-        .where(Bar.ticker == ticker, Bar.t > after_t, Bar.t <= until_t)
+        .where(Bar.ticker == ticker, lower, Bar.t <= until_t)
         .order_by(Bar.t.asc())
         .limit(1)
     )
