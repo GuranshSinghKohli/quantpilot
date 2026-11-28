@@ -449,9 +449,9 @@ A unit test builds a bar series with a gap and asserts the fill uses the first b
 
 ### 7.5 Orders accepted by the simulator
 
-- Agent orders: notional USD (e.g. "buy $120 of AMD") or sell fraction of position (e.g. "sell 50% of AMD"). The risk engine (step 7) converts "sell X% of position" into a qty when it creates the order, using the held qty at that time. `decide_fill` still accepts `fraction` so that conversion can call it.
+- Agent orders: notional USD (e.g. "buy $120 of AMD") or sell fraction of position (e.g. "sell 50% of AMD"). The risk engine converts "sell X% of position" into a quantity when it creates the order: `floor` to 6 decimal places of the shares held times that percent, never more than the shares held. `decide_fill` still accepts `fraction`. `process_order` does not: the order it sees already has a quantity.
 - Player orders: notional USD or quantity.
-- Minimum order size: $5. That check belongs to the risk engine, not the fill engine.
+- Minimum order size: $5 for `apply_risk` and for player orders. A stop-loss sells the full quantity even when that is under $5. The check belongs to the risk engine, not the fill engine.
 
 ### 7.6 Corporate actions (v1)
 
@@ -602,11 +602,32 @@ A proposal that fails after the retry is dropped and logged (`agent_cycles.error
 | Stop-loss per position (auto-sell) | −8% | −12% | −20% |
 | ETFs allowed | Yes | Yes | Yes |
 
-Processing order for each proposal: exclusions → interest subgraph → sells first → buys sorted by confidence desc → clip to max order size → clip to max position size → clip to available cash minus buffer → drop if < $5.
+`apply_risk` is a pure function. It does not read the database or the clock. Equity is `cash + Σ qty × latest price`. A missing price, or a price ≤ 0, for a held ticker or for a proposal ticker that was quoted raises `MissingPrice`. The function does not invent a price.
 
-Stop-loss: `check_stop_losses(positions, prices, risk_level)` is a pure function. It returns sell orders whose rationales have `system=true`, `validated=true`, summary `"Stop-loss at -X%"` for that level's threshold, and empty `graph_path` and `news_ids`. The simulator calls it every 5 minutes on the game clock. That schedule is not part of the pure function. The repository inserts the rationale. Agent and LLM code cannot set `system`. The UI labels the trade "Auto stop-loss".
+Processing order:
 
-The same engine validates player orders (cash and no-shorting rules only; position limits don't apply to players).
+1. Invalid size. A buy with `size_pct_of_equity` ≤ 0, or a sell outside (0, 100], is dropped (`invalid size`).
+2. Exclusions drop buys (`excluded`), by ticker or by the listing's sector. A sell of a held name is kept so the position can be closed. An excluded ticker that is also outside the universe is `excluded`.
+3. A buy whose ticker is not in the universe is dropped (`not in universe`). A sell of a held ticker is kept even if that ticker has left the universe. A sell of a ticker that is not held is dropped (`not held`).
+4. A buy outside the interest tickers is dropped (`outside interests`).
+5. When `etfs_allowed` is false, an ETF buy (sector `ETF`) is dropped (`etf not allowed`). All three shipped levels allow ETFs.
+6. A buy and a sell of the same ticker in one call: keep the sell and drop the buy (`conflicting proposals`). An earlier gate wins, so an excluded buy is `excluded`.
+7. Sells run first, in input order. `sell X%` becomes `qty = floor` to 6 decimal places of the starting held quantity times `X%`. Later sells of that ticker are clipped so the total never exceeds the shares held (`clipped: exceeds held`, or `exceeds held` when nothing remains).
+8. Buys run by confidence descending. A tie breaks by ticker, then by input order.
+9. Clip the buy to `max_single_order_pct` of equity (`clipped: max order N%`).
+10. Clip the buy so the existing market value (`qty × price`) plus earlier accepted buys of that ticker in this call plus this buy stay within `max_position_pct` (`clipped: max position N%`).
+11. Clip the buy to current cash minus the cash buffer minus commission (`clipped: cash buffer`). Expected sell proceeds are not cash. A sell fills later, at a possibly lower price, or may expire. The sum of `notional + commission` over accepted buys stays within `cash − buffer`.
+12. Drop a buy that opens a ticker not already held when the position count is at `max_positions` (`max positions`). A full sell in this call does not free a slot. The slot frees on a later call, once the position is actually gone. Adding to a held ticker does not take a slot.
+13. Drop a buy once `buys_today` plus buys accepted in this call reach `max_new_buys_per_day` (`max buys per day`). Every accepted buy counts, including an add to a name already held.
+14. Drop whatever remains below `MIN_ORDER_USD`. The reason is `below $5 minimum` when the request itself is under the default minimum, and the clip reason when a clip is what pushed it under.
+
+Exactly at a cap is kept. One cent over is clipped down to the cap. A buy that is kept after a clip records the clip that set its size. The numbers are read from `RISK_LIMITS`. `MIN_ORDER_USD` and `COMMISSION_USD` come from settings.
+
+Stop-loss: `check_stop_losses(positions, prices, risk_level)` is a pure function. It returns a sell of the full quantity where `price <= avg_cost × (1 − |stop|)`. The order is marked `system=true`, `validated=true`, summary `"Stop-loss at -X%"` for that level, with empty `graph_path` and `news_ids`. It does not apply the $5 minimum and it does not insert a rationale. The repository inserts the rationale. Agent and LLM code cannot set `system`. The UI labels the trade "Auto stop-loss". The simulator calls it every 5 minutes on the game clock. That schedule is not part of the pure function.
+
+The connector that later submits these sells must not create a second stop-loss sell while one is already pending for that ticker. `check_stop_losses` does not see open orders, so that check belongs to the connector. The connector is not part of this step.
+
+Player orders (`validate_player_order`): a buy must be in the universe (`not in universe`). A sell of a held ticker is allowed even if it has left the universe. The order ticker's price must exist and be > 0 (`MissingPrice` otherwise). Cash and no-shorting apply, plus the $5 minimum. A buy's notional plus commission must fit in current cash. The order is accepted or dropped. It is not resized. Position limits, the cash buffer, exclusions, and the interest set do not apply to players.
 
 ## 10. Scoring, leaderboards and gamification
 
@@ -785,7 +806,7 @@ MIN_ORDER_USD=5
 | Area | Tests |
 | --- | --- |
 | Fill engine | Fills use the first existing `league.bars` row with `t > order_time` and `t <= game_clock`; a gap test (no synthesized bar inside a hole); slippage direction; fractional qty rounding; expiry on halt; one Alpaca fallback fetch then expiry |
-| Risk engine | Each limit in section 9 table, per risk level; processing order. Agent and LLM paths cannot set `rationales.system`. Only the stop-loss result may, and that row has empty `graph_path` and `news_ids` with `validated = true`. |
+| Risk engine | Each limit in section 9, per risk level, at the cap and one cent over; processing order; buys spend current cash only; player buys must be in the universe. Stop-loss at the threshold and one cent above. The pending-stop check is the connector's. Agent and LLM paths cannot set `rationales.system`. Only the stop-loss result may, and that row has empty `graph_path` and `news_ids` with `validated = true`. |
 | Property tests (hypothesis) | For random order sequences: cash never < 0, qty never < 0, equity = cash + Σ positions, ghost and actual diverge only via player orders |
 | No look-ahead | Backtest on synthetic data with a known future spike: agent must not "see" it |
 | Rationale validation | Fake news IDs, future-dated news, non-existent edges, wrong path end → all rejected |
