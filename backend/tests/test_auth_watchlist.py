@@ -1,9 +1,8 @@
-"""Phase 7 — auth + DB-backed watchlist tests (SQLite)."""
+"""Auth tests (watchlist / portfolio APIs were removed)."""
 
 import os
 from pathlib import Path
 
-# Force SQLite before app imports bind the engine
 _TEST_DB = Path(__file__).resolve().parent / "_test_quantpilot.db"
 if _TEST_DB.exists():
     _TEST_DB.unlink()
@@ -25,8 +24,8 @@ def test_health():
     assert r.json()["status"] == "ok"
 
 
-def test_register_login_me_and_scoped_watchlist():
-    email = "trader@example.com"
+def test_register_login_me():
+    email = "researcher@example.com"
     password = "securepass1"
 
     reg = client.post(
@@ -42,28 +41,6 @@ def test_register_login_me_and_scoped_watchlist():
     me = client.get("/api/auth/me", headers=headers)
     assert me.status_code == 200
     assert me.json()["email"] == email
-
-    empty = client.get("/api/watchlist", headers=headers)
-    assert empty.status_code == 200
-    assert empty.json() == []
-
-    added = client.post("/api/watchlist/AAPL", headers=headers)
-    assert added.status_code == 200
-    assert added.json()["ticker"] == "AAPL"
-
-    listed = client.get("/api/watchlist", headers=headers)
-    assert len(listed.json()) == 1
-    assert listed.json()[0]["ticker"] == "AAPL"
-
-    portfolio = client.get("/api/portfolio", headers=headers)
-    assert portfolio.status_code == 200
-    assert portfolio.json()["holdings_count"] == 1
-
-    # Guest/anonymous list should not include the authenticated user's ticker
-    guest = client.get("/api/watchlist")
-    assert guest.status_code == 200
-    guest_tickers = {e["ticker"] for e in guest.json()}
-    assert "AAPL" not in guest_tickers
 
     login = client.post(
         "/api/auth/login",
@@ -88,9 +65,8 @@ def test_duplicate_register_rejected():
     assert second.status_code == 409
 
 
-def test_guest_watchlist_persists():
-    r1 = client.post("/api/watchlist/MSFT")
-    assert r1.status_code == 200
-    r2 = client.get("/api/watchlist")
-    assert any(e["ticker"] == "MSFT" for e in r2.json())
-    client.delete("/api/watchlist/MSFT")
+def test_removed_trading_desk_routes():
+    assert client.get("/api/watchlist").status_code == 404
+    assert client.get("/api/portfolio").status_code == 404
+    assert client.get("/api/recommendations").status_code == 404
+    assert client.get("/api/alerts/rules").status_code == 404

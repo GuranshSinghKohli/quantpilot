@@ -4,6 +4,22 @@
 .env.production
 .env.*.local
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+# Provider checksums are resolved in CI. A lock generated on this machine only
+# covered darwin_amd64 and would fail linux runners.
+.terraform.lock.hcl
+
+# Licensed Massive minute bars. The replay reads league.bars. Do not commit a dump.
+backend/tests/fixtures/bars_one_day/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -12,6 +28,7 @@ __pycache__/
 .venv/
 venv/
 backend/.venv/
+backend/.venv-*/
 env/
 *.egg-info/
 .eggs/
@@ -49,7 +66,16 @@ data/watchlist.json
 backend/data/chroma_db/
 backend/data/watchlist.json
 backend/data/*.db
+backend/data/lake/
 backend/tests/_test_*.db
+backend/tests/_test_lake/
+
+# Phase 11 evaluation run artifacts (keep last_run after a measured run)
+evals/reports/**/*.json
+evals/reports/**/*.md
+!evals/reports/README.md
+!evals/reports/last_run.json
+!evals/reports/last_run.md
 
 # Docker
 .docker/
@@ -71,3 +97,5 @@ backend/tests/_test_*.db
 .impeccable/live/deferred-svelte-component-accepts.json
 .impeccable/live/*.png
 # impeccable-ignore-end
+.claude/
+.impeccable/

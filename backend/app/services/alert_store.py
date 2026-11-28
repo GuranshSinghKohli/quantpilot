@@ -1,15 +1,15 @@
-"""Alert rule/event persistence and evaluation helpers."""
+"""In-app notification (AlertEvent) persistence."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Tuple
+from datetime import datetime, timezone
+from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import AlertEvent, AlertRule, User
-from app.models.alert_schemas import AlertEventOut, AlertRuleOut
+from app.db.models import AlertEvent, User
+from app.models.alert_schemas import AlertEventOut
 
 
 def _iso(dt: Optional[datetime]) -> Optional[str]:
@@ -20,24 +20,9 @@ def _iso(dt: Optional[datetime]) -> Optional[str]:
     return dt.isoformat()
 
 
-def rule_to_out(rule: AlertRule) -> AlertRuleOut:
-    return AlertRuleOut(
-        id=rule.id,
-        ticker=rule.ticker,
-        alert_type=rule.alert_type,
-        threshold=float(rule.threshold),
-        enabled=bool(rule.enabled),
-        cooldown_minutes=int(rule.cooldown_minutes or 60),
-        last_triggered_at=_iso(rule.last_triggered_at),
-        created_at=_iso(rule.created_at) or datetime.now(timezone.utc).isoformat(),
-        note=rule.note or "",
-    )
-
-
 def event_to_out(event: AlertEvent) -> AlertEventOut:
     return AlertEventOut(
         id=event.id,
-        rule_id=event.rule_id,
         ticker=event.ticker,
         alert_type=event.alert_type,
         title=event.title,
@@ -49,67 +34,8 @@ def event_to_out(event: AlertEvent) -> AlertEventOut:
         created_at=_iso(event.created_at) or datetime.now(timezone.utc).isoformat(),
         read_at=_iso(event.read_at),
         is_read=event.read_at is not None,
+        feedback=getattr(event, "feedback", "") or "",
     )
-
-
-def list_rules(db: Session, user: User) -> List[AlertRule]:
-    return list(
-        db.scalars(
-            select(AlertRule)
-            .where(AlertRule.user_id == user.id)
-            .order_by(AlertRule.created_at.desc())
-        ).all()
-    )
-
-
-def get_rule(db: Session, user: User, rule_id: int) -> Optional[AlertRule]:
-    return db.scalar(
-        select(AlertRule).where(AlertRule.id == rule_id, AlertRule.user_id == user.id)
-    )
-
-
-def create_rule(
-    db: Session,
-    user: User,
-    *,
-    ticker: str,
-    alert_type: str,
-    threshold: float,
-    cooldown_minutes: int = 60,
-    note: str = "",
-    enabled: bool = True,
-) -> AlertRule:
-    rule = AlertRule(
-        user_id=user.id,
-        ticker=ticker.upper().strip(),
-        alert_type=alert_type,
-        threshold=threshold,
-        cooldown_minutes=cooldown_minutes,
-        note=note or "",
-        enabled=enabled,
-    )
-    db.add(rule)
-    db.commit()
-    db.refresh(rule)
-    return rule
-
-
-def delete_rule(db: Session, user: User, rule_id: int) -> bool:
-    rule = get_rule(db, user, rule_id)
-    if rule is None:
-        return False
-    db.delete(rule)
-    db.commit()
-    return True
-
-
-def update_rule(db: Session, rule: AlertRule, **fields) -> AlertRule:
-    for key, value in fields.items():
-        if value is not None and hasattr(rule, key):
-            setattr(rule, key, value)
-    db.commit()
-    db.refresh(rule)
-    return rule
 
 
 def list_events(
@@ -127,8 +53,6 @@ def list_events(
 
 
 def unread_count(db: Session, user: User) -> int:
-    from sqlalchemy import func
-
     return int(
         db.scalar(
             select(func.count())
@@ -159,46 +83,3 @@ def mark_all_read(db: Session, user: User) -> int:
         event.read_at = now
     db.commit()
     return len(events)
-
-
-def in_cooldown(rule: AlertRule, now: Optional[datetime] = None) -> bool:
-    if rule.last_triggered_at is None:
-        return False
-    now = now or datetime.now(timezone.utc)
-    last = rule.last_triggered_at
-    if last.tzinfo is None:
-        last = last.replace(tzinfo=timezone.utc)
-    return now < last + timedelta(minutes=int(rule.cooldown_minutes or 60))
-
-
-def record_trigger(
-    db: Session,
-    rule: AlertRule,
-    *,
-    title: str,
-    message: str,
-    observed_value: Optional[float],
-) -> AlertEvent:
-    now = datetime.now(timezone.utc)
-    event = AlertEvent(
-        user_id=rule.user_id,
-        rule_id=rule.id,
-        ticker=rule.ticker,
-        alert_type=rule.alert_type,
-        title=title,
-        message=message,
-        observed_value=observed_value,
-        threshold=float(rule.threshold),
-        created_at=now,
-    )
-    rule.last_triggered_at = now
-    db.add(event)
-    db.commit()
-    db.refresh(event)
-    return event
-
-
-def list_enabled_rules(db: Session) -> List[AlertRule]:
-    return list(
-        db.scalars(select(AlertRule).where(AlertRule.enabled.is_(True))).all()
-    )

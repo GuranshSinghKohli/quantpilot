@@ -12,7 +12,6 @@ from app.models.agent_schemas import (
     FactsAndInsights,
     FinalReportOutput,
     FinancialMetricsAgentOutput,
-    InvestmentMemoOutput,
     IrMaterialsOutput,
     MacroAgentOutput,
     NewsAgentOutput,
@@ -39,7 +38,6 @@ def build_analysis_response(state: Dict[str, Any], run_id: str) -> AnalysisRespo
         bear=scores.get("bear", 0.0),
         verification=scores.get("verification", 0.0),
         report=scores.get("report", 0.0),
-        memo=scores.get("memo", 0.0),
     )
     overall = overall_confidence(per_agent.model_dump())
 
@@ -62,11 +60,6 @@ def build_analysis_response(state: Dict[str, Any], run_id: str) -> AnalysisRespo
     return AnalysisResponse(
         ticker=symbol,
         final_report=FinalReportOutput.model_validate(final_report_raw),
-        investment_memo=(
-            InvestmentMemoOutput.model_validate(state["investment_memo"])
-            if state.get("investment_memo")
-            else None
-        ),
         news_output=(
             NewsAgentOutput.model_validate(state["news_output"])
             if state.get("news_output")

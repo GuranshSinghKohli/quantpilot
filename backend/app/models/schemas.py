@@ -10,6 +10,25 @@ class HealthResponse(BaseModel):
     sentry: bool = False
     otel: bool = False
     version: str = "1.0.0"
+    application: str = "ok"
+    database: str = "unknown"
+    redis: str = "unknown"
+    draining: bool = False
+
+
+class ReadyResponse(BaseModel):
+    status: str
+    application: str
+    database: str
+    db_revision: Optional[str] = None
+    migrations_current: bool = False
+    redis: str
+    draining: bool = False
+    request_id: str = ""
+    # Informational only: a down pipeline must not fail readiness (the API works without it).
+    kafka: Optional[str] = None
+    lake: Optional[str] = None
+    neo4j: Optional[str] = None
 
 
 class StockResponse(BaseModel):

@@ -22,10 +22,54 @@ def get_stock_price(ticker: str) -> Dict[str, Any]:
     }
 
 
+def _earnings_fields(info: Dict[str, Any]) -> Dict[str, Any]:
+    """Best-effort earnings date from yfinance info (unix ts or date list)."""
+    raw = (
+        safe_get(info, "earningsTimestamp")
+        or safe_get(info, "earningsTimestampStart")
+        or safe_get(info, "earningsDate")
+    )
+    if isinstance(raw, (list, tuple)) and raw:
+        raw = raw[0]
+    timestamp = None
+    iso = None
+    if raw is not None:
+        from datetime import datetime, timezone
+
+        if hasattr(raw, "timestamp"):
+            try:
+                timestamp = float(raw.timestamp())
+                iso = datetime.fromtimestamp(timestamp, tz=timezone.utc).date().isoformat()
+            except (TypeError, ValueError, OverflowError, OSError):
+                timestamp = None
+        if iso is None:
+            try:
+                ts = float(raw)
+                if ts > 1e12:
+                    ts /= 1000.0
+                timestamp = ts
+                iso = datetime.fromtimestamp(ts, tz=timezone.utc).date().isoformat()
+            except (TypeError, ValueError, OverflowError, OSError):
+                text = str(raw)
+                iso = text[:10] if len(text) >= 10 else text
+    surprise = safe_get(info, "earningsQuarterlyGrowth")
+    if surprise is not None:
+        try:
+            surprise = float(surprise) * 100.0
+        except (TypeError, ValueError):
+            surprise = None
+    return {
+        "earnings_date": iso,
+        "earnings_timestamp": timestamp,
+        "next_earnings_date": iso,
+        "earnings_surprise_pct": surprise,
+    }
+
+
 def get_stock_fundamentals(ticker: str) -> Dict[str, Any]:
     symbol = validate_ticker(ticker)
     info = yf.Ticker(symbol).info or {}
-    return {
+    payload = {
         "ticker": symbol,
         "market_cap": safe_get(info, "marketCap"),
         "pe_ratio": safe_get(info, "trailingPE"),
@@ -36,6 +80,8 @@ def get_stock_fundamentals(ticker: str) -> Dict[str, Any]:
         "sector": safe_get(info, "sector", ""),
         "industry": safe_get(info, "industry", ""),
     }
+    payload.update(_earnings_fields(info))
+    return payload
 
 
 def _news_link(value: Any) -> str:

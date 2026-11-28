@@ -60,7 +60,7 @@ uvicorn app.main:app --reload --port 8000
 
 ## Browser MCP + OpenClaw (PRD v3 Phase 10 / repo Phase 11)
 
-IR tools use allowlisted **httpx** first. Set `OPENCLAW_IR_FALLBACK=true` (plus `OPENCLAW_BROWSER_URL`) to try OpenClaw navigate when httpx fails or returns thin content. Set `BROWSER_MCP_ENABLED=false` to disable. Investigations escalate to `get_ir_materials` / `get_shareholder_letter` when news/filings are thin.
+IR tools use allowlisted **httpx** first. Set `OPENCLAW_IR_FALLBACK=true` (plus `OPENCLAW_BROWSER_URL`) to try OpenClaw navigate when httpx fails or returns thin content. Set `BROWSER_MCP_ENABLED=false` to disable. Investigations escalate to `get_ir_materials` / `get_shareholder_letter` when news/filings are thin. Phase 6 adds `browser_find_document` / `browser_search` / `browser_open` / `browser_download` / `browser_extract` for official IR documents when those APIs are insufficient. OpenClaw is not the default path.
 
 Agents `news_agent`, `financial_metrics_agent`, `sec_filing_agent`, and `earnings_agent` (IR) use MCP tools.
 

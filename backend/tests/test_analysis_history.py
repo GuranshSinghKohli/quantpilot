@@ -8,8 +8,6 @@ if _TEST_DB.exists():
     _TEST_DB.unlink()
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB.as_posix()}"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key"
-os.environ["BRIEFING_ENABLED"] = "false"
-os.environ["ALERTS_ENABLED"] = "false"
 os.environ["QUANTPILOT_LIGHTWEIGHT"] = "true"
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -39,7 +37,7 @@ def test_guest_history_is_device_scoped():
             owner_key="guest:device_aaa11111",
             user=None,
             ticker="NVDA",
-            recommendation="HOLD",
+            headline="NVDA research snapshot",
             risk_level="MEDIUM",
         )
         analysis_history_store.add_run(
@@ -47,7 +45,7 @@ def test_guest_history_is_device_scoped():
             owner_key="guest:device_bbb22222",
             user=None,
             ticker="AAPL",
-            recommendation="BUY",
+            headline="AAPL research snapshot",
             risk_level="LOW",
         )
     finally:
@@ -89,7 +87,7 @@ def test_auth_user_history_isolated_from_guest():
             owner_key=f"user:{user_id}",
             user=user,
             ticker="MSFT",
-            recommendation="HOLD",
+            headline="MSFT research snapshot",
             risk_level="MEDIUM",
         )
         analysis_history_store.add_run(
@@ -97,7 +95,7 @@ def test_auth_user_history_isolated_from_guest():
             owner_key="guest:someotherdevice99",
             user=None,
             ticker="TSLA",
-            recommendation="SELL",
+            headline="TSLA research snapshot",
             risk_level="HIGH",
         )
     finally:

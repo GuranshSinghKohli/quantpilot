@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / "backend" / ".env")
 
-from mcp_server.tools import browser_tools, sec_tools, stock_tools
+from mcp_server.tools import browser_mcp, browser_tools, sec_tools, stock_tools
 
 HANDLERS = {
     "get_stock_price": stock_tools.get_stock_price,
@@ -26,6 +26,11 @@ HANDLERS = {
     "fetch_browser_page": browser_tools.fetch_browser_page,
     "get_shareholder_letter": browser_tools.get_shareholder_letter,
     "snapshot_active_browser_tab": browser_tools.snapshot_active_browser_tab,
+    "browser_search": browser_mcp.browser_search,
+    "browser_open": browser_mcp.browser_open,
+    "browser_find_document": browser_mcp.browser_find_document,
+    "browser_download": browser_mcp.browser_download,
+    "browser_extract": browser_mcp.browser_extract,
 }
 
 
@@ -83,6 +88,50 @@ def _run_official_mcp() -> None:
     def snapshot_active_browser_tab() -> dict:
         """Read the active tab of the user's real signed-in browser via OpenClaw."""
         return browser_tools.snapshot_active_browser_tab()
+
+    @mcp.tool()
+    def browser_search(domain: str, query: str, max_results: int = 5, ticker: str = "") -> dict:
+        """Search an official IR/government domain. Does not search the open web."""
+        return browser_mcp.browser_search(domain, query, max_results=max_results, ticker=ticker)
+
+    @mcp.tool()
+    def browser_open(url: str, ticker: str = "") -> dict:
+        """Open one official primary-source page and return sanitized text."""
+        return browser_mcp.browser_open(url, ticker=ticker)
+
+    @mcp.tool()
+    def browser_find_document(
+        ticker: str,
+        document_type: str = "investor_presentation",
+        query: str = "",
+        company: str = "",
+        domain: str = "",
+    ) -> dict:
+        """Find a specific official IR document. APIs first; OpenClaw only if needed."""
+        return browser_mcp.browser_find_document(
+            ticker,
+            document_type=document_type,
+            query=query,
+            company=company,
+            domain=domain,
+        )
+
+    @mcp.tool()
+    def browser_download(url: str, ticker: str = "") -> dict:
+        """Download an official document or PDF and extract text when possible."""
+        return browser_mcp.browser_download(url, ticker=ticker)
+
+    @mcp.tool()
+    def browser_extract(
+        text: str,
+        objective: str,
+        source_url: str = "",
+        title: str = "",
+    ) -> dict:
+        """Extract a relevant excerpt from already-retrieved official text."""
+        return browser_mcp.browser_extract(
+            text, objective, source_url=source_url, title=title
+        )
 
     mcp.run(transport="stdio")
 

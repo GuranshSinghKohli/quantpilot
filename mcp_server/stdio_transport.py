@@ -112,6 +112,73 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
         "Read the active tab of the user's real signed-in browser via OpenClaw.",
         {"type": "object", "properties": {}, "required": []},
     ),
+    _tool_def(
+        "browser_search",
+        "Search an official IR/government domain. Does not search the open web.",
+        {
+            "type": "object",
+            "properties": {
+                "domain": {"type": "string"},
+                "query": {"type": "string"},
+                "max_results": {"type": "integer", "default": 5},
+                "ticker": {"type": "string"},
+            },
+            "required": ["domain", "query"],
+        },
+    ),
+    _tool_def(
+        "browser_open",
+        "Open one official primary-source page.",
+        {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string"},
+                "ticker": {"type": "string"},
+            },
+            "required": ["url"],
+        },
+    ),
+    _tool_def(
+        "browser_find_document",
+        "Find a specific official IR document when structured APIs are insufficient.",
+        {
+            "type": "object",
+            "properties": {
+                "ticker": {"type": "string"},
+                "document_type": {"type": "string", "default": "investor_presentation"},
+                "query": {"type": "string"},
+                "company": {"type": "string"},
+                "domain": {"type": "string"},
+            },
+            "required": ["ticker"],
+        },
+    ),
+    _tool_def(
+        "browser_download",
+        "Download an official document or PDF and extract text when possible.",
+        {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string"},
+                "ticker": {"type": "string"},
+            },
+            "required": ["url"],
+        },
+    ),
+    _tool_def(
+        "browser_extract",
+        "Extract a relevant excerpt from already-retrieved official text.",
+        {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string"},
+                "objective": {"type": "string"},
+                "source_url": {"type": "string"},
+                "title": {"type": "string"},
+            },
+            "required": ["text", "objective"],
+        },
+    ),
 ]
 
 

@@ -22,13 +22,6 @@ function formatTime(ts: string): string {
   }
 }
 
-function recBadge(rec: string): string {
-  const upper = rec.toUpperCase();
-  if (upper.includes("BUY")) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
-  if (upper.includes("SELL")) return "text-red-400 bg-red-500/10 border-red-500/20";
-  return "text-amber-400 bg-amber-500/10 border-amber-500/20";
-}
-
 export default function HistoryPanel({
   history,
   onSelect,
@@ -66,12 +59,9 @@ export default function HistoryPanel({
             <p className="mt-1 text-[11px] text-readout">
               {formatTime(entry.timestamp)}
             </p>
-            <p
-              className={`mt-2 inline-block truncate max-w-full rounded-md border px-2 py-0.5 text-[10px] font-medium ${recBadge(entry.recommendation)}`}
-            >
-              {entry.recommendation.slice(0, 48)}
-              {entry.recommendation.length > 48 ? "…" : ""}
-            </p>
+            {entry.headline && (
+              <p className="mt-2 truncate text-[11px] text-readout">{entry.headline}</p>
+            )}
           </button>
         ))}
       </div>

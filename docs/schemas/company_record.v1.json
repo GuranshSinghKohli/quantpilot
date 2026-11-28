@@ -1,0 +1,76 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "cik": {
+      "title": "Cik",
+      "type": "string"
+    },
+    "content_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "exchange": {
+      "anyOf": [
+        {
+          "maxLength": 32,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Exchange"
+    },
+    "external_id": {
+      "title": "External Id",
+      "type": "string"
+    },
+    "ingested_at": {
+      "format": "date-time",
+      "title": "Ingested At",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "ticker": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ticker"
+    },
+    "tickers": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Tickers",
+      "type": "array"
+    }
+  },
+  "required": [
+    "source",
+    "content_hash",
+    "ingested_at",
+    "external_id",
+    "cik",
+    "name"
+  ],
+  "title": "CompanyRecord",
+  "type": "object"
+}

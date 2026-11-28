@@ -1,0 +1,674 @@
+{
+  "$defs": {
+    "CompanyEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "dedup_key": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Dedup Key",
+          "type": "string"
+        },
+        "domain": {
+          "const": "company",
+          "title": "Domain",
+          "type": "string"
+        },
+        "event_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "external_id": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "External Id",
+          "type": "string"
+        },
+        "ingested_at": {
+          "format": "date-time",
+          "title": "Ingested At",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "original": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Original",
+          "type": "object"
+        },
+        "record": {
+          "$ref": "#/$defs/CompanyRecord"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "minimum": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "source_type": {
+          "$ref": "#/$defs/DataSourceType"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "source",
+        "source_type",
+        "external_id",
+        "dedup_key",
+        "content_hash",
+        "ingested_at",
+        "original",
+        "domain",
+        "record"
+      ],
+      "title": "CompanyEvent",
+      "type": "object"
+    },
+    "CompanyRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "cik": {
+          "title": "Cik",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "exchange": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exchange"
+        },
+        "external_id": {
+          "title": "External Id",
+          "type": "string"
+        },
+        "ingested_at": {
+          "format": "date-time",
+          "title": "Ingested At",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "ticker": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ticker"
+        },
+        "tickers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tickers",
+          "type": "array"
+        }
+      },
+      "required": [
+        "source",
+        "content_hash",
+        "ingested_at",
+        "external_id",
+        "cik",
+        "name"
+      ],
+      "title": "CompanyRecord",
+      "type": "object"
+    },
+    "DataSourceType": {
+      "description": "What kind of data a source provides. ``news`` and ``market_data`` match\n``app.domain.enums.SourceType`` so news rows map onto ``sources`` directly.",
+      "enum": [
+        "news",
+        "market_data",
+        "reference_data"
+      ],
+      "title": "DataSourceType",
+      "type": "string"
+    },
+    "JsonValue": {},
+    "MarketEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "dedup_key": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Dedup Key",
+          "type": "string"
+        },
+        "domain": {
+          "const": "market",
+          "title": "Domain",
+          "type": "string"
+        },
+        "event_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "external_id": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "External Id",
+          "type": "string"
+        },
+        "ingested_at": {
+          "format": "date-time",
+          "title": "Ingested At",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "original": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Original",
+          "type": "object"
+        },
+        "record": {
+          "$ref": "#/$defs/MarketRecord"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "minimum": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "source_type": {
+          "$ref": "#/$defs/DataSourceType"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "source",
+        "source_type",
+        "external_id",
+        "dedup_key",
+        "content_hash",
+        "ingested_at",
+        "original",
+        "domain",
+        "record"
+      ],
+      "title": "MarketEvent",
+      "type": "object"
+    },
+    "MarketRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "adj_close": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adj Close"
+        },
+        "close": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Close"
+        },
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "High"
+        },
+        "ingested_at": {
+          "format": "date-time",
+          "title": "Ingested At",
+          "type": "string"
+        },
+        "interval": {
+          "const": "1d",
+          "default": "1d",
+          "title": "Interval",
+          "type": "string"
+        },
+        "low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Low"
+        },
+        "open": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Open"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "symbol": {
+          "title": "Symbol",
+          "type": "string"
+        },
+        "timestamp": {
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "trading_date": {
+          "format": "date",
+          "title": "Trading Date",
+          "type": "string"
+        },
+        "volume": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "ge": 0,
+          "title": "Volume"
+        }
+      },
+      "required": [
+        "source",
+        "content_hash",
+        "ingested_at",
+        "symbol",
+        "timestamp",
+        "trading_date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "title": "MarketRecord",
+      "type": "object"
+    },
+    "NewsEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "dedup_key": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Dedup Key",
+          "type": "string"
+        },
+        "domain": {
+          "const": "news",
+          "title": "Domain",
+          "type": "string"
+        },
+        "event_id": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "external_id": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "External Id",
+          "type": "string"
+        },
+        "ingested_at": {
+          "format": "date-time",
+          "title": "Ingested At",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "original": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Original",
+          "type": "object"
+        },
+        "record": {
+          "$ref": "#/$defs/NewsRecord"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "minimum": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "source_type": {
+          "$ref": "#/$defs/DataSourceType"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "source",
+        "source_type",
+        "external_id",
+        "dedup_key",
+        "content_hash",
+        "ingested_at",
+        "original",
+        "domain",
+        "record"
+      ],
+      "title": "NewsEvent",
+      "type": "object"
+    },
+    "NewsRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author"
+        },
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "external_id": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "External Id",
+          "type": "string"
+        },
+        "ingested_at": {
+          "format": "date-time",
+          "title": "Ingested At",
+          "type": "string"
+        },
+        "published_at": {
+          "format": "date-time",
+          "title": "Published At",
+          "type": "string"
+        },
+        "publisher": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publisher"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 20000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary"
+        },
+        "tickers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tickers",
+          "type": "array"
+        },
+        "title": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "maxLength": 2048,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "content_hash",
+        "ingested_at",
+        "external_id",
+        "title",
+        "url",
+        "published_at"
+      ],
+      "title": "NewsRecord",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "company": "#/$defs/CompanyEvent",
+      "market": "#/$defs/MarketEvent",
+      "news": "#/$defs/NewsEvent"
+    },
+    "propertyName": "domain"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/NewsEvent"
+    },
+    {
+      "$ref": "#/$defs/MarketEvent"
+    },
+    {
+      "$ref": "#/$defs/CompanyEvent"
+    }
+  ]
+}

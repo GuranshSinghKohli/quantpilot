@@ -168,23 +168,6 @@ def score_report_agent(
     return _clamp(score)
 
 
-def score_memo_agent(
-    output: Dict[str, Any],
-    report_confidence: float = 0.5,
-) -> float:
-    score = report_confidence
-    thesis = output.get("investment_thesis") or ""
-    if len(thesis.split()) < 25:
-        score -= 0.1
-    if not output.get("key_numbers"):
-        score -= 0.1
-    if not output.get("risks"):
-        score -= 0.1
-    if (output.get("decision") or "").upper() not in {"BUY", "HOLD", "SELL", "WATCH"}:
-        score -= 0.1
-    return _clamp(score)
-
-
 def overall_confidence(per_agent: Dict[str, float]) -> float:
     weights = {
         "news": 0.09,
@@ -195,9 +178,8 @@ def overall_confidence(per_agent: Dict[str, float]) -> float:
         "risk": 0.12,
         "bull": 0.04,
         "bear": 0.04,
-        "verification": 0.09,
-        "report": 0.13,
-        "memo": 0.12,
+        "verification": 0.11,
+        "report": 0.15,
     }
     total = 0.0
     weight_sum = 0.0

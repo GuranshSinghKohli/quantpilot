@@ -9,18 +9,17 @@
 [![Vercel](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
 [![Railway](https://img.shields.io/badge/Deploy-Railway-0B0D0E?logo=railway&logoColor=white)](https://railway.app/)
 
-**QuantPilot AI** is an autonomous investigation engine for equities: answer *why did this move?* with ranked claims and an Evidence Ledger, while still shipping full multi-agent research reports. A LangGraph pipeline pulls live market data, SEC filings, and news via MCP tools, then debates, verifies, and memos — with confidence scoring, fact/insight separation, and vector memory through a Next.js dashboard.
+**QuantPilot** is a flagship systems project: an evidence-driven market and technology intelligence platform. It detects events, maps company/technology relationships, measures related market impact, and uses specialized agents to produce source-backed research — not stock-price predictions or investment recommendations. The desk is built to be explainable: workflow, agents, evidence, and the stack are visible on the page.
 
 ---
 
 ## What it does
 
-- **Why did it move?** — Reactive investigation: detect move → plan evidence → collect via MCP → rank weighted hypotheses into the Evidence Ledger
-- **One-click equity research** — Enter a ticker and receive a full multi-section report plus shareable investment memo
-- **Transparent agent pipeline** — News, financial, SEC, earnings, macro, risk, bull/bear, verification, report, and memo agents
-- **Grounded citations** — Facts (prices, filings, headlines) stay separated from model insight
-- **Persistent memory** — Per-user / per-device history, ChromaDB reports, watchlist, and portfolio OS
-- **Production observability** — Structured logs, workflow runs, optional LangSmith / OTel / Sentry
+- **Event-led research** — Detect a material event, collect evidence, verify claims, and write a structured report
+- **Evidence Ledger** — Ranked, cited claims with a verification / Devil's Advocate pass
+- **Multi-agent research** — News, company, market, filings, and verification agents (LangGraph)
+- **Fact vs inference** — Grounded facts stay separated from model interpretation
+- **Not a trading desk** — No portfolio OS, broker sync, investment memos, or price-alert recommendations
 
 ![Dashboard](./assets/dashboard.png)
 
@@ -29,29 +28,44 @@
 ## Architecture overview
 
 ```
-Browser → Vercel (Next.js) → Railway (FastAPI) → LangGraph → Agents → MCP → yfinance / SEC / OpenAI
+Browser (Next.js) → FastAPI → LangGraph / investigation runner → MCP → yfinance / SEC / OpenAI
                                       ↓
-                                 ChromaDB + Watchlist
+                         Postgres/SQLite + Evidence Ledger + ChromaDB
 ```
 
-Full diagram and technology rationale: **[ARCHITECTURE.md](./ARCHITECTURE.md)**
+Workflow: **Event → Entity → Relationship → Market → Research → Verification → Report**
+
+Full diagram: **[ARCHITECTURE.md](./ARCHITECTURE.md)** · Current state, decisions and roadmap: **[docs/CURRENT_STATE.md](./docs/CURRENT_STATE.md)** · **[docs/ARCHITECTURE_DECISIONS.md](./docs/ARCHITECTURE_DECISIONS.md)** · **[docs/IMPLEMENTATION_ROADMAP.md](./docs/IMPLEMENTATION_ROADMAP.md)**
 
 ---
 
 ## Tech stack
 
+**Shipped in this repo**
+
 | Layer | Technology | Purpose |
 |-------|------------|---------|
-| Frontend | Next.js 14, TypeScript, Tailwind | Dashboard UI, API client, deploy on Vercel |
-| Backend | FastAPI, Pydantic, uvicorn | REST API, CORS, background tasks |
-| Orchestration | LangGraph | Stateful multi-agent workflow |
-| Agents | OpenAI GPT-4o-mini | News, valuation, SEC, earnings, macro, risk, debate, verification, report |
-| Tools | MCP (stdio server) | Standardized financial tool interface |
-| Memory | ChromaDB, PostgreSQL | Vector reports; users / portfolios / watchlist |
-| Auth | JWT + bcrypt | Register / login, user-scoped holdings |
-| Data | yfinance, SEC EDGAR | Market data and filings |
-| Observability | JSON logging, workflow tracker | Agent timing, confidence, failures |
-| Deployment | Railway (API), Vercel (UI) | Production hosting |
+| Frontend | Next.js 14, TypeScript, Tailwind | Investigation desk, API client |
+| Backend | Python, FastAPI, Pydantic | REST API, jobs, schemas |
+| Agents | LangGraph, OpenAI | Multi-agent research + verification |
+| Store | PostgreSQL / SQLite, optional Redis, ChromaDB | Ledger, cache, report search |
+| Tools | MCP, yfinance, SEC EDGAR | Market data and filings |
+| Auth | JWT + bcrypt | Persist research history |
+| Quality | Pytest, GitHub Actions, Docker | Tests, CI, local/prod images |
+
+**Paper league (in progress):** `docs/QUANTPILOT_LEAGUE.md`. Minute bars come from Massive through the existing `SourceClient`. Session hours come from `exchange-calendars` (XNYS), offline. Rows live in Postgres schema `league`, separate from `public`. No broker.
+
+**Ingestion pipeline (Phase 2, in progress; compose profile `pipeline`):** Kafka 4.3 (KRaft, single node) as the event transport, a lake writer consuming into a write-once raw lake on MinIO/S3, and run/event tracking with lineage in Postgres. Three real source adapters feed it through one tracked publisher: Massive (formerly Polygon.io) ticker news and daily bars (a free API key is needed), and the SEC's keyless company/ticker/exchange file. Adapters only fetch and normalize, and the raw lake keeps each provider object verbatim. The deterministic SYNTHETIC source remains for tests and is flagged as such. A PySpark 4.1 batch layer (compose profile `spark`, `local[*]` in one container, S3A to MinIO) turns raw objects into validated, deduplicated, date-partitioned Parquet under `processed/`. It uses explicit schemas, write-once reject objects for every failed check, a manifest per job, and tracking in `processing_jobs`; reruns are idempotent (`make spark-news|spark-market|spark-company|spark-all`). A canonical loader (compose profile `load`, pyarrow, no Spark) moves the processed Parquet listed in a completed job's manifest into Postgres: `companies` (keyed by CIK), `market_bars` and `news_articles` + `sources`. It validates every row before writing anything, applies the same newest-wins rule as Step 2.2 through database-enforced upserts, and commits in batches together with the ledger update. It records its counts and status on `processing_jobs`, plus a load report per attempt. Replays are no-ops (`make load-company|load-market|load-news|load-all`). Today only the real SEC companies are loaded. The dev lake holds no real market or news data (no Massive key is configured), and synthetic rows are refused by design. Research does not read these tables yet. Operators inspect the path with `make pipeline-status`, `pipeline-check` (stale RUNNING jobs, report only), `pipeline-reconcile` and `pipeline-quality`. `GET /metrics` is Prometheus text (low-cardinality labels only). `GET /ready` reports Kafka and the lake without requiring them. An optional compose profile `observability` runs Prometheus against `/metrics`. See [docs/PHASE2_PLAN.md](./docs/PHASE2_PLAN.md), [docs/PHASE2_7_PLAN.md](./docs/PHASE2_7_PLAN.md) and [docs/PHASE2_8_PLAN.md](./docs/PHASE2_8_PLAN.md).
+
+**Entity graph (Phase 3.1–3.2):** Postgres `entities` / `relationships` / `entity_aliases` / `relationship_candidates` are the source of truth. Resolution is exact (CIK, source key, normalized name, ticker) and refuses to guess. New edges require `source_id` + `evidence_id`; co-mention is not a relationship. Optional Neo4j 5 (compose profiles `graph` / `graph-test`) is an idempotent projection (`make graph-project`) with read-only reconcile and opt-in repair. The API starts if Neo4j is down. Read-only: `GET /api/entities/{id}` and neighbors. See [docs/PHASE3_1_PLAN.md](./docs/PHASE3_1_PLAN.md) and [docs/PHASE3_2_PLAN.md](./docs/PHASE3_2_PLAN.md).
+
+**Market & event intelligence (Phase 3.3):** Canonical news with structured tickers may become `event_candidates` (`NEWS`); articles without tickers stay documents. Accepted candidates become confirmed `events` + `event_entities` (Phase 3.2 resolver; no guessing). `event_impacts` stores trading-session window returns on `market_bars` (`calculation_version=v1`, unadjusted close, `MARKET_BENCHMARK_SYMBOL`). Missing bars are `NULL`. Confirmed associations project as `:CanonicalEvent-[:INVOLVES]->:Entity`. CLI: `python -m app.market events-from-news|impact|quality`. APIs: `GET /api/events/{id}` and `/impact`. Not a forecast and not investment advice. See [docs/PHASE3_3_PLAN.md](./docs/PHASE3_3_PLAN.md).
+
+**Evidence & retrieval (Phase 4.1):** Canonical sources become `retrieval_documents` + deterministic chunks. Embeddings go through `EmbeddingProvider` (`text-embedding-3-small` or a fake lexical hasher in tests). Postgres pgvector is a derived index (`chunk_embeddings`); SQLite stores JSON. Hybrid search + structured facts assemble a bounded EvidencePackage (`GET /api/search`, `POST /api/research/context`). CLI: `python -m app.retrieval documents|embed|evaluate`. See [docs/PHASE4_1_PLAN.md](./docs/PHASE4_1_PLAN.md).
+
+**Research agents (Phase 4.7):** `POST /api/research` stores a job and an outbox row. A worker publishes `quantpilot.research.request`, then calls the Phase 4.3 `run_research()` graph. `GET /api/research/{id}` reads the durable result. Delivery is at-least-once with idempotent processing. Findings stay `FACT` / `OBSERVATION` / `INFERENCE` / `SCENARIO`. Document date filters are half-open UTC on `published_at`. The planner routes from the request. A technology finding quotes an excerpt that names a technology; a mention is not USES. `python -m app.research evaluate` scores deterministic fixtures. Those scores are not production-model quality. `python -m app.research load` measures the same submit, outbox, and worker path under FakeLLM on disposable Postgres and `test.*` Kafka topics. Those timings are not production capacity. Phase 4.9 kept that path: the measured wait is one worker draining a published batch, and the code change is the outbox pending gauge, which now counts rows still pending after the batch. See [docs/PHASE4_7_PLAN.md](./docs/PHASE4_7_PLAN.md), [docs/PHASE4_8_PLAN.md](./docs/PHASE4_8_PLAN.md), and [docs/PHASE4_9_RESULTS.md](./docs/PHASE4_9_RESULTS.md).
+
+**Deployment (Phase 5–6):** Terraform under `infra/terraform/` describes a single-VPC AWS layout: ALB, ECS for the API, Next.js, and `python -m app.research worker`, RDS PostgreSQL 16, one Kafka EC2 node, and a private S3 lake. `ENVIRONMENT=production` refuses SQLite, FakeLLM, and localhost. Migrations run as `make prod-migrate` or the one-shot migrate task, not on API startup. Phase 6 applied that layout as `quantpilot-staging` in `us-east-1` and ran functional smoke tests. Phase 7 loaded five SEC company listings through the existing ingest, lake, Spark, and canonical path and ran real-OpenAI research against that corpus. RDS is single-AZ. Kafka replication factor is 1. HTTPS is pending an ACM certificate. Staging checks are not a capacity result; Phase 4.8 remains the only formal load matrix. Neo4j stays an external endpoint and was not configured in staging. Phase 9 loaded a bounded Massive news and daily-bar corpus for those five listings plus SPY, then ran retrieval, confirmed news events, market-window math, and real OpenAI research on that data. Relationship rows stayed at zero. See [docs/phases/phase9-results.md](docs/phases/phase9-results.md). Phase 10 constrains the master planner to a strict JSON schema and adds a research desk at `/`. Phase 10.1 deployed those images to the existing staging services and measured 15 real research jobs there. The local 24-query planner score is not that measurement. See [docs/phases/phase10-results.md](docs/phases/phase10-results.md). Document, event, and graph citations now pass through a stored http(s) source URL. A listing citation still has no URL, and that is counted separately from citation-object coverage. See [docs/PHASE8_RESULTS.md](./docs/PHASE8_RESULTS.md). A standing Spark cluster, Airflow, and Grafana are still not shipped. See [docs/PHASE6_RESULTS.md](./docs/PHASE6_RESULTS.md), [docs/PHASE7_RESULTS.md](./docs/PHASE7_RESULTS.md), and [docs/STAGING_CORPUS.md](./docs/STAGING_CORPUS.md).
 
 ---
 
@@ -94,15 +108,26 @@ cd quantpilot
 
 ### 2. Backend (port 8000)
 
+Python 3.11 (see `.python-version`).
+
 ```bash
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+uv venv --python 3.11 .venv          # or: python3.11 -m venv .venv
+uv pip install -r requirements-dev.txt  # runtime + pytest
 cp .env.example .env
 # Edit .env — OPENAI_API_KEY, SEC_EDGAR_USER_AGENT
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+cd .. && make migrate && make api       # alembic upgrade head, then uvicorn --reload
 ```
+
+Schema changes go through Alembic (`backend/alembic/versions/`); the API never runs `create_all`. In development the API also migrates on startup (`DB_AUTO_MIGRATE`). `GET /ready` reports `db_revision` and `migrations_current`.
+
+### AWS configuration
+
+Local `make api` is unchanged. The AWS shape is documented in [docs/PHASE5_ARCHITECTURE.md](./docs/PHASE5_ARCHITECTURE.md) and [docs/PHASE5_DEPLOYMENT.md](./docs/PHASE5_DEPLOYMENT.md). Production startup refuses development defaults (`backend/app/core/settings.py`). Apply Terraform only from the manual **Deploy** workflow, and run `make prod-migrate` with `DATABASE_URL` set before starting the API. Variable names are in `.env.production.example`. Neo4j is not created by Terraform.
+
+**Tests.** `make test` runs the full suite on a throwaway SQLite file. `make db && make test-integration` runs the Postgres tier (`backend/tests/integration/`: migration drift, core repositories) against `quantpilot_test`, which the compose Postgres creates on first boot.
+
+**Compose.** `make up` starts pgvector-enabled Postgres 16, Redis, a one-shot `migrate` service, the API and the frontend; `make dev` adds API hot reload. Host ports are overridable (`POSTGRES_PORT`, `REDIS_PORT`). Migration `0011` enables the `vector` extension.
 
 The MCP server is **auto-spawned** by the backend over stdio — no separate terminal required for normal use.
 
@@ -126,6 +151,22 @@ python mcp_server/server.py
 API docs: **http://localhost:8000/docs**
 
 ---
+
+### 5. Optional: ingestion pipeline (Kafka → lake writer → MinIO)
+
+```bash
+make pipeline-up             # postgres, migrate, MinIO, Kafka (+ topics), lake-writer
+make publish-synthetic n=5   # SYNTHETIC market events through the tracked publisher
+make sources-check           # provider health: configured / reachable / auth (separate from API /health)
+make ingest-company          # SEC company/ticker/exchange (keyless; needs SEC_EDGAR_USER_AGENT)
+make ingest-market MARKET_SYMBOLS=AAPL,MSFT MARKET_START=2026-09-01   # Massive daily bars (MARKET_API_KEY)
+make ingest-news NEWS_TICKERS=AAPL MAX_RECORDS=200                    # Massive news (NEWS_API_KEY)
+make kafka-check             # topics + lake-writer consumer-group lag
+make dlq                     # dead letters (read-only)
+make test-kafka test-s3      # pipeline test tiers (isolated test topics/buckets)
+```
+
+Every ingest run is bounded (explicit window, record cap, page cap), throttled to the provider's limit, retried only for timeouts/429/5xx, and tracked in `ingestion_runs`. Rerunning the same window yields duplicates, not new events. Guarantees are at-least-once transport with idempotent, write-once sinks, not exactly-once. Details are in [docs/PHASE2_4_PLAN.md](./docs/PHASE2_4_PLAN.md). Set `POSTGRES_PORT`, `KAFKA_PORT` or `MINIO_PORT` if the default host ports are taken.
 
 ## Environment variables
 

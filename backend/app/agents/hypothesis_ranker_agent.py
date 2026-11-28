@@ -6,8 +6,12 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
+from datetime import datetime, timezone
+
 from app.agents.llm import call_openai_json
+from app.models.hypothesis_schemas import HypothesisRecord
 from app.observability.logger import get_logger, log_event
+from app.services import hypothesis_engine
 from app.services.move_detector import MoveSnapshot
 
 logger = get_logger("hypothesis_ranker")
@@ -25,6 +29,8 @@ async def rank_hypotheses(
       summary: str
       hypotheses: [{statement, stance, confidence_score, weight, devil_advocate_notes, evidence_indices}]
     """
+    engine_result = _engine_rank(move, plan, evidence)
+    engine_legacy = hypothesis_engine.records_to_legacy(engine_result, evidence)
     fallback = _fallback_rank(move, plan, evidence)
     payload = {
         "ticker": move.ticker,
@@ -32,6 +38,17 @@ async def rank_hypotheses(
         "window_label": move.window_label,
         "plan_focus": plan.get("focus"),
         "seed_hypotheses": plan.get("seed_hypotheses") or [],
+        "hypothesis_records": [
+            {
+                "id": r.hypothesis_id,
+                "title": r.title,
+                "support_score": r.support_score,
+                "status": r.status,
+            }
+            for r in engine_result.hypotheses
+        ],
+        "leading_hypothesis_id": engine_result.leading_hypothesis_id,
+        "strongest_alternative_id": engine_result.strongest_alternative_id,
         "evidence": [
             {
                 "index": i,
@@ -72,7 +89,40 @@ async def rank_hypotheses(
     for i, h in enumerate(hypotheses, start=1):
         h["rank"] = i
 
-    summary = (result.get("summary") or fallback["summary"] or "")[:2000]
+    hypotheses = hypothesis_engine.overlay_engine_fields(hypotheses, engine_result)
+    # Engine scores are the ranking source of truth; LLM supplies narrative notes.
+    by_id = {r.hypothesis_id: r for r in engine_result.hypotheses}
+    for row in hypotheses:
+        rec = by_id.get(str(row.get("hypothesis_id") or ""))
+        if rec is None:
+            continue
+        row["support_score"] = rec.support_score
+        row["confidence_level"] = rec.confidence_level
+        row["hypothesis_status"] = rec.status
+        row["weight"] = next(
+            (
+                h.get("weight")
+                for h in engine_legacy.get("hypotheses") or []
+                if h.get("hypothesis_id") == rec.hypothesis_id
+            ),
+            row.get("weight"),
+        )
+        row["confidence_score"] = rec.support_score
+        if rec.supporting_evidence or rec.contradicting_evidence:
+            row["supporting_indices"] = list(rec.supporting_evidence)
+            row["contradicting_indices"] = list(rec.contradicting_evidence)
+            row["evidence_indices"] = list(
+                dict.fromkeys(rec.supporting_evidence + rec.contradicting_evidence)
+            ) or row.get("evidence_indices") or []
+    hypotheses.sort(
+        key=lambda h: (
+            -float(h.get("support_score") if h.get("support_score") is not None else h.get("weight") or 0),
+            -float(h.get("weight") or 0),
+        )
+    )
+    for i, h in enumerate(hypotheses, start=1):
+        h["rank"] = i
+    summary = (engine_legacy.get("summary") or result.get("summary") or fallback["summary"] or "")[:2000]
     log_event(
         logger,
         logging.INFO,
@@ -80,8 +130,51 @@ async def rank_hypotheses(
         ticker=move.ticker,
         count=len(hypotheses),
         top_weight=hypotheses[0]["weight"] if hypotheses else 0,
+        leading=engine_result.leading_hypothesis_id,
     )
-    return {"summary": summary, "hypotheses": hypotheses}
+    return {
+        "summary": summary,
+        "hypotheses": hypotheses,
+        "engine": engine_result.model_dump(),
+        "leading_hypothesis_id": engine_result.leading_hypothesis_id,
+        "strongest_alternative_id": engine_result.strongest_alternative_id,
+    }
+
+
+def _engine_rank(
+    move: MoveSnapshot,
+    plan: Dict[str, Any],
+    evidence: List[Dict[str, Any]],
+):
+    raw_records = plan.get("hypothesis_records") or []
+    records: List[HypothesisRecord] = []
+    for row in raw_records:
+        try:
+            records.append(HypothesisRecord.model_validate(row))
+        except Exception:
+            continue
+    if not records:
+        from app.agents.hypothesis_generator import catalog_hypotheses
+
+        records = catalog_hypotheses(
+            move,
+            asset_hint=getattr(move, "asset_class", None) or "equity",
+            seeds=list(plan.get("seed_hypotheses") or []),
+        )
+    event_time = None
+    event = plan.get("event") if isinstance(plan.get("event"), dict) else {}
+    raw_ts = (event or {}).get("occurred_at") or (event or {}).get("detected_at")
+    if raw_ts:
+        event_time = hypothesis_engine._parse_time(raw_ts)
+    if event_time is None:
+        event_time = datetime.now(timezone.utc)
+    return hypothesis_engine.score_and_rank(
+        records,
+        evidence,
+        event_time=event_time,
+        move=move,
+        ticker=move.ticker,
+    )
 
 
 def _normalize_hypothesis(

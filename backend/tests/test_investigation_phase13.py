@@ -9,8 +9,6 @@ if _TEST_DB.exists():
     _TEST_DB.unlink()
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB.as_posix()}"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key"
-os.environ["BRIEFING_ENABLED"] = "false"
-os.environ["ALERTS_ENABLED"] = "false"
 os.environ["INVESTIGATIONS_SWEEP_ENABLED"] = "false"
 os.environ["QUANTPILOT_LIGHTWEIGHT"] = "true"
 os.environ["LANGSMITH_TRACING"] = "false"
@@ -25,7 +23,6 @@ from app.db.session import SessionLocal, init_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.agent_schemas import (  # noqa: E402
     EarningsAgentOutput,
-    InvestmentMemoOutput,
     MacroAgentOutput,
 )
 from app.models.investigation_schemas import InvestigationCreateRequest  # noqa: E402
@@ -61,7 +58,7 @@ def test_observability_status_endpoint():
     assert cached["langsmith"] == body["langsmith"]
 
 
-def test_roster_pass_attaches_earnings_macro_memo():
+def test_roster_pass_attaches_earnings_macro():
     move = MoveSnapshot(
         ticker="MSFT",
         move_pct=-3.2,
@@ -102,33 +99,12 @@ def test_roster_pass_attaches_earnings_macro_memo():
         portfolio_implications=["Watch yields"],
         confidence_score=0.5,
     )
-    memo = InvestmentMemoOutput(
-        ticker="MSFT",
-        memo_title="MSFT Investment Memo",
-        one_liner="Investigation brief for MSFT move.",
-        investment_thesis="Thesis",
-        key_numbers=["Price: 400"],
-        catalysts=["Earnings"],
-        risks=["Macro"],
-        bull_case_summary="Bull",
-        bear_case_summary="Bear",
-        decision="WATCH",
-        conviction="medium",
-        time_horizon="3-12 months",
-        what_would_change_my_mind=["Guidance cut"],
-        disclaimer="Educational only.",
-        confidence_score=0.5,
-    )
-
     with patch(
         "app.services.investigation_roster.analyze_earnings",
         new=AsyncMock(return_value=(earn, {})),
     ), patch(
         "app.services.investigation_roster.analyze_macro",
         new=AsyncMock(return_value=mac),
-    ), patch(
-        "app.services.investigation_roster.generate_investment_memo",
-        new=AsyncMock(return_value=memo),
     ):
         roster = asyncio.get_event_loop().run_until_complete(
             run_roster_pass(
@@ -142,7 +118,7 @@ def test_roster_pass_attaches_earnings_macro_memo():
 
     assert roster["earnings"]["earnings_summary"]
     assert roster["macro"]["relevance"] == "medium"
-    assert "Investigation Brief" in roster["memo"]["memo_title"]
+    assert roster["memo"] == {}
 
 
 def test_roster_persisted_on_investigation_detail():
@@ -166,11 +142,7 @@ def test_roster_persisted_on_investigation_detail():
             roster={
                 "earnings": {"earnings_summary": "ok", "tone": "mixed"},
                 "macro": {"macro_summary": "rates", "relevance": "low"},
-                "memo": {
-                    "memo_title": "MSFT Investigation Brief",
-                    "one_liner": "Brief line",
-                    "decision": "WATCH",
-                },
+                "memo": {},
             },
         )
         detail = evidence_ledger_store.get_investigation(
@@ -180,6 +152,6 @@ def test_roster_persisted_on_investigation_detail():
         )
         assert detail is not None
         assert detail.roster is not None
-        assert detail.roster.memo.get("decision") == "WATCH"
+        assert detail.roster.earnings.get("tone") == "mixed"
     finally:
         db.close()

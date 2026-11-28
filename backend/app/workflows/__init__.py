@@ -1,1 +1,1 @@
-"""Phase 2 — LangGraph orchestration workflows."""
+"""LangGraph orchestration: analysis report graph and investigation graph."""

@@ -1,0 +1,5 @@
+# Ingestion pipeline (Phase 2). Not needed by the API image.
+-r requirements.txt
+boto3==1.43.103
+confluent-kafka==2.15.1
+pyarrow==25.0.1

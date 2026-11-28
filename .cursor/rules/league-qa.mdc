@@ -1,0 +1,40 @@
+---
+description: QA rules for all QuantPilot League work
+globs: backend/app/league/**, backend/alembic_league/**, backend/tests/unit/league/**, scripts/**, docs/QUANTPILOT_LEAGUE.md
+alwaysApply: true
+---
+
+# League QA protocol — follow on EVERY step
+
+## Definition of done
+A step is NOT done until every item below is shown with REAL command output in your reply. Never summarize test results without pasting the output. Never say "should pass".
+
+## Required checks after each step
+1. Full League test suite on a FRESH database:
+   - `alembic -c alembic_league.ini downgrade base` then `upgrade head` against 127.0.0.1:5433/quantpilot_test
+   - The dev database quantpilot is not the QA target. A downgrade there would drop league.bars.
+   - `pytest tests/unit/league -v` — paste the full output
+2. `alembic -c alembic_league.ini check` against the same quantpilot_test URL — must report no drift. Paste output.
+3. Public schema untouched: the fingerprint test passes against the PUBLIC head revision (run `alembic upgrade head` on public first if behind).
+4. Scope check: `git status` and `git diff --stat` — only League paths changed. List any file outside League scope and why.
+5. Spec check: list every section of docs/QUANTPILOT_LEAGUE.md this step implements, and for each requirement say "tested by <test name>" or "NOT tested — reason".
+
+## Test-writing rules
+- Every rule in the spec gets at least one test, including NEGATIVE tests (bad input is rejected, limits are enforced, wrong database is refused).
+- Money code (fills, risk, cash, positions) also needs Hypothesis property tests.
+- Database rules must be enforced by Postgres constraints AND tested by attempting a bad insert.
+- Tests must not depend on network, Alpaca keys, or the current time — inject a clock and use fixtures.
+- Never weaken, skip, or delete an existing test to make something pass. If a test seems wrong, stop and ask me.
+
+## Adversarial self-review (before reporting)
+List at least 3 ways this step could be broken or misused (wrong database, bad data, edge cases like zero, negative, missing bars, market closed, duplicates), and show the test that covers each. If one isn't covered, add a test or flag it.
+
+## Report format (use exactly)
+- What was built
+- Test output (pasted)
+- alembic check output (pasted)
+- Scope check (git diff --stat)
+- Spec coverage table
+- Adversarial review
+- Open questions
+Then STOP and wait for my OK.

@@ -11,7 +11,6 @@ interface AppHeaderProps {
   onUserChange: (user: AuthUser | null) => void;
   sourcesAvailable?: boolean;
   onSourcesClick?: () => void;
-  onPortfolioClick?: () => void;
   search?: ReactNode;
   caseId?: number | null;
 }
@@ -22,7 +21,6 @@ export default function AppHeader({
   onUserChange,
   sourcesAvailable = false,
   onSourcesClick,
-  onPortfolioClick,
   search,
   caseId,
 }: AppHeaderProps) {
@@ -59,17 +57,6 @@ export default function AppHeader({
         <div className="ml-auto flex items-center gap-2">
           {apiReachable === false && (
             <Readout label="Uplink down" className="border-down text-down" />
-          )}
-
-          {onPortfolioClick && (
-            <HudButton
-              variant="ghost"
-              onClick={onPortfolioClick}
-              title="Jump to your position"
-              className="min-h-9 px-2 py-1.5"
-            >
-              Position
-            </HudButton>
           )}
 
           <HudButton

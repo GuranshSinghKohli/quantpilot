@@ -9,12 +9,11 @@ const STEP_MESSAGES: Record<string, string> = {
   sec: "Reading recent SEC filings and disclosures",
   earnings: "Reviewing earnings and investor-relations material",
   macro: "Mapping rates, inflation, and macro conditions",
-  risk: "Stress-testing the investment case",
-  bull: "Building the strongest upside thesis",
-  bear: "Challenging the thesis and surfacing downside",
+  risk: "Stress-testing the research case",
+  bull: "Building the strongest supporting case",
+  bear: "Challenging the case and surfacing downside",
   verification: "Checking claims against source evidence",
   report: "Synthesizing the final research report",
-  memo: "Drafting a shareable investment memo",
 };
 
 interface LoadingPipelineProps {

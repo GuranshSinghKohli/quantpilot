@@ -28,7 +28,6 @@ def test_stream_agent_order_includes_phase10():
         "bear",
         "verification",
         "report",
-        "memo",
     ]
     assert STREAM_NODE_TO_AGENT["earnings_analysis"] == "earnings"
     assert STREAM_NODE_TO_AGENT["macro_analysis"] == "macro"

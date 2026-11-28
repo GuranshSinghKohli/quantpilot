@@ -15,6 +15,7 @@ from app.models.alert_schemas import AlertEventOut
 from app.models.investigation_schemas import InvestigationDetail
 from app.observability.logger import get_logger, log_event
 from app.services import alert_store, materiality
+from app.services.autonomous_monitor import decide_notify, log_monitor
 from app.services.move_detector import MoveSnapshot
 
 logger = get_logger("investigation_notifications")
@@ -40,37 +41,49 @@ def maybe_notify_investigation(
     Create an in-app AlertEvent when a proactive investigation clears the
     materiality bar. Returns the event or None if skipped.
     """
-    if not NOTIFY_ENABLED:
-        return None
-    if user is None:
-        return None
-    if detail.trigger_reason not in PROACTIVE_REASONS:
-        return None
-    if detail.status != "complete":
-        return None
+    recent_note = False
+    if user is not None:
+        recent_note = _recent_notification_exists(
+            db, user_id=user.id, ticker=detail.ticker, within_hours=NOTIFY_COOLDOWN_HOURS
+        )
+    trend = ""
+    if user is not None:
+        try:
+            from app.services import company_memory
 
-    assessment = materiality.assess_materiality(move)
-    if not assessment.should_notify:
-        log_event(
-            logger,
-            logging.INFO,
-            "Investigation notification suppressed",
+            summary = company_memory.build_summary(
+                db, owner_key=f"user:{user.id}", ticker=detail.ticker
+            )
+            trend = (summary.management_trend or "").strip()
+        except Exception:
+            trend = ""
+    decision = decide_notify(
+        status=detail.status,
+        trigger_reason=detail.trigger_reason,
+        claims=detail.claims or [],
+        move=move,
+        notify_enabled=NOTIFY_ENABLED,
+        user_present=user is not None,
+        recent_notification=recent_note,
+        memory_trend=trend,
+    )
+    if not decision.should_notify:
+        log_monitor(
+            "MONITOR_NOTIFY_SUPPRESSED",
             ticker=detail.ticker,
             investigation_id=detail.id,
-            reason=assessment.reason,
-            score=assessment.score,
+            status=detail.status,
+            reason=decision.reason,
         )
-        return None
-
-    if _recent_notification_exists(
-        db, user_id=user.id, ticker=detail.ticker, within_hours=NOTIFY_COOLDOWN_HOURS
-    ):
         log_event(
             logger,
             logging.INFO,
-            "Investigation notification cooldown",
+            "NOTIFICATION_SUPPRESSED",
+            event="NOTIFICATION_SUPPRESSED",
             ticker=detail.ticker,
-            user_id=user.id,
+            investigation_id=detail.id,
+            reason=decision.reason,
+            score=decision.score,
         )
         return None
 
@@ -87,22 +100,23 @@ def maybe_notify_investigation(
     move_bit = (
         f"{detail.move_pct:+.1f}%" if detail.move_pct is not None else "move"
     )
+    memory_bit = f" {decision.extra_note}" if decision.extra_note else ""
     message = (
-        f"{move_bit} cleared the materiality bar (score {assessment.score:.0f}). "
+        f"{move_bit} cleared the materiality bar (score {decision.score:.0f}). "
         f"{lead_text or 'Open the Evidence Ledger for ranked claims.'}"
+        f"{memory_bit}"
     )
 
     event = AlertEvent(
         user_id=user.id,
-        rule_id=None,
         ticker=detail.ticker.upper().strip(),
         alert_type="investigation_material",
         title=title[:280],
         message=message,
-        observed_value=assessment.score,
+        observed_value=decision.score,
         threshold=materiality.NOTIFY_MIN_SCORE,
         investigation_id=detail.id,
-        materiality_score=assessment.score,
+        materiality_score=decision.score,
     )
     db.add(event)
     db.commit()
@@ -111,12 +125,19 @@ def maybe_notify_investigation(
     log_event(
         logger,
         logging.INFO,
-        "Investigation notification created",
-        user_id=user.id,
+        "NOTIFICATION_SENT",
+        event="NOTIFICATION_SENT",
         ticker=detail.ticker,
         investigation_id=detail.id,
-        materiality_score=assessment.score,
+        materiality_score=decision.score,
         event_id=event.id,
+    )
+    log_monitor(
+        "MONITOR_NOTIFY",
+        ticker=detail.ticker,
+        investigation_id=detail.id,
+        status="notified",
+        relevance=decision.score,
     )
 
     _maybe_email_stub(user_email=user.email, title=title, message=message)

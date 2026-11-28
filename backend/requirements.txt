@@ -1,4 +1,4 @@
-# QuantPilot backend — pinned for reproducible Railway deploys
+# QuantPilot backend runtime (Python 3.11). Dev/test tools: requirements-dev.txt
 fastapi==0.128.8
 uvicorn[standard]==0.39.0
 httpx==0.28.1
@@ -10,8 +10,9 @@ openai==2.37.0
 langgraph==0.6.11
 langchain-core==0.3.86
 chromadb==1.5.9
-# Phase 7 — data layer + auth
+# Data layer + auth
 SQLAlchemy==2.0.41
+alembic==1.16.5
 psycopg2-binary==2.9.10
 PyJWT==2.10.1
 bcrypt==4.3.0
@@ -27,9 +28,11 @@ opentelemetry-api==1.41.1
 opentelemetry-sdk==1.41.1
 opentelemetry-exporter-otlp-proto-http==1.41.1
 opentelemetry-instrumentation-fastapi==0.62b1
-# MCP SDK optional (Python 3.10+); Python 3.9 uses built-in stdio fallback in mcp_server/
+# MCP SDK optional; mcp_server/ ships a built-in stdio fallback
 # mcp>=1.0.0
-
-# Dev / CI
-pytest==8.3.5
-pytest-asyncio==0.25.3
+# Phase 3.1 — optional Neo4j projection (API starts if the server is down)
+neo4j==5.28.2
+# Phase 4.1 — pgvector retrieval index (Postgres). SQLite stores embeddings as JSON.
+pgvector==0.3.6
+# League: offline NYSE calendar (XNYS). Used by backend/app/league/sim/xnys.py.
+exchange-calendars==4.13.3

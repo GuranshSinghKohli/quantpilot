@@ -1,0 +1,10 @@
+aws_region              = "us-east-1"
+environment             = "staging"
+project_name            = "quantpilot"
+acm_certificate_arn     = ""
+research_worker_count   = 1
+start_services          = false
+neo4j_uri               = ""
+allowed_origins         = "https://app.example.com"
+github_repository       = ""
+lake_bucket_name        = ""
